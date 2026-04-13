@@ -1,54 +1,100 @@
-import { 
-  Engine, 
-  Scene, 
-  ArcRotateCamera, 
-  Vector3 as BabylonVector3,
+import {
+  Engine,
+  Scene,
+  ArcRotateCamera,
+  Vector3 as V3,
   HemisphericLight,
+  DirectionalLight,
   MeshBuilder,
   StandardMaterial,
   Color3,
   Color4,
-  Mesh,
-  AbstractMesh
+  AbstractMesh,
+  ShadowGenerator,
+  FloatArray,
+  Scene as SceneType
 } from '@babylonjs/core';
+import { AssetManager } from './AssetManager';
+import { ZoneDefinition } from '@dust-saga/shared';
+
+export interface EntityMeshGroup {
+  root: AbstractMesh;
+  healthBarBg?: AbstractMesh;
+  healthBarFg?: AbstractMesh;
+  namePlate?: AbstractMesh;
+}
 
 export class GameEngine {
   private canvas: HTMLCanvasElement;
   private engine: Engine;
   private scene: Scene | null = null;
   private camera: ArcRotateCamera | null = null;
-  private meshes: Map<string, AbstractMesh> = new Map();
+  private shadowGenerator: ShadowGenerator | null = null;
+  private meshes: Map<string, EntityMeshGroup> = new Map();
+  private assetManager: AssetManager | null = null;
+  private playerMesh: AbstractMesh | null = null;
+  private onClickCallbacks: Array<(entityId: string) => void> = [];
+  private minimapCanvas: HTMLCanvasElement | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.engine = new Engine(this.canvas, true, {
       preserveDrawingBuffer: true,
-      stencil: true
+      stencil: true,
+      antialias: true
     });
   }
 
   async initialize(): Promise<void> {
     this.scene = new Scene(this.engine);
     this.scene.clearColor = new Color4(0.5, 0.7, 1.0, 1);
+    this.scene.ambientColor = new Color3(0.3, 0.3, 0.3);
+
+    this.scene.fogMode = SceneType.FOGMODE_EXP;
+    this.scene.fogDensity = 0.003;
+    this.scene.fogColor = new Color3(0.7, 0.85, 0.95);
+
+    this.assetManager = new AssetManager(this.scene);
 
     this.camera = new ArcRotateCamera(
       'camera',
       -Math.PI / 2,
-      Math.PI / 3,
-      15,
-      BabylonVector3.Zero(),
+      Math.PI / 3.5,
+      12,
+      V3.Zero(),
       this.scene
     );
     this.camera.attachControl(this.canvas, true);
-    this.camera.lowerRadiusLimit = 5;
-    this.camera.upperRadiusLimit = 50;
-    this.camera.wheelPrecision = 50;
+    this.camera.lowerRadiusLimit = 3;
+    this.camera.upperRadiusLimit = 40;
+    this.camera.lowerBetaLimit = 0.3;
+    this.camera.upperBetaLimit = Math.PI / 2.2;
+    this.camera.wheelPrecision = 30;
+    this.camera.panningSensibility = 0;
+    this.camera.inertia = 0.8;
 
-    const light = new HemisphericLight('light', new BabylonVector3(0, 1, 0), this.scene);
-    light.intensity = 0.8;
+    const hemiLight = new HemisphericLight('hemiLight', new V3(0, 1, 0), this.scene);
+    hemiLight.intensity = 0.6;
+    hemiLight.groundColor = new Color3(0.3, 0.3, 0.3);
 
-    this.createGround();
-    this.createEnvironment();
+    const dirLight = new DirectionalLight('dirLight', new V3(-1, -2, -1), this.scene);
+    dirLight.intensity = 0.8;
+    dirLight.position = new V3(50, 100, 50);
+
+    this.shadowGenerator = new ShadowGenerator(1024, dirLight);
+    this.shadowGenerator.useBlurExponentialShadowMap = true;
+    this.shadowGenerator.blurKernel = 32;
+
+    this.scene.onPointerDown = (evt, pickResult) => {
+      if (evt.button === 0 && pickResult?.hit && pickResult.pickedMesh) {
+        for (const [id, group] of this.meshes) {
+          if (pickResult.pickedMesh === group.root || group.root.getChildMeshes().includes(pickResult.pickedMesh)) {
+            this.onClickCallbacks.forEach(cb => cb(id));
+            break;
+          }
+        }
+      }
+    };
 
     this.engine.runRenderLoop(() => {
       if (this.scene) {
@@ -61,135 +107,450 @@ export class GameEngine {
     });
   }
 
-  private createGround(): void {
+  async loadZone(zoneDef: ZoneDefinition): Promise<void> {
     if (!this.scene) return;
 
-    const ground = MeshBuilder.CreateGround('ground', {
-      width: 100,
-      height: 100,
-      subdivisions: 20
-    }, this.scene);
+    this.clearEnvironment();
 
-    const groundMaterial = new StandardMaterial('groundMat', this.scene);
-    groundMaterial.diffuseColor = new Color3(0.3, 0.5, 0.3);
-    groundMaterial.specularColor = new Color3(0.1, 0.1, 0.1);
-    ground.material = groundMaterial;
+    this.scene.clearColor = new Color4(zoneDef.fogColor.r, zoneDef.fogColor.g, zoneDef.fogColor.b, 1);
+    this.scene.fogColor = new Color3(zoneDef.fogColor.r, zoneDef.fogColor.g, zoneDef.fogColor.b);
+    this.scene.fogDensity = zoneDef.fogDensity;
 
-    this.meshes.set('ground', ground);
-  }
-
-  private createEnvironment(): void {
-    if (!this.scene) return;
-
-    for (let i = 0; i < 20; i++) {
-      const tree = this.createTree();
-      const x = (Math.random() - 0.5) * 80;
-      const z = (Math.random() - 0.5) * 80;
-      tree.position = new BabylonVector3(x, 0, z);
-      this.meshes.set(`tree_${i}`, tree);
+    const ground = this.createGround(zoneDef);
+    if (ground && this.shadowGenerator) {
+      ground.receiveShadows = true;
     }
 
-    for (let i = 0; i < 10; i++) {
-      const rock = this.createRock();
-      const x = (Math.random() - 0.5) * 80;
-      const z = (Math.random() - 0.5) * 80;
-      rock.position = new BabylonVector3(x, 0.5, z);
-      this.meshes.set(`rock_${i}`, rock);
+    await this.createEnvironmentObjects(zoneDef);
+
+    if (this.minimapCanvas) {
+      this.renderMinimap(zoneDef);
     }
   }
 
-  private createTree(): Mesh {
-    if (!this.scene) {
-      throw new Error('Scene not initialized');
+  private clearEnvironment(): void {
+    const envMeshes = this.scene!.meshes.filter(
+      m => m.name.startsWith('ground') || m.name.startsWith('env_') || m.name.startsWith('zone_')
+    );
+    envMeshes.forEach(m => {
+      if (m.material) m.material.dispose();
+      m.dispose();
+    });
+  }
+
+  private createGround(zoneDef: ZoneDefinition): AbstractMesh {
+    const ground = MeshBuilder.CreateGround('zone_ground', {
+      width: zoneDef.size,
+      height: zoneDef.size,
+      subdivisions: 32
+    }, this.scene!);
+
+    const groundMat = new StandardMaterial('zone_ground_mat', this.scene!);
+    groundMat.diffuseColor = new Color3(zoneDef.groundColor.r, zoneDef.groundColor.g, zoneDef.groundColor.b);
+    groundMat.specularColor = new Color3(0.05, 0.05, 0.05);
+    ground.material = groundMat;
+
+    this.applyGroundVariation(ground, zoneDef);
+
+    return ground;
+  }
+
+  private applyGroundVariation(ground: AbstractMesh, _zoneDef: ZoneDefinition): void {
+    if (!this.scene) return;
+    const positions = ground.getVerticesData('position');
+    if (!positions) return;
+
+    const newPositions = new Float32Array(positions.length);
+    for (let i = 0; i < positions.length; i += 3) {
+      newPositions[i] = positions[i];
+      newPositions[i + 1] = positions[i + 1] + (Math.random() - 0.5) * 0.15;
+      newPositions[i + 2] = positions[i + 2];
     }
 
-    const trunk = MeshBuilder.CreateCylinder('trunk', {
-      height: 3,
-      diameter: 0.5
+    ground.updateVerticesData('position', newPositions as FloatArray);
+    ground.createNormals(true);
+
+    ground.receiveShadows = true;
+  }
+
+  private async createEnvironmentObjects(zoneDef: ZoneDefinition): Promise<void> {
+    if (!this.scene || !this.assetManager) return;
+
+    for (const objGroup of zoneDef.environmentObjects) {
+      for (const pos of objGroup.positions) {
+        const position = new V3(pos.x, pos.y, pos.z);
+        const scale = pos.scale || 1;
+
+        if (objGroup.type === 'tree') {
+          await this.createTree(position, scale);
+        } else if (objGroup.type === 'rock') {
+          await this.createRock(position, scale);
+        }
+      }
+    }
+  }
+
+  private async createTree(position: V3, scale: number): Promise<void> {
+    if (!this.assetManager) return;
+
+    const mesh = await this.assetManager.instantiateModel('Pine.glb', position);
+    if (mesh) {
+      mesh.scaling = new V3(scale, scale, scale);
+      mesh.name = `env_tree_${position.x}_${position.z}`;
+      if (this.shadowGenerator) {
+        this.shadowGenerator.addShadowCaster(mesh);
+      }
+    } else {
+      this.createFallbackTree(position, scale);
+    }
+  }
+
+  private createFallbackTree(position: V3, scale: number): void {
+    if (!this.scene) return;
+
+    const trunk = MeshBuilder.CreateCylinder(`env_tree_trunk_${Date.now()}`, {
+      height: 3 * scale,
+      diameter: 0.4 * scale
     }, this.scene);
+    trunk.position = position;
+    trunk.position.y += 1.5 * scale;
 
-    const trunkMaterial = new StandardMaterial('trunkMat', this.scene);
-    trunkMaterial.diffuseColor = new Color3(0.4, 0.3, 0.2);
-    trunk.material = trunkMaterial;
+    const trunkMat = new StandardMaterial(`env_trunk_mat_${Date.now()}`, this.scene);
+    trunkMat.diffuseColor = new Color3(0.4, 0.25, 0.15);
+    trunk.material = trunkMat;
 
-    const leaves = MeshBuilder.CreateCylinder('leaves', {
-      height: 4,
+    const leaves = MeshBuilder.CreateCylinder(`env_tree_leaves_${Date.now()}`, {
+      height: 4 * scale,
       diameterTop: 0,
-      diameterBottom: 3,
+      diameterBottom: 2.5 * scale,
       tessellation: 6
     }, this.scene);
+    leaves.position = position.add(new V3(0, 4 * scale, 0));
 
-    const leavesMaterial = new StandardMaterial('leavesMat', this.scene);
-    leavesMaterial.diffuseColor = new Color3(0.2, 0.6, 0.2);
-    leaves.material = leavesMaterial;
+    const leavesMat = new StandardMaterial(`env_leaves_mat_${Date.now()}`, this.scene);
+    leavesMat.diffuseColor = new Color3(0.15 + Math.random() * 0.15, 0.5 + Math.random() * 0.2, 0.15);
+    leaves.material = leavesMat;
 
-    leaves.position.y = 3.5;
-
-    const tree = Mesh.MergeMeshes([trunk, leaves], true, true, undefined, false, true);
-    if (!tree) {
-      throw new Error('Failed to create tree');
+    if (this.shadowGenerator) {
+      this.shadowGenerator.addShadowCaster(trunk);
+      this.shadowGenerator.addShadowCaster(leaves);
     }
-    return tree;
   }
 
-  private createRock(): Mesh {
-    if (!this.scene) {
-      throw new Error('Scene not initialized');
-    }
+  private async createRock(position: V3, scale: number): Promise<void> {
+    if (!this.assetManager) return;
 
-    const rock = MeshBuilder.CreateBox('rock', {
-      width: 1 + Math.random(),
-      height: 0.5 + Math.random() * 0.5,
-      depth: 1 + Math.random()
-    }, this.scene);
-
-    const rockMaterial = new StandardMaterial('rockMat', this.scene);
-    rockMaterial.diffuseColor = new Color3(0.5, 0.5, 0.5);
-    rock.material = rockMaterial;
-
-    return rock;
-  }
-
-  createPlayerMesh(entityId: string, position: BabylonVector3): Mesh {
-    if (!this.scene) {
-      throw new Error('Scene not initialized');
-    }
-
-    const player = MeshBuilder.CreateCapsule(`player_${entityId}`, {
-      height: 2,
-      radius: 0.4
-    }, this.scene);
-
-    const playerMaterial = new StandardMaterial(`playerMat_${entityId}`, this.scene);
-    playerMaterial.diffuseColor = new Color3(0.2, 0.4, 0.8);
-    player.material = playerMaterial;
-
-    player.position = position;
-
-    this.meshes.set(entityId, player);
-    return player;
-  }
-
-  updateEntityPosition(entityId: string, position: BabylonVector3): void {
-    const mesh = this.meshes.get(entityId);
+    const mesh = await this.assetManager.instantiateModel('Rock Medium.glb', position);
     if (mesh) {
-      mesh.position = position;
+      mesh.scaling = new V3(scale, scale, scale);
+      mesh.name = `env_rock_${position.x}_${position.z}`;
+      if (this.shadowGenerator) {
+        this.shadowGenerator.addShadowCaster(mesh);
+      }
+    } else {
+      this.createFallbackRock(position, scale);
     }
   }
 
-  updateEntityRotation(entityId: string, rotation: BabylonVector3): void {
-    const mesh = this.meshes.get(entityId);
-    if (mesh) {
-      mesh.rotation = rotation;
+  private createFallbackRock(position: V3, scale: number): void {
+    if (!this.scene) return;
+
+    const rock = MeshBuilder.CreateBox(`env_rock_${Date.now()}`, {
+      width: (0.8 + Math.random() * 0.6) * scale,
+      height: (0.4 + Math.random() * 0.3) * scale,
+      depth: (0.8 + Math.random() * 0.6) * scale
+    }, this.scene);
+    rock.position = position.add(new V3(0, 0.25 * scale, 0));
+    rock.rotation.y = Math.random() * Math.PI * 2;
+
+    const rockMat = new StandardMaterial(`env_rock_mat_${Date.now()}`, this.scene);
+    rockMat.diffuseColor = new Color3(
+      0.4 + Math.random() * 0.2,
+      0.4 + Math.random() * 0.2,
+      0.4 + Math.random() * 0.2
+    );
+    rock.material = rockMat;
+
+    if (this.shadowGenerator) {
+      this.shadowGenerator.addShadowCaster(rock);
     }
+  }
+
+  async createPlayerEntity(entityId: string, position: V3, modelFile: string): Promise<AbstractMesh | null> {
+    if (!this.scene || !this.assetManager) return null;
+
+    let mesh: AbstractMesh | null = null;
+
+    if (modelFile) {
+      mesh = await this.assetManager.instantiateModel(modelFile, position);
+    }
+
+    if (!mesh) {
+      mesh = this.createFallbackCharacter(entityId, position, new Color3(0.2, 0.4, 0.8));
+    }
+
+    if (mesh) {
+      mesh.name = `player_${entityId}`;
+      mesh.scaling = new V3(0.7, 0.7, 0.7);
+      if (this.shadowGenerator) {
+        this.shadowGenerator.addShadowCaster(mesh);
+      }
+    }
+
+    const group: EntityMeshGroup = { root: mesh };
+    this.meshes.set(entityId, group);
+
+    return mesh;
+  }
+
+  async createEnemyEntity(
+    entityId: string,
+    position: V3,
+    modelFile: string,
+    health: number,
+    maxHealth: number,
+    name: string
+  ): Promise<AbstractMesh | null> {
+    if (!this.scene || !this.assetManager) return null;
+
+    let mesh: AbstractMesh | null = null;
+
+    if (modelFile) {
+      mesh = await this.assetManager.instantiateModel(modelFile, position);
+    }
+
+    if (!mesh) {
+      mesh = this.createFallbackCharacter(entityId, position, new Color3(0.8, 0.2, 0.2));
+    }
+
+    if (mesh) {
+      mesh.name = `enemy_${entityId}`;
+      mesh.scaling = new V3(0.6, 0.6, 0.6);
+      if (this.shadowGenerator) {
+        this.shadowGenerator.addShadowCaster(mesh);
+      }
+    }
+
+    const hpBar = this.assetManager.createHealthBar(entityId);
+    hpBar.background.position = position.add(new V3(0, 2.5, 0));
+    hpBar.foreground.parent = hpBar.background;
+    hpBar.foreground.position = new V3(0, 0, -0.01);
+
+    const namePlate = this.assetManager.createNamePlate(name, entityId);
+    namePlate.position = position.add(new V3(0, 3, 0));
+
+    const group: EntityMeshGroup = {
+      root: mesh,
+      healthBarBg: hpBar.background,
+      healthBarFg: hpBar.foreground,
+      namePlate
+    };
+    this.meshes.set(entityId, group);
+
+    this.updateEntityHealth(entityId, health, maxHealth);
+
+    return mesh;
+  }
+
+  async createNPCEntity(
+    entityId: string,
+    position: V3,
+    modelFile: string,
+    name: string
+  ): Promise<AbstractMesh | null> {
+    if (!this.scene || !this.assetManager) return null;
+
+    let mesh: AbstractMesh | null = null;
+
+    if (modelFile) {
+      mesh = await this.assetManager.instantiateModel(modelFile, position);
+    }
+
+    if (!mesh) {
+      mesh = this.createFallbackCharacter(entityId, position, new Color3(0.2, 0.8, 0.2));
+    }
+
+    if (mesh) {
+      mesh.name = `npc_${entityId}`;
+      mesh.scaling = new V3(0.7, 0.7, 0.7);
+    }
+
+    const namePlate = this.assetManager.createNamePlate(name, entityId);
+    namePlate.position = position.add(new V3(0, 2.8, 0));
+
+    const indicator = MeshBuilder.CreatePlane(`npc_indicator_${entityId}`, { width: 0.3, height: 0.3 }, this.scene);
+    const indMat = new StandardMaterial(`npc_ind_mat_${entityId}`, this.scene);
+    indMat.diffuseColor = new Color3(1, 1, 0);
+    indMat.emissiveColor = new Color3(0.8, 0.8, 0);
+    indMat.disableLighting = true;
+    indMat.backFaceCulling = false;
+    indicator.material = indMat;
+    indicator.position = position.add(new V3(0, 3.2, 0));
+    indicator.billboardMode = 7;
+
+    const group: EntityMeshGroup = {
+      root: mesh,
+      namePlate
+    };
+    this.meshes.set(entityId, group);
+
+    return mesh;
+  }
+
+  private createFallbackCharacter(entityId: string, position: V3, color: Color3): AbstractMesh {
+    const body = MeshBuilder.CreateCapsule(`fallback_${entityId}`, {
+      height: 1.8,
+      radius: 0.35
+    }, this.scene!);
+    body.position = position;
+    body.position.y += 0.9;
+
+    const mat = new StandardMaterial(`fallback_mat_${entityId}`, this.scene!);
+    mat.diffuseColor = color;
+    body.material = mat;
+
+    return body;
+  }
+
+  setPlayerMesh(entityId: string): void {
+    const group = this.meshes.get(entityId);
+    if (group) {
+      this.playerMesh = group.root;
+    }
+  }
+
+  getPlayerMesh(): AbstractMesh | null {
+    return this.playerMesh;
+  }
+
+  updateEntityPosition(entityId: string, position: V3): void {
+    const group = this.meshes.get(entityId);
+    if (group?.root) {
+      group.root.position = position;
+
+      if (group.healthBarBg) {
+        group.healthBarBg.position = position.add(new V3(0, 2.5, 0));
+      }
+      if (group.namePlate) {
+        const hpOffset = group.healthBarBg ? 3 : 2.8;
+        group.namePlate.position = position.add(new V3(0, hpOffset, 0));
+      }
+    }
+  }
+
+  updateEntityRotation(entityId: string, rotation: number): void {
+    const group = this.meshes.get(entityId);
+    if (group?.root) {
+      group.root.rotation.y = rotation;
+    }
+  }
+
+  updateEntityHealth(entityId: string, current: number, max: number): void {
+    const group = this.meshes.get(entityId);
+    if (!group || !this.assetManager || !group.healthBarBg || !group.healthBarFg) return;
+
+    this.assetManager.updateHealthBar(entityId, current, max, group.healthBarBg, group.healthBarFg);
+  }
+
+  showDamageNumber(entityId: string, damage: number, isCritical: boolean): void {
+    const group = this.meshes.get(entityId);
+    if (!group?.root || !this.assetManager) return;
+
+    this.assetManager.createDamageNumber(damage, group.root.position, isCritical);
+  }
+
+  createLootBeacon(position: V3): void {
+    if (!this.assetManager) return;
+    this.assetManager.createLootBeacon(position);
   }
 
   removeEntity(entityId: string): void {
-    const mesh = this.meshes.get(entityId);
-    if (mesh) {
-      mesh.dispose();
+    const group = this.meshes.get(entityId);
+    if (group) {
+      group.root.dispose();
+      group.healthBarBg?.dispose();
+      group.healthBarFg?.dispose();
+      group.namePlate?.dispose();
       this.meshes.delete(entityId);
     }
+  }
+
+  focusCameraOnEntity(entityId: string): void {
+    const group = this.meshes.get(entityId);
+    if (group?.root && this.camera) {
+      this.camera.target = group.root.position;
+    }
+  }
+
+  attachCameraToEntity(entityId: string): void {
+    const group = this.meshes.get(entityId);
+    if (group?.root && this.camera) {
+      this.camera.lockedTarget = group.root;
+    }
+  }
+
+  onClickEntity(callback: (entityId: string) => void): void {
+    this.onClickCallbacks.push(callback);
+  }
+
+  setMinimapCanvas(canvas: HTMLCanvasElement): void {
+    this.minimapCanvas = canvas;
+  }
+
+  private renderMinimap(zoneDef: ZoneDefinition): void {
+    if (!this.minimapCanvas) return;
+    const ctx = this.minimapCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const size = this.minimapCanvas.width;
+    const scale = size / zoneDef.size;
+
+    ctx.fillStyle = `rgb(${Math.floor(zoneDef.groundColor.r * 255)}, ${Math.floor(zoneDef.groundColor.g * 255)}, ${Math.floor(zoneDef.groundColor.b * 255)})`;
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.fillStyle = 'rgba(0, 100, 0, 0.5)';
+    for (const objGroup of zoneDef.environmentObjects) {
+      if (objGroup.type === 'tree') {
+        for (const pos of objGroup.positions) {
+          ctx.beginPath();
+          ctx.arc(
+            size / 2 + pos.x * scale,
+            size / 2 + pos.z * scale,
+            3,
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+        }
+      }
+    }
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, size, size);
+  }
+
+  updateMinimapPlayerDot(x: number, z: number, zoneSize: number): void {
+    if (!this.minimapCanvas) return;
+    const ctx = this.minimapCanvas.getContext('2d');
+    if (!ctx) return;
+
+    const size = this.minimapCanvas.width;
+    const scale = size / zoneSize;
+
+    ctx.fillStyle = '#4488ff';
+    ctx.beginPath();
+    ctx.arc(
+      size / 2 + x * scale,
+      size / 2 + z * scale,
+      4,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+    ctx.strokeStyle = 'white';
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
 
   getScene(): Scene | null {
@@ -200,9 +561,23 @@ export class GameEngine {
     return this.engine;
   }
 
+  getAssetManager(): AssetManager | null {
+    return this.assetManager;
+  }
+
+  getMeshGroup(entityId: string): EntityMeshGroup | undefined {
+    return this.meshes.get(entityId);
+  }
+
   dispose(): void {
-    this.meshes.forEach(mesh => mesh.dispose());
+    this.meshes.forEach(group => {
+      group.root.dispose();
+      group.healthBarBg?.dispose();
+      group.healthBarFg?.dispose();
+      group.namePlate?.dispose();
+    });
     this.meshes.clear();
+    this.assetManager?.dispose();
     this.scene?.dispose();
     this.engine.dispose();
   }

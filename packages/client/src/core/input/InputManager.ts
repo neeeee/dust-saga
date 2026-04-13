@@ -8,6 +8,7 @@ export interface InputState {
   jump: boolean;
   sprint: boolean;
   attack: boolean;
+  interact: boolean;
 }
 
 export class InputManager {
@@ -15,9 +16,14 @@ export class InputManager {
   private mousePosition: { x: number; y: number } = { x: 0, y: 0 };
   private mouseDelta: { x: number; y: number } = { x: 0, y: 0 };
   private pointerLocked: boolean = false;
+  private chatFocused: boolean = false;
 
   constructor() {
     this.setupEventListeners();
+  }
+
+  setChatFocused(focused: boolean): void {
+    this.chatFocused = focused;
   }
 
   private setupEventListeners(): void {
@@ -30,6 +36,7 @@ export class InputManager {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
+    if (this.chatFocused) return;
     this.keys.set(e.code, true);
 
     if (e.code === 'Escape' && this.pointerLocked) {
@@ -38,6 +45,7 @@ export class InputManager {
   }
 
   private handleKeyUp(e: KeyboardEvent): void {
+    if (this.chatFocused) return;
     this.keys.set(e.code, false);
   }
 
@@ -77,7 +85,8 @@ export class InputManager {
       right: this.keys.get('KeyD') || false,
       jump: this.keys.get('Space') || false,
       sprint: this.keys.get('ShiftLeft') || false,
-      attack: this.keys.get('KeyF') || false
+      attack: this.keys.get('KeyF') || false,
+      interact: this.keys.get('KeyE') || false
     };
   }
 

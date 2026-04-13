@@ -7,45 +7,34 @@ export class NetworkClient {
   private isConnected: boolean = false;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 5;
+  private token: string | null = null;
 
   connect(serverUrl: string = 'http://localhost:3001'): void {
-    if (this.socket?.connected) {
-      console.log('Already connected to server');
-      return;
-    }
+    if (this.socket?.connected) return;
 
     this.socket = io(serverUrl, {
       transports: ['websocket'],
       reconnection: true,
       reconnectionDelay: 2000,
-      reconnectionAttempts: this.maxReconnectAttempts
+      reconnectionAttempts: this.maxReconnectAttempts,
+      auth: { token: this.token }
     });
 
     this.socket.on('connect', () => {
-      console.log('Connected to server:', this.socket?.id);
       this.isConnected = true;
       this.reconnectAttempts = 0;
     });
 
     this.socket.on('disconnect', () => {
-      console.log('Disconnected from server');
       this.isConnected = false;
     });
 
-    this.socket.on('connect_error', (error) => {
-      console.error('Connection error:', error);
+    this.socket.on('connect_error', () => {
       this.reconnectAttempts++;
-      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.error('Max reconnection attempts reached');
-      }
     });
 
     this.socket.on('packet', (packet: Packet) => {
       this.handlePacket(packet);
-    });
-
-    this.socket.on('error', (error) => {
-      console.error('Socket error:', error);
     });
   }
 
@@ -60,8 +49,6 @@ export class NetworkClient {
   sendPacket(packet: Packet): void {
     if (this.socket && this.isConnected) {
       this.socket.emit('packet', packet);
-    } else {
-      console.warn('Cannot send packet: not connected to server');
     }
   }
 
@@ -76,9 +63,7 @@ export class NetworkClient {
     const handlers = this.packetHandlers.get(type);
     if (handlers) {
       const index = handlers.indexOf(handler);
-      if (index > -1) {
-        handlers.splice(index, 1);
-      }
+      if (index > -1) handlers.splice(index, 1);
     }
   }
 
@@ -95,6 +80,10 @@ export class NetworkClient {
     }
   }
 
+  setToken(token: string): void {
+    this.token = token;
+  }
+
   login(username: string, password: string): void {
     this.sendPacket({
       type: PacketType.LOGIN,
@@ -108,6 +97,38 @@ export class NetworkClient {
       type: PacketType.REGISTER,
       timestamp: Date.now(),
       data: { username, email, password }
+    });
+  }
+
+  requestCharacterList(): void {
+    this.sendPacket({
+      type: PacketType.CHARACTER_LIST,
+      timestamp: Date.now(),
+      data: {}
+    });
+  }
+
+  createCharacter(name: string, characterClass: string): void {
+    this.sendPacket({
+      type: PacketType.CHARACTER_CREATE,
+      timestamp: Date.now(),
+      data: { name, characterClass }
+    });
+  }
+
+  selectCharacter(characterId: string): void {
+    this.sendPacket({
+      type: PacketType.CHARACTER_SELECT,
+      timestamp: Date.now(),
+      data: { characterId }
+    });
+  }
+
+  deleteCharacter(characterId: string): void {
+    this.sendPacket({
+      type: PacketType.CHARACTER_DELETE,
+      timestamp: Date.now(),
+      data: { characterId }
     });
   }
 
@@ -127,11 +148,91 @@ export class NetworkClient {
     });
   }
 
-  sendAttack(targetId: string, damage: number): void {
+  sendAttack(targetId: string): void {
     this.sendPacket({
       type: PacketType.ATTACK,
       timestamp: Date.now(),
-      data: { targetId, damage }
+      data: { targetId }
+    });
+  }
+
+  useItem(itemId: string): void {
+    this.sendPacket({
+      type: PacketType.ITEM_USE,
+      timestamp: Date.now(),
+      data: { itemId }
+    });
+  }
+
+  equipItem(itemId: string): void {
+    this.sendPacket({
+      type: PacketType.EQUIP_ITEM,
+      timestamp: Date.now(),
+      data: { itemId }
+    });
+  }
+
+  unequipItem(slot: string): void {
+    this.sendPacket({
+      type: PacketType.UNEQUIP_ITEM,
+      timestamp: Date.now(),
+      data: { slot }
+    });
+  }
+
+  pickupLoot(lootId: string): void {
+    this.sendPacket({
+      type: PacketType.LOOT_PICKUP,
+      timestamp: Date.now(),
+      data: { lootId }
+    });
+  }
+
+  acceptQuest(questId: string): void {
+    this.sendPacket({
+      type: PacketType.QUEST_ACCEPT,
+      timestamp: Date.now(),
+      data: { questId }
+    });
+  }
+
+  completeQuest(questId: string): void {
+    this.sendPacket({
+      type: PacketType.QUEST_COMPLETE,
+      timestamp: Date.now(),
+      data: { questId }
+    });
+  }
+
+  abandonQuest(questId: string): void {
+    this.sendPacket({
+      type: PacketType.QUEST_ABANDON,
+      timestamp: Date.now(),
+      data: { questId }
+    });
+  }
+
+  interactNPC(npcId: string, dialogId?: string): void {
+    this.sendPacket({
+      type: PacketType.NPC_INTERACT,
+      timestamp: Date.now(),
+      data: { npcId, dialogId }
+    });
+  }
+
+  buyFromShop(itemId: string, quantity: number = 1): void {
+    this.sendPacket({
+      type: PacketType.NPC_SHOP_BUY,
+      timestamp: Date.now(),
+      data: { itemId, quantity }
+    });
+  }
+
+  changeZone(zoneId: string): void {
+    this.sendPacket({
+      type: PacketType.ENTER_ZONE,
+      timestamp: Date.now(),
+      data: { zoneId }
     });
   }
 

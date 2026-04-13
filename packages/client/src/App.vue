@@ -1,159 +1,395 @@
 <template>
   <div id="app">
-    <div v-if="!isAuthenticated" class="auth-container">
+    <div v-if="gameState === 'auth'" class="auth-container">
       <div class="auth-box">
-        <h1>{{ isLoginMode ? 'Login' : 'Register' }}</h1>
-        <form @submit.prevent="handleSubmit">
-          <div v-if="!isLoginMode" class="form-group">
-            <label>Email</label>
-            <input
-              v-model="email"
-              type="email"
-              placeholder="Enter your email"
-              required
-            />
-          </div>
-          <div class="form-group">
-            <label>Username</label>
-            <input
-              v-model="username"
-              type="text"
-              placeholder="Enter your username"
-              required
-            />
-          </div>
-          <div class="form-group">
-            <label>Password</label>
-            <input
-              v-model="password"
-              type="password"
-              placeholder="Enter your password"
-              required
-            />
-          </div>
-          <button type="submit" class="btn-primary">
-            {{ isLoginMode ? 'Login' : 'Register' }}
-          </button>
-        </form>
+        <div class="logo">
+          <h1>Dust Saga</h1>
+          <p class="subtitle">Low Poly MMORPG</p>
+        </div>
+        <div v-if="!isLoginMode" class="form-group">
+          <label>Email</label>
+          <input v-model="email" type="email" placeholder="Enter your email" required />
+        </div>
+        <div class="form-group">
+          <label>Username</label>
+          <input v-model="username" type="text" placeholder="Enter your username" required />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input v-model="password" type="password" placeholder="Enter your password" required />
+        </div>
+        <button type="button" class="btn-primary" @click="handleAuth">
+          {{ isLoginMode ? 'Login' : 'Register' }}
+        </button>
         <p class="toggle-mode">
           {{ isLoginMode ? "Don't have an account?" : "Already have an account?" }}
-          <a @click="toggleMode">{{ isLoginMode ? 'Register' : 'Login' }}</a>
+          <a @click="isLoginMode = !isLoginMode">{{ isLoginMode ? 'Register' : 'Login' }}</a>
         </p>
       </div>
     </div>
 
-    <div v-else class="game-container">
+    <CharacterSelect
+      v-else-if="gameState === 'character-select'"
+      :characters="characters"
+      @select-character="handleSelectCharacter"
+      @create-character="handleCreateCharacter"
+      @delete-character="handleDeleteCharacter"
+    />
+
+    <div v-else-if="gameState === 'playing'" class="game-container">
       <canvas ref="gameCanvas"></canvas>
-      <div class="hud">
-        <div class="hud-panel">
-          <h3>{{ username }}</h3>
-          <p>Health: 100/100</p>
-          <p>Level: 1</p>
-        </div>
-        <div class="hud-panel chat-panel">
-          <div class="chat-messages" ref="chatMessages">
-            <div v-for="(msg, index) in chatMessages" :key="index" class="chat-message">
-              <span class="chat-sender">{{ msg.sender }}:</span>
-              <span class="chat-text">{{ msg.message }}</span>
-            </div>
-          </div>
-          <form @submit.prevent="sendChat" class="chat-input">
-            <input
-              v-model="chatInput"
-              type="text"
-              placeholder="Press Enter to chat..."
-              maxlength="200"
-            />
-            <button type="submit">Send</button>
-          </form>
-        </div>
-      </div>
+
+      <GameHUD
+        ref="hudRef"
+        :stats="playerStats"
+        :player-name="playerName"
+        :player-class="playerClass"
+        :target-id="targetId"
+        :target-name="targetName"
+        :target-health="targetHealth"
+        :target-max-health="targetMaxHealth"
+        @toggle-inventory="showInventory = !showInventory"
+        @toggle-quests="showQuests = !showQuests"
+        @toggle-character="showInventory = !showInventory"
+      />
+
+      <ChatPanel
+        :messages="chatMessages"
+        @send="handleSendChat"
+        @focus="chatFocused = true"
+        @blur="chatFocused = false"
+      />
+
+      <InventoryUI
+        :visible="showInventory"
+        :inventory="inventory"
+        :equipment="equipment"
+        :max-slots="30"
+        @close="showInventory = false"
+        @use-item="handleUseItem"
+        @equip-item="handleEquipItem"
+        @unequip-item="handleUnequipItem"
+      />
+
+      <QuestLog
+        :visible="showQuests"
+        :quests="quests"
+        @close="showQuests = false"
+        @complete-quest="handleCompleteQuest"
+        @abandon-quest="handleAbandonQuest"
+      />
+
+      <DialogBox
+        :visible="showDialog"
+        :npc-name="dialogData.npcName"
+        :dialog="dialogData.dialog"
+        :shop-items="dialogData.shopItems"
+        :available-quests="dialogData.availableQuests"
+        @close="showDialog = false"
+        @select-option="handleDialogOption"
+        @buy="handleBuyItem"
+        @accept-quest="handleAcceptQuest"
+      />
+
+      <NotificationPopup
+        :message="notification.message"
+        :type="notification.type"
+        :visible="notification.visible"
+        @hide="notification.visible = false"
+      />
+
       <div class="controls-hint">
-        <p>Click to lock mouse | WASD to move | Shift to sprint | F to attack</p>
+        Click to lock | WASD move | Shift sprint | F attack | I inventory | J quests | E interact
       </div>
+    </div>
+
+    <div v-else class="loading-screen">
+      <h2>Loading...</h2>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { GameClient } from './core/GameClient';
-import { PacketType } from '@dust-saga/shared';
+import { PacketType, PlayerStats } from '@dust-saga/shared';
+import CharacterSelect from './ui/CharacterSelect.vue';
+import GameHUD from './ui/GameHUD.vue';
+import ChatPanel from './ui/ChatPanel.vue';
+import InventoryUI from './ui/InventoryUI.vue';
+import QuestLog from './ui/QuestLog.vue';
+import DialogBox from './ui/DialogBox.vue';
+import NotificationPopup from './ui/NotificationPopup.vue';
 
+type GameState = 'auth' | 'character-select' | 'loading' | 'playing';
+
+const gameState = ref<GameState>('auth');
 const isLoginMode = ref(true);
 const username = ref('');
 const email = ref('');
 const password = ref('');
-const isAuthenticated = ref(false);
 const gameCanvas = ref<HTMLCanvasElement | null>(null);
-const chatInput = ref('');
+const hudRef = ref<any>(null);
+
+const characters = ref<any[]>([]);
+const playerStats = ref<PlayerStats | null>(null);
+const playerName = ref('');
+const playerClass = ref('');
 const chatMessages = ref<Array<{ sender: string; message: string }>>([]);
-const chatMessagesRef = ref<HTMLElement | null>(null);
+const chatFocused = ref(false);
+const showInventory = ref(false);
+const showQuests = ref(false);
+const showDialog = ref(false);
+const inventory = ref<any[]>([]);
+const equipment = ref<any>({});
+const quests = ref<any[]>([]);
+
+const targetId = ref<string | null>(null);
+const targetName = ref('');
+const targetHealth = ref(0);
+const targetMaxHealth = ref(0);
+
+const dialogData = ref<any>({
+  npcName: '',
+  dialog: null,
+  shopItems: [],
+  availableQuests: []
+});
+const currentNPCId = ref('');
+
+const notification = ref({ message: '', type: 'info', visible: false });
 
 let gameClient: GameClient | null = null;
+let currentDialogNPCId = '';
 
-const toggleMode = () => {
-  isLoginMode.value = !isLoginMode.value;
-};
-
-const handleSubmit = () => {
+function handleAuth() {
   if (!gameClient) return;
-
   if (isLoginMode.value) {
     gameClient.login(username.value, password.value);
   } else {
     gameClient.register(username.value, email.value, password.value);
   }
-};
+}
 
-const sendChat = () => {
-  if (!gameClient || !chatInput.value.trim()) return;
+function handleSelectCharacter(characterId: string) {
+  if (!gameClient) return;
+  gameState.value = 'loading';
+  gameClient.selectCharacter(characterId);
 
-  gameClient.sendChatMessage(chatInput.value);
-  chatInput.value = '';
-};
-
-const addChatMessage = (sender: string, message: string) => {
-  chatMessages.value.push({ sender, message });
-  if (chatMessages.value.length > 50) {
-    chatMessages.value.shift();
-  }
-  
   setTimeout(() => {
-    if (chatMessagesRef.value) {
-      chatMessagesRef.value.scrollTop = chatMessagesRef.value.scrollHeight;
+    if (gameState.value === 'loading') {
+      gameState.value = 'playing';
+      nextTick(() => {
+        setupGameCanvas();
+      });
     }
-  }, 100);
-};
+  }, 1000);
+}
+
+async function handleCreateCharacter(name: string, characterClass: string) {
+  if (!gameClient) return;
+  gameClient.createCharacter(name, characterClass);
+  setTimeout(() => {
+    gameClient?.requestCharacterList();
+  }, 500);
+}
+
+function handleDeleteCharacter(characterId: string) {
+  if (!gameClient) return;
+  gameClient.deleteCharacter(characterId);
+  characters.value = characters.value.filter(c => c.id !== characterId);
+}
+
+async function setupGameCanvas() {
+  await nextTick();
+  if (gameCanvas.value && gameClient) {
+    await (gameClient as any).engine.initialize();
+    const minimapCanvas = hudRef.value?.minimapCanvas;
+    if (minimapCanvas) {
+      gameClient.setMinimapCanvas(minimapCanvas);
+    }
+  }
+}
+
+function handleSendChat(message: string) {
+  if (!gameClient) return;
+  gameClient.sendChatMessage(message);
+}
+
+function handleUseItem(itemId: string) {
+  if (!gameClient) return;
+  gameClient.useItem(itemId);
+}
+
+function handleEquipItem(itemId: string) {
+  if (!gameClient) return;
+  gameClient.equipItem(itemId);
+}
+
+function handleUnequipItem(slot: string) {
+  if (!gameClient) return;
+  gameClient.unequipItem(slot);
+}
+
+function handleCompleteQuest(questId: string) {
+  if (!gameClient) return;
+  gameClient.completeQuest(questId);
+}
+
+function handleAbandonQuest(questId: string) {
+  if (!gameClient) return;
+  gameClient.abandonQuest(questId);
+}
+
+function handleDialogOption(option: any) {
+  if (!gameClient) return;
+  if (option.action === 'accept_quest') {
+    gameClient.acceptQuest(option.actionData.questId);
+    showDialog.value = false;
+  } else if (option.action === 'complete_quest') {
+    gameClient.completeQuest(option.actionData.questId);
+    showDialog.value = false;
+  } else if (option.action === 'open_shop') {
+  } else if (option.action === 'heal') {
+    gameClient.interactNPC(currentDialogNPCId);
+    showDialog.value = false;
+  } else if (option.nextDialogId) {
+    gameClient.interactNPC(currentDialogNPCId, option.nextDialogId);
+  }
+}
+
+function handleBuyItem(itemId: string) {
+  if (!gameClient) return;
+  gameClient.buyFromShop(itemId);
+}
+
+function handleAcceptQuest(questId: string) {
+  if (!gameClient) return;
+  gameClient.acceptQuest(questId);
+  showDialog.value = false;
+}
+
+function showNotification(message: string, type: string) {
+  notification.value = { message, type, visible: true };
+}
 
 onMounted(async () => {
-  if (gameCanvas.value) {
-    gameClient = new GameClient(gameCanvas.value);
-    
-    await gameClient.initialize();
-    
-    const network = gameClient.getNetworkClient();
-    
-    network.onPacket(PacketType.AUTH_SUCCESS, () => {
-      isAuthenticated.value = true;
-    });
-    
-    network.onPacket(PacketType.CHAT_MESSAGE, (packet: any) => {
-      addChatMessage(packet.data.sender, packet.data.message);
-    });
+  if (!gameCanvas.value) return;
 
-    network.onPacket(PacketType.ENTITY_SPAWN, (packet: any) => {
-      if (!isAuthenticated.value && packet.data.id === network.getSocketId()) {
-        isAuthenticated.value = true;
+  gameClient = new GameClient(gameCanvas.value);
+
+  gameClient.setCallbacks({
+    onStatsUpdate: (stats) => {
+      playerStats.value = stats;
+    },
+    onInventoryUpdate: (inv, equip) => {
+      inventory.value = inv;
+      equipment.value = equip;
+    },
+    onQuestUpdate: (q) => {
+      quests.value = q;
+    },
+    onChatMessage: (sender, message) => {
+      chatMessages.value.push({ sender, message });
+      if (chatMessages.value.length > 50) chatMessages.value.shift();
+    },
+    onNotification: (message, type) => {
+      showNotification(message, type);
+    },
+    onDeath: (data) => {
+      showNotification('You have died! Respawning...', 'error');
+    },
+    onExperienceGain: (data) => {
+      showNotification(`+${data.experience} XP`, 'info');
+    },
+    onLevelUp: (level) => {
+      showNotification(`Level Up! You are now level ${level}!`, 'success');
+    },
+    onNPCDialog: (data) => {
+      currentDialogNPCId = data.npcId;
+      dialogData.value = data;
+      showDialog.value = true;
+    },
+    onTargetChange: (id) => {
+      targetId.value = id;
+      if (!id) {
+        targetName.value = '';
+        targetHealth.value = 0;
+        targetMaxHealth.value = 0;
       }
+    },
+    onZoneChange: (zoneId, zoneName) => {
+      showNotification(`Entered: ${zoneName}`, 'info');
+    },
+    onEnemyListUpdate: (enemies) => {
+    }
+  });
+
+  await gameClient.initialize();
+
+  const network = gameClient.getNetworkClient();
+
+  network.onPacket(PacketType.AUTH_SUCCESS, (packet: any) => {
+    if (gameState.value === 'auth') {
+      gameState.value = 'character-select';
+      setTimeout(() => {
+        gameClient?.requestCharacterList();
+      }, 200);
+    }
+  });
+
+  network.onPacket(PacketType.AUTH_FAILURE, (packet: any) => {
+    showNotification(packet.data.message, 'error');
+  });
+
+  network.onPacket(PacketType.CHARACTER_LIST, (packet: any) => {
+    characters.value = packet.data.characters || [];
+  });
+
+  network.onPacket(PacketType.CHARACTER_CREATE, (packet: any) => {
+    if (packet.data.character) {
+      characters.value.push(packet.data.character);
+    }
+  });
+
+  network.onPacket(PacketType.CHARACTER_SELECT, () => {
+    gameState.value = 'playing';
+    nextTick(() => {
+      setupGameCanvas();
     });
-  }
+  });
+
+  network.onPacket(PacketType.STATS_UPDATE, (packet: any) => {
+    if (packet.data.entityId && packet.data.entityId !== gameClient?.getPlayerId()) {
+      if (packet.data.entityId === targetId.value) {
+        targetHealth.value = packet.data.health || 0;
+        targetMaxHealth.value = packet.data.maxHealth || 0;
+      }
+    }
+  });
+
+  window.addEventListener('keydown', handleGlobalKeyDown);
 });
+
+function handleGlobalKeyDown(e: KeyboardEvent) {
+  if (chatFocused.value) return;
+
+  if (e.code === 'KeyI') {
+    showInventory.value = !showInventory.value;
+  } else if (e.code === 'KeyJ') {
+    showQuests.value = !showQuests.value;
+  } else if (e.code === 'Escape') {
+    showInventory.value = false;
+    showQuests.value = false;
+    showDialog.value = false;
+  }
+}
 
 onUnmounted(() => {
   if (gameClient) {
     gameClient.dispose();
   }
+  window.removeEventListener('keydown', handleGlobalKeyDown);
 });
 </script>
 
@@ -164,6 +400,7 @@ onUnmounted(() => {
   margin: 0;
   padding: 0;
   overflow: hidden;
+  font-family: 'Segoe UI', sans-serif;
 }
 
 .auth-container {
@@ -171,21 +408,33 @@ onUnmounted(() => {
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
 }
 
 .auth-box {
-  background: white;
+  background: rgba(20, 20, 40, 0.95);
   padding: 2rem;
-  border-radius: 10px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   width: 350px;
 }
 
-.auth-box h1 {
-  margin-top: 0;
-  color: #333;
+.logo {
   text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.logo h1 {
+  color: white;
+  margin: 0;
+  font-size: 2rem;
+  letter-spacing: 3px;
+}
+
+.subtitle {
+  color: #667eea;
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
 }
 
 .form-group {
@@ -195,15 +444,23 @@ onUnmounted(() => {
 .form-group label {
   display: block;
   margin-bottom: 0.5rem;
-  color: #555;
+  color: #888;
+  font-size: 0.85rem;
 }
 
 .form-group input {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: white;
   font-size: 1rem;
+  outline: none;
+}
+
+.form-group input:focus {
+  border-color: #667eea;
 }
 
 .btn-primary {
@@ -212,10 +469,10 @@ onUnmounted(() => {
   background: #667eea;
   color: white;
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   font-size: 1rem;
   cursor: pointer;
-  transition: background 0.3s;
+  transition: background 0.2s;
 }
 
 .btn-primary:hover {
@@ -226,6 +483,7 @@ onUnmounted(() => {
   text-align: center;
   margin-top: 1rem;
   color: #666;
+  font-size: 0.85rem;
 }
 
 .toggle-mode a {
@@ -246,91 +504,25 @@ onUnmounted(() => {
   display: block;
 }
 
-.hud {
+.controls-hint {
   position: absolute;
-  top: 20px;
-  left: 20px;
-  right: 20px;
-  display: flex;
-  justify-content: space-between;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.5);
+  color: #888;
+  padding: 4px 16px;
+  border-radius: 20px;
+  font-size: 0.75rem;
   pointer-events: none;
 }
 
-.hud-panel {
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 1rem;
-  border-radius: 10px;
-  pointer-events: auto;
-}
-
-.hud-panel h3 {
-  margin: 0 0 0.5rem 0;
-}
-
-.hud-panel p {
-  margin: 0.25rem 0;
-}
-
-.chat-panel {
-  width: 300px;
-  max-height: 300px;
+.loading-screen {
   display: flex;
-  flex-direction: column;
-}
-
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  margin-bottom: 0.5rem;
-  max-height: 200px;
-}
-
-.chat-message {
-  margin-bottom: 0.25rem;
-  font-size: 0.9rem;
-}
-
-.chat-sender {
-  color: #667eea;
-  font-weight: bold;
-}
-
-.chat-text {
-  color: #ccc;
-}
-
-.chat-input {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.chat-input input {
-  flex: 1;
-  padding: 0.5rem;
-  border: none;
-  border-radius: 5px;
-  font-size: 0.9rem;
-}
-
-.chat-input button {
-  padding: 0.5rem 1rem;
-  background: #667eea;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background: #0a0a15;
   color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-
-.controls-hint {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-size: 0.9rem;
 }
 </style>
