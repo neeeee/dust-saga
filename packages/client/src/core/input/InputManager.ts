@@ -58,23 +58,13 @@ export class InputManager {
     this.mousePosition.y = e.clientY;
   }
 
-  private handleMouseDown(e: MouseEvent): void {
-    if (e.button === 0 && !this.pointerLocked) {
-      this.requestPointerLock();
-    }
+  private handleMouseDown(_e: MouseEvent): void {
   }
 
-  private handleMouseUp(e: MouseEvent): void {
-    if (e.button === 0) {
-    }
+  private handleMouseUp(_e: MouseEvent): void {
   }
 
   private handlePointerLockChange(): void {
-    this.pointerLocked = document.pointerLockElement !== null;
-  }
-
-  private requestPointerLock(): void {
-    document.body.requestPointerLock();
   }
 
   getInputState(): InputState {
@@ -94,8 +84,8 @@ export class InputManager {
     const input = this.getInputState();
     const movement = new Vector3(0, 0, 0);
 
-    if (input.forward) movement.z -= 1;
-    if (input.backward) movement.z += 1;
+    if (input.forward) movement.z += 1;
+    if (input.backward) movement.z -= 1;
     if (input.left) movement.x -= 1;
     if (input.right) movement.x += 1;
 

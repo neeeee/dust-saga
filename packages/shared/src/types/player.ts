@@ -24,6 +24,7 @@ export interface PlayerSession {
   zoneId: string;
   targetId: string | null;
   lastAttackTime: number;
+  invulnerableUntil: number;
   inventory: Array<{
     itemId: string;
     quantity: number;

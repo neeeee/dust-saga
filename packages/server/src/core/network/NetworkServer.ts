@@ -108,6 +108,8 @@ export class NetworkServer {
       const target = this.findPlayerByCharacterId(targetId);
       if (!target) return;
 
+      if (target.invulnerableUntil > Date.now()) return;
+
       const enemy = this.spawnMgr.getEnemy(enemyId);
       if (!enemy) return;
 
@@ -139,6 +141,14 @@ export class NetworkServer {
     session.stats.health = session.stats.maxHealth;
     session.stats.mana = session.stats.maxMana;
     session.position = { ...spawnPoint };
+    session.invulnerableUntil = Date.now() + 5000;
+
+    this.spawnMgr.getAllEnemies().forEach(enemy => {
+      if (enemy.targetId === session.characterId) {
+        enemy.state = 'return';
+        enemy.targetId = null;
+      }
+    });
 
     this.sendToPlayer(session.characterId, {
       type: PacketType.DEATH,
@@ -391,12 +401,14 @@ export class NetworkServer {
       char.level
     );
 
-    session.position = {
-      x: char.position_x || 0,
-      y: char.position_y || 0,
-      z: char.position_z || 0
-    };
     session.zoneId = char.zone_id || 'starter_zone';
+
+    const zoneDef = getZoneDefinition(session.zoneId);
+    if (char.position_x === 0 && char.position_y === 0 && char.position_z === 0) {
+      session.position = { ...(zoneDef?.playerSpawn || { x: 0, y: 0, z: 0 }) };
+    } else {
+      session.position = { x: char.position_x, y: char.position_y, z: char.position_z };
+    }
 
     this.state.players.set(session.characterId, session);
     this.state.playerToSocket.set(session.characterId, socket.id);
@@ -873,8 +885,10 @@ export class NetworkServer {
   }
 
   gameLoop(): void {
+    const now = Date.now();
     const playerPositions = new Map<string, { position: { x: number; y: number; z: number }; characterId: string }>();
     this.state.players.forEach(session => {
+      if (session.invulnerableUntil > now) return;
       playerPositions.set(session.characterId, { position: session.position, characterId: session.characterId });
     });
 

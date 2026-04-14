@@ -29,11 +29,12 @@ export interface GameCallbacks {
 export class GameClient {
   private engine: GameEngine;
   private network: NetworkClient;
-  private input: InputManager;
+  private input: InputManager | null = null;
   private entityManager: ClientEntityManager;
   private interpolationManager: InterpolationManager;
   private isRunning: boolean = false;
   private lastUpdate: number = 0;
+  private lastTeleportTime: number = 0;
   private playerId: string | null = null;
   private playerMesh: any = null;
   private callbacks: Partial<GameCallbacks> = {};
@@ -45,10 +46,9 @@ export class GameClient {
   private lootBeacons: Map<string, any> = new Map();
   private knownEntities: Map<string, { type: string; data: any }> = new Map();
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement | null) {
     this.engine = new GameEngine(canvas);
     this.network = new NetworkClient();
-    this.input = new InputManager();
     this.entityManager = new ClientEntityManager();
     this.interpolationManager = new InterpolationManager();
   }
@@ -58,13 +58,18 @@ export class GameClient {
   }
 
   async initialize(): Promise<void> {
-    await this.engine.initialize();
     this.setupNetworkHandlers();
-    this.setupClickHandler();
     this.network.connect();
     this.isRunning = true;
     this.lastUpdate = performance.now();
     this.gameLoop();
+  }
+
+  async initEngine(canvas: HTMLCanvasElement): Promise<void> {
+    this.engine = new GameEngine(canvas);
+    this.input = new InputManager();
+    await this.engine.initialize();
+    this.setupClickHandler();
   }
 
   private setupClickHandler(): void {
@@ -89,6 +94,7 @@ export class GameClient {
 
     this.network.onPacket(PacketType.CHARACTER_SELECT, (packet: any) => {
       const data = packet.data;
+      this.playerId = data.characterId;
       this.stats = data.stats;
       this.currentZoneId = data.zoneId;
       this.callbacks.onStatsUpdate?.(data.stats);
@@ -334,27 +340,41 @@ export class GameClient {
   }
 
   private update(deltaTime: number): void {
-    if (!this.playerMesh || !this.input.hasPointerLock()) return;
+    if (!this.input || !this.playerMesh) return;
 
     const input = this.input.getInputState();
     const movementVector = this.input.getMovementVector();
-    const mouseDelta = this.input.getMouseDelta();
 
     const speed = input.sprint ? GAME_CONFIG.PLAYER_SPEED * 1.5 : GAME_CONFIG.PLAYER_SPEED;
 
-    const forward = this.playerMesh.forward;
-    const right = this.playerMesh.right;
+    const camera = this.engine.getScene()?.activeCamera;
+    let camForward = BabylonVector3.Forward();
+    let camRight = BabylonVector3.Right();
 
-    const moveDirection = new BabylonVector3(0, 0, 0);
-    moveDirection.addInPlace(forward.scale(movementVector.z));
-    moveDirection.addInPlace(right.scale(movementVector.x));
-
-    if (moveDirection.length() > 0) {
-      moveDirection.normalize();
-      this.playerMesh.position.addInPlace(moveDirection.scale(speed * deltaTime));
+    if (camera) {
+      camera.getDirectionToRef(BabylonVector3.Forward(), camForward);
+      camForward.y = 0;
+      camForward.normalize();
+      camera.getDirectionToRef(BabylonVector3.Right(), camRight);
+      camRight.y = 0;
+      camRight.normalize();
     }
 
-    this.playerMesh.rotation.y += mouseDelta.x * 0.002;
+    const moveDirection = new BabylonVector3(0, 0, 0);
+    moveDirection.addInPlace(camForward.scale(movementVector.z));
+    moveDirection.addInPlace(camRight.scale(movementVector.x));
+
+    const isMoving = moveDirection.length() > 0.001;
+
+    if (isMoving) {
+      moveDirection.normalize();
+      this.playerMesh.position.addInPlace(moveDirection.scale(speed * deltaTime));
+      const angle = Math.atan2(moveDirection.x, moveDirection.z);
+      this.playerMesh.rotation.y = angle;
+      this.engine.startAnimation(this.playerId!, 'Walk');
+    } else {
+      this.engine.startAnimation(this.playerId!, 'Idle');
+    }
 
     const now = Date.now();
     if (now - this.lastMoveSend > 50) {
@@ -403,6 +423,22 @@ export class GameClient {
           this.playerMesh.position.z,
           zoneDef.size
         );
+      }
+    }
+
+    if (this.playerMesh) {
+      const now = Date.now();
+      if (now - this.lastTeleportTime > 3000) {
+        const mapBuilder = this.engine.getMapBuilder();
+        const tp = mapBuilder?.checkTeleport(this.playerMesh.position);
+        if (tp) {
+          this.lastTeleportTime = now;
+          this.network.sendPacket({
+            type: PacketType.ENTER_ZONE,
+            timestamp: now,
+            data: { zoneId: tp.targetZone, spawnId: tp.targetSpawn }
+          });
+        }
       }
     }
   }
@@ -499,7 +535,7 @@ export class GameClient {
   dispose(): void {
     this.isRunning = false;
     this.network.disconnect();
-    this.input.dispose();
+    this.input?.dispose();
     this.engine.dispose();
     this.entityManager.clear();
     this.interpolationManager.clear();

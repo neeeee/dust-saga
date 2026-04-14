@@ -50,6 +50,7 @@ export class PlayerSystem extends System {
       zoneId: 'starter_zone',
       targetId: null,
       lastAttackTime: 0,
+      invulnerableUntil: Date.now() + 3000,
       inventory: [],
       equipment: {
         weapon: null,

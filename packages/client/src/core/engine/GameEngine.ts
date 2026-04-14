@@ -12,9 +12,11 @@ import {
   AbstractMesh,
   ShadowGenerator,
   FloatArray,
-  Scene as SceneType
+  Scene as SceneType,
+  AnimationGroup
 } from '@babylonjs/core';
 import { AssetManager } from './AssetManager';
+import { MapBuilder, MapData } from './MapBuilder';
 import { ZoneDefinition } from '@dust-saga/shared';
 
 export interface EntityMeshGroup {
@@ -25,27 +27,33 @@ export interface EntityMeshGroup {
 }
 
 export class GameEngine {
-  private canvas: HTMLCanvasElement;
-  private engine: Engine;
+  private canvas: HTMLCanvasElement | null;
+  private engine: Engine | null = null;
   private scene: Scene | null = null;
   private camera: ArcRotateCamera | null = null;
   private shadowGenerator: ShadowGenerator | null = null;
   private meshes: Map<string, EntityMeshGroup> = new Map();
+  private entityAnimations: Map<string, AnimationGroup[]> = new Map();
+  private currentAnimation: Map<string, string> = new Map();
   private assetManager: AssetManager | null = null;
+  private mapBuilder: MapBuilder | null = null;
   private playerMesh: AbstractMesh | null = null;
   private onClickCallbacks: Array<(entityId: string) => void> = [];
   private minimapCanvas: HTMLCanvasElement | null = null;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
+  }
+
+  async initialize(): Promise<void> {
+    if (!this.canvas) return;
+
     this.engine = new Engine(this.canvas, true, {
       preserveDrawingBuffer: true,
       stencil: true,
       antialias: true
     });
-  }
 
-  async initialize(): Promise<void> {
     this.scene = new Scene(this.engine);
     this.scene.clearColor = new Color4(0.5, 0.7, 1.0, 1);
     this.scene.ambientColor = new Color3(0.3, 0.3, 0.3);
@@ -55,6 +63,7 @@ export class GameEngine {
     this.scene.fogColor = new Color3(0.7, 0.85, 0.95);
 
     this.assetManager = new AssetManager(this.scene);
+    this.mapBuilder = new MapBuilder(this.scene, this.assetManager);
 
     this.camera = new ArcRotateCamera(
       'camera',
@@ -103,14 +112,31 @@ export class GameEngine {
     });
 
     window.addEventListener('resize', () => {
-      this.engine.resize();
+      this.engine?.resize();
     });
   }
 
   async loadZone(zoneDef: ZoneDefinition): Promise<void> {
-    if (!this.scene) return;
+    if (!this.scene || !this.mapBuilder) return;
 
     this.clearEnvironment();
+    this.entityAnimations.clear();
+    this.currentAnimation.clear();
+    this.meshes.clear();
+
+    try {
+      const resp = await fetch(`/maps/${zoneDef.id}.json`);
+      if (resp.ok) {
+        const mapData: MapData = await resp.json();
+        await this.mapBuilder.build(mapData);
+        if (this.minimapCanvas) {
+          this.renderMinimap(zoneDef);
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn(`Failed to load map JSON for ${zoneDef.id}, using fallback:`, e);
+    }
 
     this.scene.clearColor = new Color4(zoneDef.fogColor.r, zoneDef.fogColor.g, zoneDef.fogColor.b, 1);
     this.scene.fogColor = new Color3(zoneDef.fogColor.r, zoneDef.fogColor.g, zoneDef.fogColor.b);
@@ -130,7 +156,7 @@ export class GameEngine {
 
   private clearEnvironment(): void {
     const envMeshes = this.scene!.meshes.filter(
-      m => m.name.startsWith('ground') || m.name.startsWith('env_') || m.name.startsWith('zone_')
+      m => !m.name.startsWith('player_') && !m.name.startsWith('enemy_') && !m.name.startsWith('npc_') && !m.name.startsWith('fallback_') && !m.name.startsWith('hp_') && !m.name.startsWith('name_')
     );
     envMeshes.forEach(m => {
       if (m.material) m.material.dispose();
@@ -193,12 +219,12 @@ export class GameEngine {
   private async createTree(position: V3, scale: number): Promise<void> {
     if (!this.assetManager) return;
 
-    const mesh = await this.assetManager.instantiateModel('Pine.glb', position);
-    if (mesh) {
-      mesh.scaling = new V3(scale, scale, scale);
-      mesh.name = `env_tree_${position.x}_${position.z}`;
+    const result = await this.assetManager.instantiateModel('Pine.glb', position);
+    if (result) {
+      result.root.scaling = new V3(scale, scale, scale);
+      result.root.name = `env_tree_${position.x}_${position.z}`;
       if (this.shadowGenerator) {
-        this.shadowGenerator.addShadowCaster(mesh);
+        this.shadowGenerator.addShadowCaster(result.root);
       }
     } else {
       this.createFallbackTree(position, scale);
@@ -240,12 +266,12 @@ export class GameEngine {
   private async createRock(position: V3, scale: number): Promise<void> {
     if (!this.assetManager) return;
 
-    const mesh = await this.assetManager.instantiateModel('Rock Medium.glb', position);
-    if (mesh) {
-      mesh.scaling = new V3(scale, scale, scale);
-      mesh.name = `env_rock_${position.x}_${position.z}`;
+    const result = await this.assetManager.instantiateModel('Rock Medium.glb', position);
+    if (result) {
+      result.root.scaling = new V3(scale, scale, scale);
+      result.root.name = `env_rock_${position.x}_${position.z}`;
       if (this.shadowGenerator) {
-        this.shadowGenerator.addShadowCaster(mesh);
+        this.shadowGenerator.addShadowCaster(result.root);
       }
     } else {
       this.createFallbackRock(position, scale);
@@ -282,7 +308,13 @@ export class GameEngine {
     let mesh: AbstractMesh | null = null;
 
     if (modelFile) {
-      mesh = await this.assetManager.instantiateModel(modelFile, position);
+      const result = await this.assetManager.instantiateModel(modelFile, position);
+      if (result) {
+        mesh = result.root;
+        mesh.rotationQuaternion = null;
+        this.entityAnimations.set(entityId, result.animations);
+        this.startAnimation(entityId, 'Idle');
+      }
     }
 
     if (!mesh) {
@@ -316,7 +348,13 @@ export class GameEngine {
     let mesh: AbstractMesh | null = null;
 
     if (modelFile) {
-      mesh = await this.assetManager.instantiateModel(modelFile, position);
+      const result = await this.assetManager.instantiateModel(modelFile, position);
+      if (result) {
+        mesh = result.root;
+        mesh.rotationQuaternion = null;
+        this.entityAnimations.set(entityId, result.animations);
+        this.startAnimation(entityId, 'Idle');
+      }
     }
 
     if (!mesh) {
@@ -363,7 +401,13 @@ export class GameEngine {
     let mesh: AbstractMesh | null = null;
 
     if (modelFile) {
-      mesh = await this.assetManager.instantiateModel(modelFile, position);
+      const result = await this.assetManager.instantiateModel(modelFile, position);
+      if (result) {
+        mesh = result.root;
+        mesh.rotationQuaternion = null;
+        this.entityAnimations.set(entityId, result.animations);
+        this.startAnimation(entityId, 'Idle');
+      }
     }
 
     if (!mesh) {
@@ -473,6 +517,7 @@ export class GameEngine {
       group.namePlate?.dispose();
       this.meshes.delete(entityId);
     }
+    this.entityAnimations.delete(entityId);
   }
 
   focusCameraOnEntity(entityId: string): void {
@@ -503,27 +548,9 @@ export class GameEngine {
     if (!ctx) return;
 
     const size = this.minimapCanvas.width;
-    const scale = size / zoneDef.size;
 
     ctx.fillStyle = `rgb(${Math.floor(zoneDef.groundColor.r * 255)}, ${Math.floor(zoneDef.groundColor.g * 255)}, ${Math.floor(zoneDef.groundColor.b * 255)})`;
     ctx.fillRect(0, 0, size, size);
-
-    ctx.fillStyle = 'rgba(0, 100, 0, 0.5)';
-    for (const objGroup of zoneDef.environmentObjects) {
-      if (objGroup.type === 'tree') {
-        for (const pos of objGroup.positions) {
-          ctx.beginPath();
-          ctx.arc(
-            size / 2 + pos.x * scale,
-            size / 2 + pos.z * scale,
-            3,
-            0,
-            Math.PI * 2
-          );
-          ctx.fill();
-        }
-      }
-    }
 
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
     ctx.lineWidth = 1;
@@ -557,7 +584,7 @@ export class GameEngine {
     return this.scene;
   }
 
-  getEngine(): Engine {
+  getEngine(): Engine | null {
     return this.engine;
   }
 
@@ -569,6 +596,32 @@ export class GameEngine {
     return this.meshes.get(entityId);
   }
 
+  getMapBuilder(): MapBuilder | null {
+    return this.mapBuilder;
+  }
+
+  startAnimation(entityId: string, name: string): void {
+    const anims = this.entityAnimations.get(entityId);
+    if (!anims) return;
+    if (this.currentAnimation.get(entityId) === name) return;
+    this.currentAnimation.set(entityId, name);
+    anims.forEach(ag => ag.stop());
+
+    const meshGroup = this.meshes.get(entityId);
+    if (meshGroup?.root) {
+      const skeleton = meshGroup.root.skeleton || meshGroup.root.getChildMeshes().find(m => m.skeleton)?.skeleton;
+      if (skeleton) {
+        skeleton.returnToRest();
+      }
+    }
+
+    const target = anims.find(ag => ag.name.toLowerCase().includes(name.toLowerCase()));
+    if (target) {
+      target.goToFrame(target.from);
+      target.start(true, 1.0, target.from, target.to);
+    }
+  }
+
   dispose(): void {
     this.meshes.forEach(group => {
       group.root.dispose();
@@ -577,8 +630,11 @@ export class GameEngine {
       group.namePlate?.dispose();
     });
     this.meshes.clear();
+    this.entityAnimations.clear();
+    this.currentAnimation.clear();
+    this.mapBuilder?.clear();
     this.assetManager?.dispose();
     this.scene?.dispose();
-    this.engine.dispose();
+    this.engine?.dispose();
   }
 }

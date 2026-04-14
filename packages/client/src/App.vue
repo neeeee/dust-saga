@@ -203,7 +203,7 @@ function handleDeleteCharacter(characterId: string) {
 async function setupGameCanvas() {
   await nextTick();
   if (gameCanvas.value && gameClient) {
-    await (gameClient as any).engine.initialize();
+    await gameClient.initEngine(gameCanvas.value);
     const minimapCanvas = hudRef.value?.minimapCanvas;
     if (minimapCanvas) {
       gameClient.setMinimapCanvas(minimapCanvas);
@@ -274,9 +274,7 @@ function showNotification(message: string, type: string) {
 }
 
 onMounted(async () => {
-  if (!gameCanvas.value) return;
-
-  gameClient = new GameClient(gameCanvas.value);
+  gameClient = new GameClient(null);
 
   gameClient.setCallbacks({
     onStatsUpdate: (stats) => {

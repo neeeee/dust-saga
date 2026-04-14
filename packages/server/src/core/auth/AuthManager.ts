@@ -15,6 +15,9 @@ export class AuthManager {
   private static instance: AuthManager;
   private db: DatabaseManager;
 
+  private mockPlayers: Map<string, { id: string; username: string }> = new Map();
+  private mockCharacters: Map<string, Array<{ id: string; name: string; class: string; level: number; position_x: number; position_y: number; position_z: number; zone_id: string }>> = new Map();
+
   private constructor() {
     this.db = DatabaseManager.getInstance();
   }
@@ -28,11 +31,16 @@ export class AuthManager {
 
   async register(username: string, email: string, password: string): Promise<{ success: boolean; playerId?: string; token?: string; error?: string }> {
     if (!this.db.isPostgresConnected()) {
-      const mockId = uuidv4();
+      let player = this.mockPlayers.get(username);
+      if (!player) {
+        player = { id: uuidv4(), username };
+        this.mockPlayers.set(username, player);
+        this.mockCharacters.set(player.id, []);
+      }
       return {
         success: true,
-        playerId: mockId,
-        token: this.generateToken(mockId, username)
+        playerId: player.id,
+        token: this.generateToken(player.id, username)
       };
     }
 
@@ -66,12 +74,17 @@ export class AuthManager {
 
   async login(username: string, password: string): Promise<{ success: boolean; playerId?: string; username?: string; token?: string; level?: number; error?: string }> {
     if (!this.db.isPostgresConnected()) {
-      const mockId = uuidv4();
+      let player = this.mockPlayers.get(username);
+      if (!player) {
+        player = { id: uuidv4(), username };
+        this.mockPlayers.set(username, player);
+        this.mockCharacters.set(player.id, []);
+      }
       return {
         success: true,
-        playerId: mockId,
+        playerId: player.id,
         username,
-        token: this.generateToken(mockId, username),
+        token: this.generateToken(player.id, username),
         level: 1
       };
     }
@@ -121,7 +134,7 @@ export class AuthManager {
 
   async getCharacters(playerId: string): Promise<any[]> {
     if (!this.db.isPostgresConnected()) {
-      return [];
+      return this.mockCharacters.get(playerId) || [];
     }
 
     try {
@@ -138,7 +151,14 @@ export class AuthManager {
 
   async createCharacter(playerId: string, name: string, characterClass: string): Promise<{ success: boolean; characterId?: string; error?: string }> {
     if (!this.db.isPostgresConnected()) {
-      return { success: true, characterId: uuidv4() };
+      const characters = this.mockCharacters.get(playerId) || [];
+      if (characters.find(c => c.name === name)) {
+        return { success: false, error: 'Character name already exists' };
+      }
+      const newChar = { id: uuidv4(), name, class: characterClass, level: 1, position_x: 0, position_y: 0, position_z: 0, zone_id: 'starter_zone' };
+      characters.push(newChar);
+      this.mockCharacters.set(playerId, characters);
+      return { success: true, characterId: newChar.id };
     }
 
     try {
@@ -164,7 +184,14 @@ export class AuthManager {
   }
 
   async deleteCharacter(playerId: string, characterId: string): Promise<boolean> {
-    if (!this.db.isPostgresConnected()) return true;
+    if (!this.db.isPostgresConnected()) {
+      const characters = this.mockCharacters.get(playerId);
+      if (characters) {
+        const idx = characters.findIndex(c => c.id === characterId);
+        if (idx >= 0) characters.splice(idx, 1);
+      }
+      return true;
+    }
 
     try {
       await this.db.postgres!.query(

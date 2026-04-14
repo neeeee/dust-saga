@@ -4,68 +4,62 @@ import {
   SceneLoader,
   AbstractMesh,
   Vector3,
-  TransformNode,
   AnimationGroup,
   Color3,
   StandardMaterial,
   MeshBuilder,
-  DynamicTexture
+  DynamicTexture,
+  AssetContainer
 } from '@babylonjs/core';
-
-export interface LoadedModel {
-  root: TransformNode;
-  meshes: AbstractMesh[];
-  animations: AnimationGroup[];
-}
 
 export class AssetManager {
   private scene: Scene;
-  private loadedModels: Map<string, LoadedModel> = new Map();
-  private modelCache: Map<string, AbstractMesh[]> = new Map();
-  private loadingPromises: Map<string, Promise<AbstractMesh[]>> = new Map();
+  private containers: Map<string, AssetContainer> = new Map();
+  private loadingPromises: Map<string, Promise<AssetContainer | null>> = new Map();
   private basePath: string = '/models/';
 
   constructor(scene: Scene) {
     this.scene = scene;
   }
 
-  async loadModel(name: string): Promise<AbstractMesh[]> {
+  private async getContainer(name: string): Promise<AssetContainer | null> {
     const fileName = name.endsWith('.glb') ? name : `${name}.glb`;
 
-    if (this.modelCache.has(fileName)) {
-      return this.modelCache.get(fileName)!;
+    if (this.containers.has(fileName)) {
+      return this.containers.get(fileName)!;
     }
 
     if (this.loadingPromises.has(fileName)) {
       return this.loadingPromises.get(fileName)!;
     }
 
-    const promise = new Promise<AbstractMesh[]>((resolve) => {
+    const promise = new Promise<AssetContainer | null>((resolve) => {
       SceneLoader.ImportMesh(
         '',
         this.basePath,
         fileName,
         this.scene,
-        (meshes) => {
-          const rootMesh = meshes[0];
-          if (rootMesh) {
-            rootMesh.setEnabled(false);
-            rootMesh.isVisible = false;
-            meshes.forEach(m => {
-              m.isVisible = false;
-              m.setEnabled(false);
-            });
-          }
+        (meshes, _particleSystems, skeletons, animationGroups) => {
+          animationGroups.forEach(ag => ag.stop());
+          skeletons.forEach(s => s.returnToRest());
+          meshes.forEach(m => {
+            m.isVisible = false;
+          });
 
-          this.modelCache.set(fileName, meshes);
+          const container = new AssetContainer(this.scene);
+          meshes.forEach(m => container.meshes.push(m));
+          animationGroups.forEach(ag => container.animationGroups.push(ag));
+          skeletons.forEach(s => container.skeletons.push(s));
+
+          this.containers.set(fileName, container);
           this.loadingPromises.delete(fileName);
-          resolve(meshes);
+          resolve(container);
         },
         undefined,
-        (_scene, message) => {
+        (_scene: Scene, message: string) => {
           console.warn(`Failed to load model ${fileName}:`, message);
           this.loadingPromises.delete(fileName);
-          resolve([]);
+          resolve(null);
         }
       );
     });
@@ -74,27 +68,22 @@ export class AssetManager {
     return promise;
   }
 
-  async instantiateModel(name: string, position?: Vector3): Promise<AbstractMesh | null> {
-    const sourceMeshes = await this.loadModel(name);
+  async instantiateModel(name: string, position?: Vector3): Promise<{ root: AbstractMesh; animations: AnimationGroup[] } | null> {
+    const container = await this.getContainer(name);
+    if (!container) return null;
 
-    if (sourceMeshes.length === 0) return null;
-
-    const root = sourceMeshes[0].clone(`${name}_instance_${Date.now()}_${Math.random()}`, null);
+    const result = container.instantiateModelsToScene();
+    const root = result.rootNodes[0] as AbstractMesh | undefined;
     if (!root) return null;
 
-    root.setEnabled(true);
     root.isVisible = true;
+    root.getChildMeshes().forEach(m => { m.isVisible = true; });
 
     if (position) {
       root.position = position;
     }
 
-    root.getChildMeshes().forEach(m => {
-      m.isVisible = true;
-      m.setEnabled(true);
-    });
-
-    return root;
+    return { root, animations: result.animationGroups };
   }
 
   createHealthBar(parentId: string, width: number = 2, height: number = 0.2): { background: AbstractMesh; foreground: AbstractMesh } {
@@ -233,10 +222,9 @@ export class AssetManager {
   }
 
   dispose(): void {
-    this.loadedModels.forEach(model => {
-      model.meshes.forEach(m => m.dispose());
+    this.containers.forEach(container => {
+      container.dispose();
     });
-    this.loadedModels.clear();
-    this.modelCache.clear();
+    this.containers.clear();
   }
 }

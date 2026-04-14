@@ -33,7 +33,7 @@ export const ZONE_DATABASE: Record<string, ZoneDefinition> = {
     fogColor: { r: 0.7, g: 0.85, b: 0.95 },
     fogDensity: 0.003,
     size: 120,
-    playerSpawn: { x: 0, y: 0, z: 0 },
+    playerSpawn: { x: 0, y: 0, z: -50 },
     connections: ['forest_zone'],
     spawns: [
       {
@@ -47,38 +47,7 @@ export const ZONE_DATABASE: Record<string, ZoneDefinition> = {
         spawnArea: { centerX: -20, centerZ: 25, radius: 15 }
       }
     ],
-    environmentObjects: [
-      {
-        type: 'tree',
-        positions: [
-          { x: -15, y: 0, z: -20, scale: 1.2 },
-          { x: 10, y: 0, z: -35, scale: 0.9 },
-          { x: -30, y: 0, z: -10, scale: 1.1 },
-          { x: 25, y: 0, z: -15, scale: 1.0 },
-          { x: -10, y: 0, z: 15, scale: 0.8 },
-          { x: 40, y: 0, z: 5, scale: 1.3 },
-          { x: -35, y: 0, z: 20, scale: 1.0 },
-          { x: 15, y: 0, z: 40, scale: 1.1 },
-          { x: -25, y: 0, z: -35, scale: 0.9 },
-          { x: 35, y: 0, z: -40, scale: 1.2 },
-          { x: -45, y: 0, z: 10, scale: 1.0 },
-          { x: 45, y: 0, z: 25, scale: 0.8 },
-          { x: -5, y: 0, z: -45, scale: 1.1 },
-          { x: 20, y: 0, z: -50, scale: 1.0 }
-        ]
-      },
-      {
-        type: 'rock',
-        positions: [
-          { x: 5, y: 0, z: 10, scale: 1.0 },
-          { x: -20, y: 0, z: -5, scale: 1.5 },
-          { x: 30, y: 0, z: 15, scale: 0.7 },
-          { x: -10, y: 0, z: 30, scale: 1.2 },
-          { x: 15, y: 0, z: -20, scale: 0.9 },
-          { x: -40, y: 0, z: -25, scale: 1.1 }
-        ]
-      }
-    ]
+    environmentObjects: []
   },
   'forest_zone': {
     id: 'forest_zone',
