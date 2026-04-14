@@ -11,6 +11,8 @@ pnpm-lock.yaml
 dist/
 build/
 *.tsbuildinfo
+.turbo/
+.nx/
 
 # Environment variables
 .env
