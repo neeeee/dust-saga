@@ -4,6 +4,8 @@ import { getEnemyDefinition } from '@dust-saga/shared';
 
 export class AISystem extends System {
   private attackCallbacks: Array<(enemyId: string, targetId: string, damage: number) => void> = [];
+  private respawnCallbacks: Array<(enemyId: string) => void> = [];
+  private aggroCallbacks: Array<(enemyId: string, enemyType: string, targetId: string, enemyPos: { x: number; y: number; z: number }, spawnPos: { x: number; y: number; z: number }) => void> = [];
 
   constructor(entityManager: EntityManager) {
     super(entityManager);
@@ -11,6 +13,14 @@ export class AISystem extends System {
 
   onEnemyAttack(callback: (enemyId: string, targetId: string, damage: number) => void): void {
     this.attackCallbacks.push(callback);
+  }
+
+  onEnemyRespawn(callback: (enemyId: string) => void): void {
+    this.respawnCallbacks.push(callback);
+  }
+
+  onEnemyAggro(callback: (enemyId: string, enemyType: string, targetId: string, enemyPos: { x: number; y: number; z: number }, spawnPos: { x: number; y: number; z: number }) => void): void {
+    this.aggroCallbacks.push(callback);
   }
 
   updateEnemies(
@@ -63,6 +73,7 @@ export class AISystem extends System {
       if (dist < def.aggroRange) {
         enemy.state = 'chase';
         enemy.targetId = player.characterId;
+        this.aggroCallbacks.forEach(cb => cb(enemy.id, enemy.enemyType, player.characterId, { ...enemy.position }, { ...enemy.spawnPosition }));
         return;
       }
     }
@@ -224,6 +235,7 @@ export class AISystem extends System {
       enemy.targetId = null;
       enemy.position = { ...enemy.spawnPosition };
       enemy.currentPatrolIndex = 0;
+      this.respawnCallbacks.forEach(cb => cb(enemy.id));
     }
   }
 

@@ -71,6 +71,11 @@ export class NetworkServer {
           timestamp: Date.now(),
           data: { experience: enemyDef.experience, totalExperience: killer.stats.experience, level: killer.stats.level }
         });
+        this.sendToPlayer(killer.characterId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { characterId: killer.characterId, stats: killer.stats }
+        });
 
         const completedQuests = this.questSys.onEnemyKill(killer, enemy.enemyType);
         completedQuests.forEach(questId => {
@@ -102,6 +107,15 @@ export class NetworkServer {
           data: { entityId: targetId, killerId }
         }
       );
+
+      this.broadcastInZone(
+        this.findZoneOfEntity(targetId),
+        {
+          type: PacketType.ENTITY_DESPAWN,
+          timestamp: Date.now(),
+          data: { entityId: targetId }
+        }
+      );
     });
 
     this.ai.onEnemyAttack((enemyId, targetId, damage) => {
@@ -111,10 +125,30 @@ export class NetworkServer {
       if (target.invulnerableUntil > Date.now()) return;
 
       const enemy = this.spawnMgr.getEnemy(enemyId);
-      if (!enemy) return;
+      if (!enemy || enemy.state === 'dead') return;
+
+      const dx = enemy.position.x - target.position.x;
+      const dz = enemy.position.z - target.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      const enemyDef = getEnemyDefinition(enemy.enemyType);
+      if (dist > (enemyDef?.attackRange || 2) * 2) {
+        enemy.state = 'return';
+        enemy.targetId = null;
+        return;
+      }
 
       const actualDamage = Math.max(1, damage - target.stats.defense * 0.2);
       target.stats.health = Math.max(0, target.stats.health - actualDamage);
+
+      this.sendToPlayer(targetId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: {
+          sender: 'DEBUG',
+          message: `HIT: ${enemyDef?.name || enemy.enemyType} [${enemyId}] enemy=(${enemy.position.x.toFixed(1)}, ${enemy.position.z.toFixed(1)}) you=(${target.position.x.toFixed(1)}, ${target.position.z.toFixed(1)}) dist=${dist.toFixed(1)} dmg=${Math.floor(actualDamage)}`,
+          channel: 'system'
+        }
+      });
 
       this.sendToPlayer(targetId, {
         type: PacketType.DAMAGE,
@@ -131,6 +165,47 @@ export class NetworkServer {
       if (target.stats.health <= 0) {
         this.handlePlayerDeath(target);
       }
+    });
+
+    this.ai.onEnemyRespawn((enemyId) => {
+      const enemy = this.spawnMgr.getEnemy(enemyId);
+      if (!enemy) return;
+      const zoneId = this.findZoneOfEnemy(enemyId);
+      if (!zoneId) return;
+      const def = getEnemyDefinition(enemy.enemyType);
+
+      this.broadcastInZone(zoneId, {
+        type: PacketType.ENTITY_SPAWN,
+        timestamp: Date.now(),
+        data: {
+          id: enemy.id,
+          type: 'enemy',
+          position: enemy.position,
+          rotation: { x: 0, y: enemy.rotation, z: 0, w: 1 },
+          data: {
+            enemyType: enemy.enemyType,
+            name: def?.name || enemy.enemyType,
+            health: enemy.health,
+            maxHealth: enemy.maxHealth,
+            level: enemy.level,
+            state: enemy.state,
+            modelFile: def?.modelFile || 'Enemy Small.glb'
+          }
+        }
+      });
+    });
+
+    this.ai.onEnemyAggro((enemyId, enemyType, targetId, enemyPos, spawnPos) => {
+      const def = getEnemyDefinition(enemyType);
+      this.sendToPlayer(targetId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: {
+          sender: 'DEBUG',
+          message: `AGGRO: ${def?.name || enemyType} [${enemyId}] at (${enemyPos.x.toFixed(1)}, ${enemyPos.z.toFixed(1)}) spawn=(${spawnPos.x.toFixed(1)}, ${spawnPos.z.toFixed(1)}) → YOU`,
+          channel: 'system'
+        }
+      });
     });
   }
 
@@ -779,20 +854,9 @@ export class NetworkServer {
 
     session.zoneId = data.zoneId;
     session.position = { ...targetZone.playerSpawn };
+    session.invulnerableUntil = Date.now() + 3000;
 
-    this.sendZoneState(socket, data.zoneId);
-
-    this.broadcastInZone(session.zoneId, {
-      type: PacketType.ENTITY_SPAWN,
-      timestamp: Date.now(),
-      data: {
-        id: characterId,
-        type: 'player',
-        position: session.position,
-        rotation: session.rotation,
-        data: { name: session.characterName, class: session.characterClass, level: session.stats.level, modelFile: CLASS_DEFINITIONS[session.characterClass as CharacterClass]?.modelFile }
-      }
-    });
+    this.sendZoneState(socket, data.zoneId, characterId);
 
     this.sendToPlayer(characterId, {
       type: PacketType.ENTER_ZONE,
@@ -818,7 +882,7 @@ export class NetworkServer {
     this.state.socketToPlayer.delete(socket.id);
   }
 
-  private sendZoneState(socket: Socket, zoneId: string): void {
+  private sendZoneState(socket: Socket, zoneId: string, includePlayerId?: string): void {
     const zoneDef = getZoneDefinition(zoneId);
     if (!zoneDef) return;
 
@@ -860,15 +924,15 @@ export class NetworkServer {
 
     const otherPlayers: any[] = [];
     this.state.players.forEach(player => {
-      if (player.characterId !== this.findCharacterBySocket(socket.id) && player.zoneId === zoneId) {
-        otherPlayers.push({
-          id: player.characterId,
-          type: 'player',
-          position: player.position,
-          rotation: player.rotation,
-          data: { name: player.characterName, class: player.characterClass, level: player.stats.level, modelFile: CLASS_DEFINITIONS[player.characterClass as CharacterClass]?.modelFile }
-        });
-      }
+      if (player.zoneId !== zoneId) return;
+      if (player.characterId === this.findCharacterBySocket(socket.id) && player.characterId !== includePlayerId) return;
+      otherPlayers.push({
+        id: player.characterId,
+        type: 'player',
+        position: player.position,
+        rotation: player.rotation,
+        data: { name: player.characterName, class: player.characterClass, level: player.stats.level, modelFile: CLASS_DEFINITIONS[player.characterClass as CharacterClass]?.modelFile }
+      });
     });
 
     this.sendToSocket(socket.id, {
@@ -886,18 +950,23 @@ export class NetworkServer {
 
   gameLoop(): void {
     const now = Date.now();
-    const playerPositions = new Map<string, { position: { x: number; y: number; z: number }; characterId: string }>();
-    this.state.players.forEach(session => {
-      if (session.invulnerableUntil > now) return;
-      playerPositions.set(session.characterId, { position: session.position, characterId: session.characterId });
-    });
 
-    this.ai.updateEnemies(this.spawnMgr.getAllEnemies(), playerPositions, 1 / this.tickRate);
+    for (const zoneId of this.spawnMgr.getZoneIds()) {
+      const zonePlayers = new Map<string, { position: { x: number; y: number; z: number }; characterId: string }>();
+      this.state.players.forEach(session => {
+        if (session.zoneId !== zoneId) return;
+        if (session.invulnerableUntil > now) return;
+        zonePlayers.set(session.characterId, { position: session.position, characterId: session.characterId });
+      });
+
+      this.ai.updateEnemies(this.spawnMgr.getEnemiesInZone(zoneId), zonePlayers, 1 / this.tickRate);
+    }
 
     const updates: Map<string, any[]> = new Map();
 
     this.spawnMgr.getAllEnemies().forEach(enemy => {
       if (enemy.state === 'dead') return;
+
       const zoneId = this.findZoneOfEnemy(enemy.id);
       if (!zoneId) return;
 

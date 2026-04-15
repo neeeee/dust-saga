@@ -119,10 +119,16 @@ export class GameEngine {
   async loadZone(zoneDef: ZoneDefinition): Promise<void> {
     if (!this.scene || !this.mapBuilder) return;
 
-    this.clearEnvironment();
+    this.meshes.forEach(group => {
+      group.root.dispose();
+      group.healthBarBg?.dispose();
+      group.healthBarFg?.dispose();
+      group.namePlate?.dispose();
+    });
+    this.meshes.clear();
     this.entityAnimations.clear();
     this.currentAnimation.clear();
-    this.meshes.clear();
+    this.mapBuilder.clear();
 
     try {
       const resp = await fetch(`/maps/${zoneDef.id}.json`);
@@ -152,16 +158,6 @@ export class GameEngine {
     if (this.minimapCanvas) {
       this.renderMinimap(zoneDef);
     }
-  }
-
-  private clearEnvironment(): void {
-    const envMeshes = this.scene!.meshes.filter(
-      m => !m.name.startsWith('player_') && !m.name.startsWith('enemy_') && !m.name.startsWith('npc_') && !m.name.startsWith('fallback_') && !m.name.startsWith('hp_') && !m.name.startsWith('name_')
-    );
-    envMeshes.forEach(m => {
-      if (m.material) m.material.dispose();
-      m.dispose();
-    });
   }
 
   private createGround(zoneDef: ZoneDefinition): AbstractMesh {
@@ -619,6 +615,30 @@ export class GameEngine {
     if (target) {
       target.goToFrame(target.from);
       target.start(true, 1.0, target.from, target.to);
+    }
+  }
+
+  startAnimationOnce(entityId: string, name: string, onComplete?: () => void): void {
+    const anims = this.entityAnimations.get(entityId);
+    if (!anims) return;
+    this.currentAnimation.set(entityId, name);
+    anims.forEach(ag => ag.stop());
+
+    const meshGroup = this.meshes.get(entityId);
+    if (meshGroup?.root) {
+      const skeleton = meshGroup.root.skeleton || meshGroup.root.getChildMeshes().find(m => m.skeleton)?.skeleton;
+      if (skeleton) {
+        skeleton.returnToRest();
+      }
+    }
+
+    const target = anims.find(ag => ag.name.toLowerCase().includes(name.toLowerCase()));
+    if (target) {
+      target.goToFrame(target.from);
+      target.start(false, 1.0, target.from, target.to);
+      if (onComplete) {
+        target.onAnimationGroupEndObservable.addOnce(() => onComplete());
+      }
     }
   }
 

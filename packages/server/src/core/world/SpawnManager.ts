@@ -82,6 +82,10 @@ export class SpawnManager {
     return this.spawnedEnemies.get(zoneId) || new Map();
   }
 
+  getZoneIds(): string[] {
+    return [...this.spawnedEnemies.keys()];
+  }
+
   getEnemy(enemyId: string): EnemyInstance | undefined {
     for (const [, enemies] of this.spawnedEnemies) {
       const enemy = enemies.get(enemyId);

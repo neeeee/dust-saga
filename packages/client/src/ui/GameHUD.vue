@@ -20,6 +20,19 @@
           <span class="bar-text">XP: {{ stats?.experience || 0 }} / {{ stats?.experienceToNext || 100 }}</span>
         </div>
       </div>
+      <div class="target-info" v-if="targetId">
+        <div class="target-header">
+          <div class="target-identity">
+            <span class="target-name">{{ targetName }}</span>
+            <span class="target-level" v-if="targetLevel > 0">Lv. {{ targetLevel }}</span>
+          </div>
+          <button class="target-close" @click="$emit('clear-target')">x</button>
+        </div>
+        <div class="bar-container target-bar">
+          <div class="bar target-health" :style="{ width: targetHealthPercent + '%' }"></div>
+          <span class="bar-text">{{ targetHealth }} / {{ targetMaxHealth }}</span>
+        </div>
+      </div>
     </div>
 
     <div class="hud-top-right">
@@ -36,15 +49,6 @@
       </div>
     </div>
 
-    <div class="hud-bottom-left">
-      <div class="target-info" v-if="targetId">
-        <div class="target-name">{{ targetName }}</div>
-        <div class="bar-container small">
-          <div class="bar target-health" :style="{ width: targetHealthPercent + '%' }"></div>
-        </div>
-      </div>
-    </div>
-
     <div class="hud-bottom-right">
       <div class="action-buttons">
         <button class="action-btn" @click="$emit('toggle-inventory')" title="Inventory (I)">B</button>
@@ -56,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { PlayerStats } from '@dust-saga/shared';
 
 const props = defineProps<{
@@ -67,12 +71,14 @@ const props = defineProps<{
   targetName: string;
   targetHealth: number;
   targetMaxHealth: number;
+  targetLevel: number;
 }>();
 
 defineEmits<{
   'toggle-inventory': [];
   'toggle-quests': [];
   'toggle-character': [];
+  'clear-target': [];
 }>();
 
 const minimapCanvas = ref<HTMLCanvasElement | null>(null);
@@ -177,9 +183,9 @@ defineExpose({ minimapCanvas });
   overflow: hidden;
 }
 
-.bar-container.small {
-  height: 12px;
-  width: 150px;
+.bar-container.target-bar {
+  width: 200px;
+  height: 18px;
 }
 
 .bar {
@@ -213,6 +219,62 @@ defineExpose({ minimapCanvas });
   font-size: 0.65rem;
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
   white-space: nowrap;
+}
+
+.target-info {
+  background: rgba(0, 0, 0, 0.75);
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: white;
+  min-width: 160px;
+}
+
+.target-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.target-identity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.target-close {
+  background: rgba(255, 255, 255, 0.15);
+  border: none;
+  color: #aaa;
+  font-size: 0.75rem;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+}
+
+.target-close:hover {
+  background: rgba(255, 80, 80, 0.5);
+  color: white;
+}
+
+.target-name {
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: #f44336;
+}
+
+.target-level {
+  font-size: 0.75rem;
+  color: #aaa;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 6px;
+  border-radius: 8px;
 }
 
 .hud-top-right {
@@ -266,25 +328,6 @@ defineExpose({ minimapCanvas });
   color: #667eea;
   font-size: 0.8rem;
   font-weight: bold;
-}
-
-.hud-bottom-left {
-  position: absolute;
-  bottom: 80px;
-  left: 15px;
-}
-
-.target-info {
-  background: rgba(0, 0, 0, 0.75);
-  padding: 6px 10px;
-  border-radius: 6px;
-  color: white;
-}
-
-.target-name {
-  font-size: 0.85rem;
-  margin-bottom: 4px;
-  color: #f44336;
 }
 
 .hud-bottom-right {

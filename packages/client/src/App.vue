@@ -48,9 +48,11 @@
         :target-name="targetName"
         :target-health="targetHealth"
         :target-max-health="targetMaxHealth"
+        :target-level="targetLevel"
         @toggle-inventory="showInventory = !showInventory"
         @toggle-quests="showQuests = !showQuests"
         @toggle-character="showInventory = !showInventory"
+        @clear-target="gameClient?.setTarget(null)"
       />
 
       <ChatPanel
@@ -148,6 +150,7 @@ const targetId = ref<string | null>(null);
 const targetName = ref('');
 const targetHealth = ref(0);
 const targetMaxHealth = ref(0);
+const targetLevel = ref(0);
 
 const dialogData = ref<any>({
   npcName: '',
@@ -308,12 +311,18 @@ onMounted(async () => {
       dialogData.value = data;
       showDialog.value = true;
     },
-    onTargetChange: (id) => {
+    onTargetChange: (id, data) => {
       targetId.value = id;
-      if (!id) {
+      if (!id || !data) {
         targetName.value = '';
         targetHealth.value = 0;
         targetMaxHealth.value = 0;
+        targetLevel.value = 0;
+      } else {
+        targetName.value = data.name;
+        targetHealth.value = data.health;
+        targetMaxHealth.value = data.maxHealth;
+        targetLevel.value = data.level;
       }
     },
     onZoneChange: (zoneId, zoneName) => {

@@ -14,14 +14,14 @@ import {
 export interface GameCallbacks {
   onStatsUpdate: (stats: PlayerStats) => void;
   onInventoryUpdate: (inventory: any, equipment: any) => void;
-  onQuestUpdate: (quests: any[]) => void;
-  onChatMessage: (sender: string, message: string, channel: string) => void;
+  onQuestUpdate: (quests: any) => void;
+  onChatMessage: (sender: string, message: string, channel?: string) => void;
   onNotification: (message: string, type: string) => void;
   onDeath: (data: any) => void;
   onExperienceGain: (data: any) => void;
   onLevelUp: (level: number) => void;
   onNPCDialog: (data: any) => void;
-  onTargetChange: (targetId: string | null) => void;
+  onTargetChange: (id: string | null, data?: { name: string; level: number; health: number; maxHealth: number } | null) => void;
   onZoneChange: (zoneId: string, zoneName: string) => void;
   onEnemyListUpdate: (enemies: any[]) => void;
 }
@@ -77,9 +77,14 @@ export class GameClient {
       const entity = this.knownEntities.get(entityId);
       if (entity?.type === 'enemy') {
         this.targetId = entityId;
-        this.callbacks.onTargetChange?.(entityId);
+        const enemyData = this.enemies.get(entityId);
+        this.callbacks.onTargetChange?.(entityId, enemyData ? { name: enemyData.name || 'Enemy', level: enemyData.level || 1, health: enemyData.health || 0, maxHealth: enemyData.maxHealth || 1 } : null);
       } else if (entity?.type === 'npc') {
-        this.network.interactNPC(entityId);
+        this.targetId = entityId;
+        this.callbacks.onTargetChange?.(entityId, { name: entity.data.name || 'NPC', level: 0, health: 0, maxHealth: 0 });
+      } else {
+        this.targetId = null;
+        this.callbacks.onTargetChange?.(null);
       }
     });
   }
@@ -206,11 +211,20 @@ export class GameClient {
 
           if (entity.health !== undefined) {
             this.engine.updateEntityHealth(entity.id, entity.health, entity.maxHealth);
+            const enemyData = this.enemies.get(entity.id);
+            if (enemyData && entity.maxHealth) {
+              enemyData.health = entity.health;
+              enemyData.maxHealth = entity.maxHealth;
+            }
           }
           if (entity.state) {
             const enemyData = this.enemies.get(entity.id);
             if (enemyData) {
+              const prevState = enemyData.state;
               enemyData.state = entity.state;
+              if (prevState === 'dead' && entity.state !== 'dead') {
+                this.engine.startAnimation(entity.id, 'Idle');
+              }
             }
           }
         });
@@ -285,8 +299,15 @@ export class GameClient {
         if (this.playerMesh) {
           this.playerMesh.position = new BabylonVector3(respawnPosition.x, respawnPosition.y, respawnPosition.z);
         }
+        this.callbacks.onDeath?.(packet.data);
       }
-      this.callbacks.onDeath?.(packet.data);
+      if (entityId !== this.playerId) {
+        this.engine.startAnimationOnce(entityId, 'Death');
+        if (this.targetId === entityId) {
+          this.targetId = null;
+          this.callbacks.onTargetChange?.(null);
+        }
+      }
     });
 
     this.network.onPacket(PacketType.LOOT_SPAWN, (packet: any) => {
