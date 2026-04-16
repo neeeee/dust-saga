@@ -11,10 +11,11 @@
           :class="{ selected: selectedCharacterId === char.id }"
           @click="selectedCharacterId = char.id"
         >
-          <div class="char-class-icon">{{ getClassEmoji(char.class) }}</div>
+          <div class="char-class-icon">{{ getRaceEmoji(char.race) }}</div>
           <div class="char-info">
             <h3>{{ char.name }}</h3>
-            <p class="char-class">{{ char.class }}</p>
+            <p class="char-class">{{ getJobName(char.jobId || char.class) }}</p>
+            <p class="char-race">{{ capitalize(char.race || 'Human') }}</p>
             <p class="char-level">Level {{ char.level }}</p>
           </div>
           <button class="delete-btn" @click.stop="$emit('delete-character', char.id)">x</button>
@@ -37,26 +38,59 @@
             <label>Name</label>
             <input v-model="newName" type="text" placeholder="Character name" maxlength="20" />
           </div>
-          <div class="class-select">
+
+          <h3 class="section-title">Choose Race</h3>
+          <div class="race-select">
             <div
-              v-for="(cls, key) in classes"
-              :key="key"
-              class="class-card"
-              :class="{ selected: newClass === key }"
-              @click="newClass = key"
+              v-for="race in races"
+              :key="race.id"
+              class="race-card"
+              :class="{ selected: newRace === race.id }"
+              @click="newRace = race.id"
             >
-              <div class="class-emoji">{{ getClassEmoji(key) }}</div>
-              <h4>{{ cls.name }}</h4>
-              <p>{{ cls.description }}</p>
-              <div class="class-stats">
-                <span>HP: {{ cls.stats.baseHealth }}</span>
-                <span>ATK: {{ cls.stats.baseAttack }}</span>
-                <span>DEF: {{ cls.stats.baseDefense }}</span>
+              <div class="race-emoji">{{ getRaceEmoji(race.id) }}</div>
+              <h4>{{ race.name }}</h4>
+              <p>{{ race.description }}</p>
+              <div class="race-stats">
+                <span v-for="(val, stat) in race.baseStats" :key="stat" class="stat-mini">
+                  {{ stat }}: {{ val }}
+                </span>
+              </div>
+              <div class="race-passive">
+                <strong>{{ race.passiveName }}</strong>: {{ race.passiveDescription }}
               </div>
             </div>
           </div>
+
+          <h3 class="section-title">Choose Class</h3>
+          <div class="class-select">
+            <div
+              v-for="cls in baseClasses"
+              :key="cls.id"
+              class="class-card"
+              :class="{ selected: newClass === cls.id }"
+              @click="newClass = cls.id"
+            >
+              <div class="class-emoji">{{ getClassEmoji(cls.id) }}</div>
+              <h4>{{ cls.name }}</h4>
+              <p>{{ cls.description }}</p>
+              <div class="class-stats-preview">
+                <div class="stat-bar" v-for="stat in previewStats" :key="stat.key">
+                  <span class="stat-label">{{ stat.label }}</span>
+                  <div class="stat-bar-bg">
+                    <div
+                      class="stat-bar-fill"
+                      :style="{ width: getPreviewPercent(stat.key) + '%' }"
+                    ></div>
+                  </div>
+                  <span class="stat-value">{{ getPreviewValue(stat.key) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="form-actions">
-            <button class="btn-primary" @click="handleCreate" :disabled="!newName || !newClass">Create</button>
+            <button class="btn-primary" @click="handleCreate" :disabled="!newName || !newRace || !newClass">Create</button>
             <button class="btn-secondary" @click="showCreateForm = false">Cancel</button>
           </div>
         </div>
@@ -67,13 +101,15 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { CLASS_DEFINITIONS, CharacterClass } from '@dust-saga/shared';
+import { RACE_DATA, JOB_DEFINITIONS, BaseClass, Race, getBaseClassForJob, calculateDerivedStats, createDefaultStatPoints } from '@dust-saga/shared';
 
 const props = defineProps<{
   characters: Array<{
     id: string;
     name: string;
     class: string;
+    race: string;
+    jobId: string;
     level: number;
     modelFile: string;
   }>;
@@ -81,32 +117,78 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'select-character': [characterId: string];
-  'create-character': [name: string, characterClass: string];
+  'create-character': [name: string, characterClass: string, race: string];
   'delete-character': [characterId: string];
 }>();
 
-const classes = CLASS_DEFINITIONS;
+const races = Object.values(RACE_DATA);
+const baseClasses = Object.values(JOB_DEFINITIONS).filter(j => j.tier === 1);
 const selectedCharacterId = ref<string | null>(null);
 const showCreateForm = ref(false);
 const newName = ref('');
-const newClass = ref('');
+const newRace = ref<Race>(Race.HUMAN);
+const newClass = ref<BaseClass>(BaseClass.WARRIOR);
+
+const previewStats = [
+  { key: 'maxHealth', label: 'HP' },
+  { key: 'maxMana', label: 'MP' },
+  { key: 'attack', label: 'ATK' },
+  { key: 'defense', label: 'DEF' },
+  { key: 'speed', label: 'SPD' },
+  { key: 'magicAttack', label: 'MATK' }
+];
+
+function getPreviewValue(key: string): number {
+  const jobId = Object.values(JOB_DEFINITIONS).find(j => j.baseClass === newClass.value && j.tier === 1)?.id;
+  if (!jobId) return 0;
+  const stats = calculateDerivedStats(newRace.value, jobId, 1, createDefaultStatPoints());
+  return (stats as any)[key] || 0;
+}
+
+function getPreviewPercent(key: string): number {
+  const val = getPreviewValue(key);
+  const maxes: Record<string, number> = { maxHealth: 200, maxMana: 150, attack: 30, defense: 20, speed: 40, magicAttack: 30 };
+  return Math.min(100, (val / (maxes[key] || 100)) * 100);
+}
+
+function getRaceEmoji(race: string): string {
+  const emojis: Record<string, string> = {
+    human: '\uD83E\uDDD1',
+    elf: '\uD83E\uDDD5',
+    dwarf: '\u26CF\uFE0F',
+    myrine: '\uD83D\uDC3A',
+    enkidu: '\uD83E\uDD81',
+    lapin: '\uD83D\uDC30'
+  };
+  return emojis[race] || '\uD83E\uDDD9';
+}
 
 function getClassEmoji(cls: string): string {
   const emojis: Record<string, string> = {
     warrior: '\u2694\uFE0F',
-    mage: '\u2728',
-    ranger: '\uD83C\uDFF3\uFE0F',
-    rogue: '\uD83D\uDD2A',
-    paladin: '\uD83D\uDEE1\uFE0F'
+    scout: '\uD83C\uDFF3\uFE0F',
+    acolyte: '\u2728',
+    mage: '\uD83D\uDD2E'
   };
   return emojis[cls] || '\uD83E\uDDD9';
 }
 
+function getJobName(jobId: string): string {
+  const job = JOB_DEFINITIONS[jobId as any];
+  return job?.name || jobId;
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function handleCreate() {
-  if (newName.value && newClass.value) {
-    emit('create-character', newName.value, newClass.value);
+  if (newName.value && newRace.value && newClass.value) {
+    const jobId = Object.values(JOB_DEFINITIONS).find(j => j.baseClass === newClass.value && j.tier === 1)?.id || newClass.value;
+    emit('create-character', newName.value, jobId, newRace.value);
     newName.value = '';
-    newClass.value = '';
+    newClass.value = BaseClass.WARRIOR;
+    newRace.value = Race.HUMAN;
     showCreateForm.value = false;
   }
 }
@@ -187,6 +269,13 @@ function handleCreate() {
   text-transform: capitalize;
 }
 
+.char-race {
+  color: #88ccaa;
+  margin: 0.1rem 0 0;
+  text-transform: capitalize;
+  font-size: 0.85rem;
+}
+
 .char-level {
   color: #aaa;
   margin: 0;
@@ -239,8 +328,10 @@ function handleCreate() {
   background: rgba(0, 0, 0, 0.8);
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
+  padding-top: 2rem;
   z-index: 100;
+  overflow-y: auto;
 }
 
 .create-form {
@@ -248,15 +339,24 @@ function handleCreate() {
   padding: 2rem;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  width: 700px;
+  width: 900px;
   max-height: 90vh;
   overflow-y: auto;
   color: white;
+  margin-bottom: 2rem;
 }
 
 .create-form h2 {
   text-align: center;
   margin-bottom: 1rem;
+}
+
+.section-title {
+  color: #aaa;
+  margin: 1rem 0 0.5rem;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
 .form-group {
@@ -277,11 +377,80 @@ function handleCreate() {
   border-radius: 6px;
   color: white;
   font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.race-select {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.race-card {
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.race-card:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.race-card.selected {
+  border-color: #88ccaa;
+  background: rgba(136, 204, 170, 0.2);
+}
+
+.race-emoji {
+  font-size: 1.5rem;
+}
+
+.race-card h4 {
+  margin: 0.3rem 0 0.15rem;
+  font-size: 0.9rem;
+}
+
+.race-card > p {
+  font-size: 0.7rem;
+  color: #aaa;
+  margin: 0 0 0.4rem;
+  line-height: 1.3;
+}
+
+.race-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem;
+  font-size: 0.65rem;
+  color: #888;
+  margin-bottom: 0.3rem;
+}
+
+.stat-mini {
+  background: rgba(255,255,255,0.05);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.race-passive {
+  font-size: 0.65rem;
+  color: #88ccaa;
+  line-height: 1.2;
+}
+
+.race-passive strong {
+  color: #aaddcc;
 }
 
 .class-select {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem;
   margin-bottom: 1rem;
 }
@@ -305,22 +474,58 @@ function handleCreate() {
   background: rgba(102, 126, 234, 0.2);
 }
 
+.class-emoji {
+  font-size: 1.5rem;
+}
+
 .class-card h4 {
-  margin: 0.5rem 0 0.25rem;
+  margin: 0.3rem 0 0.15rem;
   font-size: 0.95rem;
 }
 
-.class-card p {
+.class-card > p {
   font-size: 0.75rem;
   color: #aaa;
   margin: 0 0 0.5rem;
   line-height: 1.3;
 }
 
-.class-stats {
+.class-stats-preview {
   display: flex;
-  justify-content: space-around;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stat-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.7rem;
+}
+
+.stat-label {
+  width: 35px;
+  text-align: right;
+  color: #aaa;
+}
+
+.stat-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.stat-bar-fill {
+  height: 100%;
+  background: #667eea;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.stat-value {
+  width: 30px;
   color: #888;
 }
 

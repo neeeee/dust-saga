@@ -105,6 +105,8 @@ export class DatabaseManager {
         player_id UUID REFERENCES players(id) ON DELETE CASCADE,
         name VARCHAR(50) NOT NULL,
         class VARCHAR(20) NOT NULL,
+        race VARCHAR(20) NOT NULL DEFAULT 'human',
+        job_id VARCHAR(30) NOT NULL DEFAULT 'warrior',
         level INTEGER DEFAULT 1,
         position_x FLOAT DEFAULT 0,
         position_y FLOAT DEFAULT 0,
@@ -114,6 +116,10 @@ export class DatabaseManager {
         rotation_z FLOAT DEFAULT 0,
         rotation_w FLOAT DEFAULT 1,
         zone_id VARCHAR(50) DEFAULT 'starter_zone',
+        stat_points JSONB DEFAULT '{"STA":0,"STR":0,"AGI":0,"DEX":0,"SPI":0,"INT":0}',
+        unspent_stat_points INTEGER DEFAULT 0,
+        unspent_skill_points INTEGER DEFAULT 0,
+        skill_proficiencies JSONB DEFAULT '{"melee":0,"technique":0,"prayer":0,"magic":0,"special":0}',
         created_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(player_id, name)
       );
@@ -143,10 +149,34 @@ export class DatabaseManager {
     try {
       await this.postgres.query(schema);
       console.log('Database schema initialized successfully');
+      await this.runMigrations();
     } catch (error) {
       console.error('Error initializing database schema:', error);
       throw error;
     }
+  }
+
+  private async runMigrations(): Promise<void> {
+    if (!this.postgres || !this.postgresConnected) return;
+
+    const migrations = [
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS race VARCHAR(20) NOT NULL DEFAULT 'human'`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS job_id VARCHAR(30) NOT NULL DEFAULT 'warrior'`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS stat_points JSONB DEFAULT '{"STA":0,"STR":0,"AGI":0,"DEX":0,"SPI":0,"INT":0}'`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS unspent_stat_points INTEGER DEFAULT 0`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS unspent_skill_points INTEGER DEFAULT 0`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS skill_proficiencies JSONB DEFAULT '{"melee":0,"technique":0,"prayer":0,"magic":0,"special":0}'`,
+    ];
+
+    for (const sql of migrations) {
+      try {
+        await this.postgres.query(sql);
+      } catch {
+        // Column already exists, ignore
+      }
+    }
+
+    await this.postgres.query(`UPDATE characters SET job_id = class WHERE job_id = 'warrior' AND class != 'warrior'`).catch(() => {});
   }
 
   isPostgresConnected(): boolean {

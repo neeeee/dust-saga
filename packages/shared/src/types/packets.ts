@@ -56,6 +56,8 @@ export enum PacketType {
   STATS_UPDATE = 90,
   EXPERIENCE_GAIN = 91,
   LEVEL_UP = 92,
+  STAT_ALLOCATE = 93,
+  JOB_ADVANCE = 94,
 
   NOTIFICATION = 100,
   ERROR = 101

@@ -1,110 +1,61 @@
-import { CharacterClass, ClassDefinition } from '../types/classes';
+import { JobId, BaseClass, JOB_DEFINITIONS, JobDefinition } from '../types/jobs';
+import { Race, StatType, StatPoints, createDefaultStatPoints } from '../types/races';
+import { RACE_DATA, MAX_LEVEL, MAX_STAT_VALUE } from '../constants/races';
 
-export const CLASS_DEFINITIONS: Record<CharacterClass, ClassDefinition> = {
-  [CharacterClass.WARRIOR]: {
-    id: CharacterClass.WARRIOR,
-    name: 'Warrior',
-    description: 'A mighty fighter with high health and physical power. Masters of close combat.',
-    modelFile: 'Adventurer.glb',
-    abilities: ['slash', 'shield_bash', 'war_cry', 'whirlwind'],
-    stats: {
-      baseHealth: 150,
-      baseMana: 30,
-      baseAttack: 15,
-      baseDefense: 12,
-      baseSpeed: 4,
-      healthPerLevel: 15,
-      manaPerLevel: 3,
-      attackPerLevel: 3,
-      defensePerLevel: 2
-    }
-  },
-  [CharacterClass.MAGE]: {
-    id: CharacterClass.MAGE,
-    name: 'Mage',
-    description: 'A powerful spellcaster with devastating magical abilities. Fragile but deadly.',
-    modelFile: 'Witch.glb',
-    abilities: ['fireball', 'ice_lance', 'arcane_shield', 'meteor'],
-    stats: {
-      baseHealth: 80,
-      baseMana: 120,
-      baseAttack: 8,
-      baseDefense: 4,
-      baseSpeed: 4.5,
-      healthPerLevel: 6,
-      manaPerLevel: 12,
-      attackPerLevel: 1,
-      defensePerLevel: 1
-    }
-  },
-  [CharacterClass.RANGER]: {
-    id: CharacterClass.RANGER,
-    name: 'Ranger',
-    description: 'A swift hunter with ranged attacks and survival skills. Fast and agile.',
-    modelFile: 'Farmer.glb',
-    abilities: ['arrow_shot', 'multishot', 'trap', 'evasion'],
-    stats: {
-      baseHealth: 100,
-      baseMana: 50,
-      baseAttack: 12,
-      baseDefense: 6,
-      baseSpeed: 5.5,
-      healthPerLevel: 8,
-      manaPerLevel: 5,
-      attackPerLevel: 2,
-      defensePerLevel: 1
-    }
-  },
-  [CharacterClass.ROGUE]: {
-    id: CharacterClass.ROGUE,
-    name: 'Rogue',
-    description: 'A stealthy assassin with high critical hits. Strikes from the shadows.',
-    modelFile: 'Punk.glb',
-    abilities: ['backstab', 'poison_blade', 'stealth', 'fan_of_knives'],
-    stats: {
-      baseHealth: 90,
-      baseMana: 40,
-      baseAttack: 14,
-      baseDefense: 5,
-      baseSpeed: 6,
-      healthPerLevel: 7,
-      manaPerLevel: 4,
-      attackPerLevel: 3,
-      defensePerLevel: 1
-    }
-  },
-  [CharacterClass.PALADIN]: {
-    id: CharacterClass.PALADIN,
-    name: 'Paladin',
-    description: 'A holy knight with healing abilities and strong defenses. Protector of the weak.',
-    modelFile: 'King.glb',
-    abilities: ['holy_strike', 'heal', 'divine_shield', 'consecration'],
-    stats: {
-      baseHealth: 130,
-      baseMana: 70,
-      baseAttack: 10,
-      baseDefense: 14,
-      baseSpeed: 3.5,
-      healthPerLevel: 12,
-      manaPerLevel: 7,
-      attackPerLevel: 2,
-      defensePerLevel: 3
-    }
-  }
-};
-
-export function getClassStats(cls: CharacterClass, level: number) {
-  const def = CLASS_DEFINITIONS[cls];
-  const s = def.stats;
-  return {
-    maxHealth: s.baseHealth + s.healthPerLevel * (level - 1),
-    maxMana: s.baseMana + s.manaPerLevel * (level - 1),
-    attack: s.baseAttack + s.attackPerLevel * (level - 1),
-    defense: s.baseDefense + s.defensePerLevel * (level - 1),
-    speed: s.baseSpeed
-  };
-}
+export { CharacterClass as LegacyCharacterClass } from '../types/classes';
+export { JobId, BaseClass, JOB_DEFINITIONS } from '../types/jobs';
 
 export function getExperienceToNextLevel(level: number): number {
   return Math.floor(100 * Math.pow(1.5, level - 1));
 }
+
+export function calculateMaxLP(job: JobDefinition, level: number, sta: number): number {
+  return Math.floor(job.lpBase + job.lpPerLevel * (level - 1) + job.lpPerSta * sta);
+}
+
+export function calculateMaxMP(job: JobDefinition, level: number, spi: number): number {
+  return Math.floor(job.mpBase + job.mpPerLevel * (level - 1) + job.mpPerSpi * spi);
+}
+
+export function calculateDerivedStats(
+  race: Race,
+  jobId: JobId,
+  level: number,
+  allocatedStats: StatPoints
+): {
+  maxHealth: number;
+  maxMana: number;
+  attack: number;
+  defense: number;
+  speed: number;
+  magicAttack: number;
+} {
+  const job = JOB_DEFINITIONS[jobId];
+  const raceData = RACE_DATA[race];
+  if (!job || !raceData) {
+    return { maxHealth: 100, maxMana: 50, attack: 10, defense: 5, speed: 4, magicAttack: 8 };
+  }
+
+  const totalSTA = raceData.baseStats.STA + allocatedStats.STA + (job.baseStatModifiers.STA || 0);
+  const totalSTR = raceData.baseStats.STR + allocatedStats.STR + (job.baseStatModifiers.STR || 0);
+  const totalAGI = raceData.baseStats.AGI + allocatedStats.AGI + (job.baseStatModifiers.AGI || 0);
+  const totalDEX = raceData.baseStats.DEX + allocatedStats.DEX + (job.baseStatModifiers.DEX || 0);
+  const totalSPI = raceData.baseStats.SPI + allocatedStats.SPI + (job.baseStatModifiers.SPI || 0);
+  const totalINT = raceData.baseStats.INT + allocatedStats.INT + (job.baseStatModifiers.INT || 0);
+
+  const maxHealth = calculateMaxLP(job, level, totalSTA);
+  const maxMana = calculateMaxMP(job, level, totalSPI);
+  const attack = Math.floor(5 + totalSTR * 1.5 + totalDEX * 0.3);
+  const defense = Math.floor(3 + totalSTA * 0.8 + totalSTR * 0.3);
+  const speed = Math.floor(30 + totalAGI * 0.5);
+  const magicAttack = Math.floor(5 + totalINT * 1.5 + totalSPI * 0.3);
+
+  return { maxHealth, maxMana, attack, defense, speed, magicAttack };
+}
+
+export function getStatPointsGainedAtLevel(level: number): number {
+  if (level <= 1) return 0;
+  return 3 + Math.floor(level / 5);
+}
+
+export { MAX_LEVEL, MAX_STAT_VALUE, getExperienceToNextLevel as getExperienceToNext };

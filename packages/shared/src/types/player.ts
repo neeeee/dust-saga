@@ -1,3 +1,8 @@
+import { StatPoints, StatType, createDefaultStatPoints } from './races';
+import { JobId, SkillProficiencies, createDefaultSkillProficiencies, BaseClass } from './jobs';
+import { SkillCooldownEntry, ActiveCast } from './skills';
+import { StatusEffect } from './status';
+
 export interface PlayerStats {
   health: number;
   maxHealth: number;
@@ -6,6 +11,7 @@ export interface PlayerStats {
   attack: number;
   defense: number;
   speed: number;
+  magicAttack: number;
   level: number;
   experience: number;
   experienceToNext: number;
@@ -17,14 +23,23 @@ export interface PlayerSession {
   username: string;
   characterId: string;
   characterName: string;
-  characterClass: string;
+  race: string;
+  jobId: JobId;
+  baseClass: BaseClass;
   stats: PlayerStats;
+  statPoints: StatPoints;
+  unspentStatPoints: number;
+  unspentSkillPoints: number;
+  skillProficiencies: SkillProficiencies;
   position: { x: number; y: number; z: number };
   rotation: { x: number; y: number; z: number; w: number };
   zoneId: string;
   targetId: string | null;
   lastAttackTime: number;
   invulnerableUntil: number;
+  skillCooldowns: SkillCooldownEntry[];
+  activeCast: ActiveCast | null;
+  statusEffects: StatusEffect[];
   inventory: Array<{
     itemId: string;
     quantity: number;

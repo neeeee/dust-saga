@@ -1,7 +1,16 @@
 import { EntityManager, System } from '../EntityManager';
-import { PlayerSession, CharacterClass } from '@dust-saga/shared';
-import { getClassStats, getExperienceToNextLevel, ITEM_DATABASE, EquipmentSlot } from '@dust-saga/shared';
-import { GAME_CONFIG } from '@dust-saga/shared';
+import { PlayerSession, JobId, BaseClass, StatType } from '@dust-saga/shared';
+import {
+  calculateDerivedStats,
+  getExperienceToNextLevel,
+  getStatPointsGainedAtLevel,
+  getBaseClassForJob,
+  JOB_DEFINITIONS,
+  ITEM_DATABASE,
+  EquipmentSlot,
+  GAME_CONFIG,
+  MAX_LEVEL
+} from '@dust-saga/shared';
 
 export class PlayerSystem extends System {
   private levelUpCallbacks: Array<(playerId: string, newLevel: number) => void> = [];
@@ -20,10 +29,16 @@ export class PlayerSystem extends System {
     username: string,
     characterId: string,
     characterName: string,
-    characterClass: CharacterClass,
-    level: number
+    race: string,
+    jobId: JobId,
+    level: number,
+    statPoints: any,
+    unspentStatPoints: number,
+    unspentSkillPoints: number,
+    skillProficiencies: any
   ): PlayerSession {
-    const stats = getClassStats(characterClass, level);
+    const baseClass = getBaseClassForJob(jobId);
+    const stats = calculateDerivedStats(race as any, jobId, level, statPoints);
     const xpToNext = getExperienceToNextLevel(level);
 
     return {
@@ -32,7 +47,9 @@ export class PlayerSystem extends System {
       username,
       characterId,
       characterName,
-      characterClass,
+      race,
+      jobId,
+      baseClass,
       stats: {
         health: stats.maxHealth,
         maxHealth: stats.maxHealth,
@@ -41,16 +58,24 @@ export class PlayerSystem extends System {
         attack: stats.attack,
         defense: stats.defense,
         speed: stats.speed,
+        magicAttack: stats.magicAttack,
         level,
         experience: 0,
         experienceToNext: xpToNext
       },
+      statPoints,
+      unspentStatPoints,
+      unspentSkillPoints,
+      skillProficiencies,
       position: { x: 0, y: 0, z: 0 },
       rotation: { x: 0, y: 0, z: 0, w: 1 },
       zoneId: 'starter_zone',
       targetId: null,
       lastAttackTime: 0,
       invulnerableUntil: Date.now() + 3000,
+      skillCooldowns: [],
+      activeCast: null,
+      statusEffects: [],
       inventory: [],
       equipment: {
         weapon: null,
@@ -67,24 +92,73 @@ export class PlayerSystem extends System {
     session.stats.experience += amount;
 
     let leveledUp = false;
-    while (session.stats.experience >= session.stats.experienceToNext && session.stats.level < GAME_CONFIG.MAX_LEVEL) {
+    while (session.stats.experience >= session.stats.experienceToNext && session.stats.level < MAX_LEVEL) {
       session.stats.experience -= session.stats.experienceToNext;
       session.stats.level++;
       session.stats.experienceToNext = getExperienceToNextLevel(session.stats.level);
 
-      const newStats = getClassStats(session.characterClass as CharacterClass, session.stats.level);
-      session.stats.maxHealth = newStats.maxHealth;
-      session.stats.maxMana = newStats.maxMana;
-      session.stats.attack = newStats.attack;
-      session.stats.defense = newStats.defense;
-      session.stats.health = newStats.maxHealth;
-      session.stats.mana = newStats.maxMana;
+      const gainedStatPoints = getStatPointsGainedAtLevel(session.stats.level);
+      session.unspentStatPoints += gainedStatPoints;
+      session.unspentSkillPoints += 1;
+
+      this.recalcStats(session);
 
       leveledUp = true;
       this.levelUpCallbacks.forEach(cb => cb(session.characterId, session.stats.level));
     }
 
     return leveledUp;
+  }
+
+  allocateStatPoint(session: PlayerSession, stat: StatType): boolean {
+    const currentValue = session.statPoints[stat];
+    const cost = Math.ceil((currentValue + 1) / 10);
+
+    if (session.unspentStatPoints < cost) return false;
+    if (currentValue >= 99) return false;
+
+    session.statPoints[stat] += 1;
+    session.unspentStatPoints -= cost;
+
+    this.recalcStats(session);
+    return true;
+  }
+
+  advanceJob(session: PlayerSession, newJobId: JobId): boolean {
+    const currentJob = JOB_DEFINITIONS[session.jobId];
+    const newJob = JOB_DEFINITIONS[newJobId];
+    if (!currentJob || !newJob) return false;
+
+    if (newJob.parentJob !== session.jobId) return false;
+
+    const requiredLevel = newJob.tier === 2 ? 20 : newJob.tier === 3 ? 40 : 1;
+    if (session.stats.level < requiredLevel) return false;
+
+    session.jobId = newJobId;
+    session.baseClass = newJob.baseClass;
+    this.recalcStats(session);
+    return true;
+  }
+
+  recalcStats(session: PlayerSession): void {
+    const derived = calculateDerivedStats(
+      session.race as any,
+      session.jobId,
+      session.stats.level,
+      session.statPoints
+    );
+    const healthRatio = session.stats.maxHealth > 0 ? session.stats.health / session.stats.maxHealth : 1;
+    const manaRatio = session.stats.maxMana > 0 ? session.stats.mana / session.stats.maxMana : 1;
+
+    session.stats.maxHealth = derived.maxHealth;
+    session.stats.maxMana = derived.maxMana;
+    session.stats.attack = derived.attack;
+    session.stats.defense = derived.defense;
+    session.stats.speed = derived.speed;
+    session.stats.magicAttack = derived.magicAttack;
+
+    session.stats.health = Math.floor(derived.maxHealth * healthRatio);
+    session.stats.mana = Math.floor(derived.maxMana * manaRatio);
   }
 
   healPlayer(session: PlayerSession): void {

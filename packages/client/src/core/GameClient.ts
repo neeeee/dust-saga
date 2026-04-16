@@ -476,8 +476,8 @@ export class GameClient {
     this.network.requestCharacterList();
   }
 
-  createCharacter(name: string, characterClass: string): void {
-    this.network.createCharacter(name, characterClass);
+  createCharacter(name: string, characterClass: string, race: string = 'human'): void {
+    this.network.createCharacter(name, characterClass, race);
   }
 
   selectCharacter(characterId: string): void {

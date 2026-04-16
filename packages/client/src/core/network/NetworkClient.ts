@@ -9,6 +9,8 @@ export class NetworkClient {
   private maxReconnectAttempts: number = 5;
   private token: string | null = null;
 
+  private pendingPackets: Packet[] = [];
+
   connect(serverUrl: string = 'http://localhost:3001'): void {
     if (this.socket?.connected) return;
 
@@ -23,6 +25,7 @@ export class NetworkClient {
     this.socket.on('connect', () => {
       this.isConnected = true;
       this.reconnectAttempts = 0;
+      this.flushPendingPackets();
     });
 
     this.socket.on('disconnect', () => {
@@ -46,9 +49,20 @@ export class NetworkClient {
     }
   }
 
+  private flushPendingPackets(): void {
+    while (this.pendingPackets.length > 0) {
+      const packet = this.pendingPackets.shift()!;
+      if (this.socket && this.isConnected) {
+        this.socket.emit('packet', packet);
+      }
+    }
+  }
+
   sendPacket(packet: Packet): void {
     if (this.socket && this.isConnected) {
       this.socket.emit('packet', packet);
+    } else {
+      this.pendingPackets.push(packet);
     }
   }
 
@@ -108,11 +122,11 @@ export class NetworkClient {
     });
   }
 
-  createCharacter(name: string, characterClass: string): void {
+  createCharacter(name: string, characterClass: string, race: string = 'human'): void {
     this.sendPacket({
       type: PacketType.CHARACTER_CREATE,
       timestamp: Date.now(),
-      data: { name, characterClass }
+      data: { name, characterClass, race }
     });
   }
 
@@ -153,6 +167,14 @@ export class NetworkClient {
       type: PacketType.ATTACK,
       timestamp: Date.now(),
       data: { targetId }
+    });
+  }
+
+  useSkill(skillName: string, targetId: string | null = null): void {
+    this.sendPacket({
+      type: PacketType.SKILL_USE,
+      timestamp: Date.now(),
+      data: { skillName, targetId }
     });
   }
 

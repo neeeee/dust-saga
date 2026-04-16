@@ -2,6 +2,8 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseManager } from '../database/DatabaseManager';
+import { createDefaultStatPoints } from '@dust-saga/shared';
+import { createDefaultSkillProficiencies } from '@dust-saga/shared';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dust-saga-secret-key-change-in-production';
 const JWT_EXPIRY = '24h';
@@ -11,12 +13,29 @@ export interface AuthToken {
   username: string;
 }
 
+export interface MockCharacter {
+  id: string;
+  name: string;
+  class: string;
+  race: string;
+  job_id: string;
+  level: number;
+  position_x: number;
+  position_y: number;
+  position_z: number;
+  zone_id: string;
+  stat_points: string;
+  unspent_stat_points: number;
+  unspent_skill_points: number;
+  skill_proficiencies: string;
+}
+
 export class AuthManager {
   private static instance: AuthManager;
   private db: DatabaseManager;
 
   private mockPlayers: Map<string, { id: string; username: string }> = new Map();
-  private mockCharacters: Map<string, Array<{ id: string; name: string; class: string; level: number; position_x: number; position_y: number; position_z: number; zone_id: string }>> = new Map();
+  private mockCharacters: Map<string, MockCharacter[]> = new Map();
 
   private constructor() {
     this.db = DatabaseManager.getInstance();
@@ -132,14 +151,14 @@ export class AuthManager {
     }
   }
 
-  async getCharacters(playerId: string): Promise<any[]> {
+  async getCharacters(playerId: string): Promise<MockCharacter[]> {
     if (!this.db.isPostgresConnected()) {
       return this.mockCharacters.get(playerId) || [];
     }
 
     try {
       const result = await this.db.postgres!.query(
-        'SELECT id, name, class, level, position_x, position_y, position_z, zone_id FROM characters WHERE player_id = $1',
+        'SELECT id, name, class, race, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies FROM characters WHERE player_id = $1',
         [playerId]
       );
       return result.rows;
@@ -149,13 +168,35 @@ export class AuthManager {
     }
   }
 
-  async createCharacter(playerId: string, name: string, characterClass: string): Promise<{ success: boolean; characterId?: string; error?: string }> {
+  async createCharacter(
+    playerId: string,
+    name: string,
+    race: string,
+    jobId: string
+  ): Promise<{ success: boolean; characterId?: string; error?: string }> {
     if (!this.db.isPostgresConnected()) {
       const characters = this.mockCharacters.get(playerId) || [];
       if (characters.find(c => c.name === name)) {
         return { success: false, error: 'Character name already exists' };
       }
-      const newChar = { id: uuidv4(), name, class: characterClass, level: 1, position_x: 0, position_y: 0, position_z: 0, zone_id: 'starter_zone' };
+      const defaultStats = createDefaultStatPoints();
+      const defaultSkills = createDefaultSkillProficiencies();
+      const newChar: MockCharacter = {
+        id: uuidv4(),
+        name,
+        class: jobId,
+        race,
+        job_id: jobId,
+        level: 1,
+        position_x: 0,
+        position_y: 0,
+        position_z: 0,
+        zone_id: 'starter_zone',
+        stat_points: JSON.stringify(defaultStats),
+        unspent_stat_points: 0,
+        unspent_skill_points: 0,
+        skill_proficiencies: JSON.stringify(defaultSkills)
+      };
       characters.push(newChar);
       this.mockCharacters.set(playerId, characters);
       return { success: true, characterId: newChar.id };
@@ -171,9 +212,12 @@ export class AuthManager {
         return { success: false, error: 'Character name already exists' };
       }
 
+      const defaultStats = createDefaultStatPoints();
+      const defaultSkills = createDefaultSkillProficiencies();
       const result = await this.db.postgres!.query(
-        'INSERT INTO characters (player_id, name, class, level, position_x, position_y, position_z, zone_id) VALUES ($1, $2, $3, 1, 0, 0, 0, $4) RETURNING id',
-        [playerId, name, characterClass, 'starter_zone']
+        `INSERT INTO characters (player_id, name, class, race, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies)
+         VALUES ($1, $2, $3, $4, $5, 1, 0, 0, 0, $6, $7, 0, 0, $8) RETURNING id`,
+        [playerId, name, jobId, race, jobId, 'starter_zone', JSON.stringify(defaultStats), JSON.stringify(defaultSkills)]
       );
 
       return { success: true, characterId: result.rows[0].id };
