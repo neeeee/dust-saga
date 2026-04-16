@@ -8,6 +8,7 @@
     </div>
     <form @submit.prevent="sendChat" class="chat-form">
       <input
+        ref="inputEl"
         v-model="input"
         type="text"
         placeholder="Press Enter to chat..."
@@ -35,6 +36,7 @@ const emit = defineEmits<{
 
 const input = ref('');
 const chatEl = ref<HTMLElement | null>(null);
+const inputEl = ref<HTMLInputElement | null>(null);
 
 watch(() => props.messages.length, async () => {
   await nextTick();
@@ -57,6 +59,12 @@ function onFocus() {
 function onBlur() {
   emit('blur');
 }
+
+function focusInput() {
+  inputEl.value?.focus();
+}
+
+defineExpose({ focusInput });
 </script>
 
 <style scoped>

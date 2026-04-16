@@ -492,6 +492,10 @@ export class GameClient {
     this.network.sendChatMessage(message);
   }
 
+  setChatFocused(focused: boolean): void {
+    this.input?.setChatFocused(focused);
+  }
+
   useItem(itemId: string): void {
     this.network.useItem(itemId);
   }

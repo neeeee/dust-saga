@@ -56,10 +56,11 @@
       />
 
       <ChatPanel
+        ref="chatPanelRef"
         :messages="chatMessages"
         @send="handleSendChat"
-        @focus="chatFocused = true"
-        @blur="chatFocused = false"
+        @focus="onChatFocus"
+        @blur="onChatBlur"
       />
 
       <InventoryUI
@@ -139,6 +140,7 @@ const playerName = ref('');
 const playerClass = ref('');
 const chatMessages = ref<Array<{ sender: string; message: string }>>([]);
 const chatFocused = ref(false);
+const chatPanelRef = ref<any>(null);
 const showInventory = ref(false);
 const showQuests = ref(false);
 const showDialog = ref(false);
@@ -217,6 +219,16 @@ async function setupGameCanvas() {
 function handleSendChat(message: string) {
   if (!gameClient) return;
   gameClient.sendChatMessage(message);
+}
+
+function onChatFocus() {
+  chatFocused.value = true;
+  gameClient?.setChatFocused(true);
+}
+
+function onChatBlur() {
+  chatFocused.value = false;
+  gameClient?.setChatFocused(false);
 }
 
 function handleUseItem(itemId: string) {
@@ -379,6 +391,12 @@ onMounted(async () => {
 });
 
 function handleGlobalKeyDown(e: KeyboardEvent) {
+  if (e.code === 'Enter' && !chatFocused.value && gameState.value === 'playing') {
+    e.preventDefault();
+    chatPanelRef.value?.focusInput();
+    return;
+  }
+
   if (chatFocused.value) return;
 
   if (e.code === 'KeyI') {
