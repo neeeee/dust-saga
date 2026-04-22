@@ -258,6 +258,14 @@ export class NetworkClient {
     });
   }
 
+  allocateStatPoint(stat: string): void {
+    this.sendPacket({
+      type: PacketType.STAT_ALLOCATE,
+      timestamp: Date.now(),
+      data: { stat }
+    });
+  }
+
   isSocketConnected(): boolean {
     return this.isConnected;
   }

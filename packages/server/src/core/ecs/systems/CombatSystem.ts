@@ -1,5 +1,5 @@
 import { EntityManager, System } from '../EntityManager';
-import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition } from '@dust-saga/shared';
+import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage } from '@dust-saga/shared';
 
 export class CombatSystem extends System {
   private damageCallbacks: Array<(info: DamageInfo) => void> = [];
@@ -61,7 +61,7 @@ export class CombatSystem extends System {
     if (dist > COMBAT_CONFIG.ATTACK_RANGE) return null;
 
     const attackPower = attacker.stats.attack;
-    const isCritical = Math.random() < COMBAT_CONFIG.CRITICAL_CHANCE;
+    const isCritical = Math.random() < applyRacialCritChance(attacker.race, COMBAT_CONFIG.CRITICAL_CHANCE);
     let damage = Math.max(
       COMBAT_CONFIG.MIN_DAMAGE,
       attackPower - targetDefense * COMBAT_CONFIG.DAMAGE_REDUCTION_PER_DEFENSE * 10
@@ -123,6 +123,9 @@ export class CombatSystem extends System {
     }
 
     damage = Math.floor(damage * (0.85 + Math.random() * 0.3));
+
+    const racialResult = processRacialOnDamage(target, damage, 'physical');
+    damage = racialResult.finalDamage;
 
     target.stats.health = Math.max(0, target.stats.health - damage);
 

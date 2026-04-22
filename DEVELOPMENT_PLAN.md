@@ -151,7 +151,7 @@ Replace the current 5 flat classes with the 4 base class system, 6 races, and 6-
 - PVP vendors: spend points/medals for gear
 
 ### 4.4 Party System
-- Party size: up to 6 players
+- Party size: up to 8 players
 - Cross-nation parties allowed in safe zones only
 - In PVP zones, party is same-nation only
 - Party leader can invite/kick

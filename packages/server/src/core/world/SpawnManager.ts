@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { EnemyInstance } from '@dust-saga/shared';
-import { getEnemyDefinition, getZoneDefinition, ZONE_DATABASE } from '@dust-saga/shared';
+import { getEnemyDefinition, getZoneDefinition, ZONE_DATABASE, ZoneType } from '@dust-saga/shared';
 
 export class SpawnManager {
   private spawnedEnemies: Map<string, Map<string, EnemyInstance>> = new Map();
@@ -14,6 +14,11 @@ export class SpawnManager {
   private spawnZoneEnemies(zoneId: string): void {
     const zoneDef = getZoneDefinition(zoneId);
     if (!zoneDef) return;
+
+    if (zoneDef.type === ZoneType.SAFE || zoneDef.type === ZoneType.NATION) {
+      this.spawnedEnemies.set(zoneId, new Map());
+      return;
+    }
 
     const enemies = new Map<string, EnemyInstance>();
     this.spawnedEnemies.set(zoneId, enemies);

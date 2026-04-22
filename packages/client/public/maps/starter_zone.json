@@ -81,6 +81,14 @@
       "targetSpawn": "tp_from_starter",
       "radius": 2,
       "label": "Whispering Woods"
+    },
+    {
+      "id": "tp_to_astir",
+      "position": { "x": -50, "y": 0, "z": 0 },
+      "targetZone": "astir_central",
+      "targetSpawn": "tp_to_starter",
+      "radius": 2,
+      "label": "Astir Central Plaza"
     }
   ],
   "lights": [

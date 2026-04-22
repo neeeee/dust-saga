@@ -141,6 +141,322 @@ export const ENEMY_DATABASE: Record<string, EnemyDefinition> = {
         { itemId: 'mana_potion', quantity: 2, chance: 0.4 }
       ]
     }
+  },
+  'mountain_bandit': {
+    id: 'mountain_bandit',
+    name: 'Mountain Bandit',
+    modelFile: 'Enemy Small.glb',
+    level: 12,
+    health: 280,
+    attack: 35,
+    defense: 12,
+    speed: 3.5,
+    experience: 180,
+    aggroRange: 10,
+    attackRange: 2,
+    leashRange: 25,
+    respawnTime: 20000,
+    patrolSpeed: 2,
+    lootTable: {
+      rolls: 2,
+      drops: [
+        { itemId: 'health_potion', quantity: 1, chance: 0.4 },
+        { itemId: 'iron_sword', quantity: 1, chance: 0.08 },
+        { itemId: 'leather_boots', quantity: 1, chance: 0.06 }
+      ]
+    }
+  },
+  'rock_golem': {
+    id: 'rock_golem',
+    name: 'Rock Golem',
+    modelFile: 'Enemy Small.glb',
+    level: 16,
+    health: 500,
+    attack: 30,
+    defense: 25,
+    speed: 1.5,
+    experience: 220,
+    aggroRange: 8,
+    attackRange: 2.5,
+    leashRange: 20,
+    respawnTime: 30000,
+    patrolSpeed: 0.8,
+    lootTable: {
+      rolls: 2,
+      drops: [
+        { itemId: 'health_potion', quantity: 2, chance: 0.5 },
+        { itemId: 'chainmail', quantity: 1, chance: 0.06 },
+        { itemId: 'ancient_scroll', quantity: 1, chance: 0.12 }
+      ]
+    }
+  },
+  'frost_wolf': {
+    id: 'frost_wolf',
+    name: 'Frost Wolf',
+    modelFile: 'Enemy Small.glb',
+    level: 20,
+    health: 400,
+    attack: 45,
+    defense: 15,
+    speed: 5,
+    experience: 300,
+    aggroRange: 14,
+    attackRange: 2,
+    leashRange: 30,
+    respawnTime: 25000,
+    patrolSpeed: 2.5,
+    lootTable: {
+      rolls: 2,
+      drops: [
+        { itemId: 'wolf_pelt', quantity: 1, chance: 0.5 },
+        { itemId: 'health_potion', quantity: 2, chance: 0.4 },
+        { itemId: 'swift_boots', quantity: 1, chance: 0.04 }
+      ]
+    }
+  },
+  'mountain_giant': {
+    id: 'mountain_giant',
+    name: 'Mountain Giant',
+    modelFile: 'Enemy Small.glb',
+    level: 30,
+    health: 1200,
+    attack: 65,
+    defense: 30,
+    speed: 1.8,
+    experience: 600,
+    aggroRange: 12,
+    attackRange: 3.5,
+    leashRange: 25,
+    respawnTime: 60000,
+    patrolSpeed: 1,
+    lootTable: {
+      rolls: 3,
+      drops: [
+        { itemId: 'plate_armor', quantity: 1, chance: 0.08 },
+        { itemId: 'steel_blade', quantity: 1, chance: 0.06 },
+        { itemId: 'health_potion', quantity: 3, chance: 0.6 },
+        { itemId: 'ancient_scroll', quantity: 1, chance: 0.15 }
+      ]
+    }
+  },
+  'wild_boar': {
+    id: 'wild_boar',
+    name: 'Wild Boar',
+    modelFile: 'Enemy Small.glb',
+    level: 13,
+    health: 320,
+    attack: 32,
+    defense: 10,
+    speed: 3.5,
+    experience: 190,
+    aggroRange: 10,
+    attackRange: 1.8,
+    leashRange: 20,
+    respawnTime: 18000,
+    patrolSpeed: 2,
+    lootTable: {
+      rolls: 2,
+      drops: [
+        { itemId: 'health_potion', quantity: 1, chance: 0.45 },
+        { itemId: 'leather_boots', quantity: 1, chance: 0.06 }
+      ]
+    }
+  },
+  'plains_lion': {
+    id: 'plains_lion',
+    name: 'Plains Lion',
+    modelFile: 'Enemy Small.glb',
+    level: 22,
+    health: 550,
+    attack: 50,
+    defense: 18,
+    speed: 4.5,
+    experience: 350,
+    aggroRange: 14,
+    attackRange: 2,
+    leashRange: 30,
+    respawnTime: 25000,
+    patrolSpeed: 2.5,
+    lootTable: {
+      rolls: 2,
+      drops: [
+        { itemId: 'wolf_pelt', quantity: 1, chance: 0.4 },
+        { itemId: 'health_potion', quantity: 2, chance: 0.45 },
+        { itemId: 'swift_boots', quantity: 1, chance: 0.05 }
+      ]
+    }
+  },
+  'nomad_raider': {
+    id: 'nomad_raider',
+    name: 'Nomad Raider',
+    modelFile: 'Enemy Small.glb',
+    level: 28,
+    health: 700,
+    attack: 55,
+    defense: 22,
+    speed: 3.5,
+    experience: 450,
+    aggroRange: 12,
+    attackRange: 2.5,
+    leashRange: 28,
+    respawnTime: 30000,
+    patrolSpeed: 2,
+    lootTable: {
+      rolls: 3,
+      drops: [
+        { itemId: 'steel_blade', quantity: 1, chance: 0.07 },
+        { itemId: 'chainmail', quantity: 1, chance: 0.06 },
+        { itemId: 'health_potion', quantity: 2, chance: 0.5 },
+        { itemId: 'mana_potion', quantity: 1, chance: 0.3 }
+      ]
+    }
+  },
+  'scorpion': {
+    id: 'scorpion',
+    name: 'Desert Scorpion',
+    modelFile: 'Enemy Small.glb',
+    level: 13,
+    health: 300,
+    attack: 38,
+    defense: 14,
+    speed: 3,
+    experience: 195,
+    aggroRange: 10,
+    attackRange: 2,
+    leashRange: 22,
+    respawnTime: 18000,
+    patrolSpeed: 1.5,
+    lootTable: {
+      rolls: 2,
+      drops: [
+        { itemId: 'health_potion', quantity: 1, chance: 0.45 },
+        { itemId: 'ancient_scroll', quantity: 1, chance: 0.08 }
+      ]
+    }
+  },
+  'sand_wurm': {
+    id: 'sand_wurm',
+    name: 'Sand Wurm',
+    modelFile: 'Enemy Small.glb',
+    level: 20,
+    health: 600,
+    attack: 48,
+    defense: 20,
+    speed: 2.5,
+    experience: 320,
+    aggroRange: 12,
+    attackRange: 3,
+    leashRange: 28,
+    respawnTime: 35000,
+    patrolSpeed: 1.5,
+    lootTable: {
+      rolls: 2,
+      drops: [
+        { itemId: 'health_potion', quantity: 2, chance: 0.5 },
+        { itemId: 'plate_armor', quantity: 1, chance: 0.04 },
+        { itemId: 'ancient_scroll', quantity: 1, chance: 0.12 }
+      ]
+    }
+  },
+  'desert_raider': {
+    id: 'desert_raider',
+    name: 'Desert Raider',
+    modelFile: 'Enemy Small.glb',
+    level: 25,
+    health: 650,
+    attack: 52,
+    defense: 20,
+    speed: 3.5,
+    experience: 400,
+    aggroRange: 12,
+    attackRange: 2.5,
+    leashRange: 28,
+    respawnTime: 28000,
+    patrolSpeed: 2,
+    lootTable: {
+      rolls: 3,
+      drops: [
+        { itemId: 'steel_blade', quantity: 1, chance: 0.06 },
+        { itemId: 'health_potion', quantity: 2, chance: 0.5 },
+        { itemId: 'mana_potion', quantity: 1, chance: 0.3 }
+      ]
+    }
+  },
+  'mummy_lord': {
+    id: 'mummy_lord',
+    name: 'Mummy Lord',
+    modelFile: 'Enemy Small.glb',
+    level: 30,
+    health: 900,
+    attack: 58,
+    defense: 25,
+    speed: 2,
+    experience: 550,
+    aggroRange: 10,
+    attackRange: 2.5,
+    leashRange: 25,
+    respawnTime: 50000,
+    patrolSpeed: 1,
+    lootTable: {
+      rolls: 3,
+      drops: [
+        { itemId: 'plate_armor', quantity: 1, chance: 0.07 },
+        { itemId: 'ancient_scroll', quantity: 1, chance: 0.2 },
+        { itemId: 'health_potion', quantity: 3, chance: 0.55 },
+        { itemId: 'mana_potion', quantity: 2, chance: 0.4 }
+      ]
+    }
+  },
+  'dark_knight': {
+    id: 'dark_knight',
+    name: 'Dark Knight',
+    modelFile: 'Enemy Small.glb',
+    level: 40,
+    health: 1500,
+    attack: 75,
+    defense: 35,
+    speed: 3,
+    experience: 800,
+    aggroRange: 12,
+    attackRange: 2.5,
+    leashRange: 30,
+    respawnTime: 60000,
+    patrolSpeed: 1.5,
+    lootTable: {
+      rolls: 3,
+      drops: [
+        { itemId: 'plate_armor', quantity: 1, chance: 0.1 },
+        { itemId: 'steel_blade', quantity: 1, chance: 0.08 },
+        { itemId: 'swift_boots', quantity: 1, chance: 0.06 },
+        { itemId: 'health_potion', quantity: 3, chance: 0.6 },
+        { itemId: 'mana_potion', quantity: 2, chance: 0.45 }
+      ]
+    }
+  },
+  'basilisk': {
+    id: 'basilisk',
+    name: 'Basilisk',
+    modelFile: 'Enemy Small.glb',
+    level: 42,
+    health: 1800,
+    attack: 80,
+    defense: 30,
+    speed: 2.5,
+    experience: 900,
+    aggroRange: 10,
+    attackRange: 3,
+    leashRange: 25,
+    respawnTime: 70000,
+    patrolSpeed: 1.2,
+    lootTable: {
+      rolls: 4,
+      drops: [
+        { itemId: 'plate_armor', quantity: 1, chance: 0.1 },
+        { itemId: 'steel_blade', quantity: 1, chance: 0.08 },
+        { itemId: 'ancient_scroll', quantity: 2, chance: 0.2 },
+        { itemId: 'health_potion', quantity: 4, chance: 0.65 }
+      ]
+    }
   }
 };
 

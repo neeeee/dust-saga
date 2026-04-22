@@ -21,3 +21,4 @@ export { SKILL_CATEGORIES, CLASS_SKILL_DATA } from './constants/skills';
 export { CLASS_SPECIFIC_SKILLS } from './constants/classSkills';
 export * from './utils/math';
 export * from './utils/validator';
+export * from './utils/racialPassives';

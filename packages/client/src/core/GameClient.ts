@@ -8,11 +8,13 @@ import {
   GAME_CONFIG,
   PlayerStats,
   ZoneDefinition,
-  getZoneDefinition
+  getZoneDefinition,
+  StatPoints
 } from '@dust-saga/shared';
 
 export interface GameCallbacks {
   onStatsUpdate: (stats: PlayerStats) => void;
+  onStatPointsUpdate: (statPoints: StatPoints | null, unspentStatPoints: number, unspentSkillPoints: number) => void;
   onInventoryUpdate: (inventory: any, equipment: any) => void;
   onQuestUpdate: (quests: any) => void;
   onChatMessage: (sender: string, message: string, channel?: string) => void;
@@ -39,6 +41,9 @@ export class GameClient {
   private playerMesh: any = null;
   private callbacks: Partial<GameCallbacks> = {};
   private stats: PlayerStats | null = null;
+  private statPoints: StatPoints | null = null;
+  private unspentStatPoints: number = 0;
+  private unspentSkillPoints: number = 0;
   private currentZoneId: string | null = null;
   private targetId: string | null = null;
   private lastMoveSend: number = 0;
@@ -101,8 +106,12 @@ export class GameClient {
       const data = packet.data;
       this.playerId = data.characterId;
       this.stats = data.stats;
+      this.statPoints = data.statPoints;
+      this.unspentStatPoints = data.unspentStatPoints || 0;
+      this.unspentSkillPoints = data.unspentSkillPoints || 0;
       this.currentZoneId = data.zoneId;
       this.callbacks.onStatsUpdate?.(data.stats);
+      this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints);
       this.callbacks.onInventoryUpdate?.(data.inventory, data.equipment);
       this.callbacks.onQuestUpdate?.(data.quests);
     });
@@ -264,6 +273,12 @@ export class GameClient {
         this.stats = data.stats;
         this.callbacks.onStatsUpdate?.(data.stats);
       }
+      if (data.statPoints) {
+        this.statPoints = data.statPoints;
+        this.unspentStatPoints = data.unspentStatPoints ?? this.unspentStatPoints;
+        this.unspentSkillPoints = data.unspentSkillPoints ?? this.unspentSkillPoints;
+        this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints);
+      }
       if (data.health !== undefined && data.maxHealth) {
         this.engine.updateEntityHealth(data.entityId || data.characterId, data.health, data.maxHealth);
       }
@@ -286,11 +301,18 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.LEVEL_UP, (packet: any) => {
+      const data = packet.data;
       if (this.stats) {
-        this.stats.level = packet.data.level;
+        this.stats.level = data.level;
         this.callbacks.onStatsUpdate?.(this.stats);
       }
-      this.callbacks.onLevelUp?.(packet.data.level);
+      if (data.statPoints) {
+        this.statPoints = data.statPoints;
+        this.unspentStatPoints = data.unspentStatPoints ?? this.unspentStatPoints;
+        this.unspentSkillPoints = data.unspentSkillPoints ?? this.unspentSkillPoints;
+        this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints);
+      }
+      this.callbacks.onLevelUp?.(data.level);
     });
 
     this.network.onPacket(PacketType.DEATH, (packet: any) => {
@@ -543,6 +565,22 @@ export class GameClient {
 
   getStats(): PlayerStats | null {
     return this.stats;
+  }
+
+  getStatPoints(): StatPoints | null {
+    return this.statPoints;
+  }
+
+  getUnspentStatPoints(): number {
+    return this.unspentStatPoints;
+  }
+
+  getUnspentSkillPoints(): number {
+    return this.unspentSkillPoints;
+  }
+
+  allocateStatPoint(stat: string): void {
+    this.network.allocateStatPoint(stat);
   }
 
   getCurrentZoneId(): string | null {

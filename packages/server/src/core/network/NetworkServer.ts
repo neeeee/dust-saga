@@ -3,7 +3,7 @@ import {
   Packet, PacketType, PlayerSession, Validator,
   JOB_DEFINITIONS, RACE_DATA, createDefaultStatPoints, createDefaultSkillProficiencies,
   getBaseClassForJob, calculateDerivedStats, getExperienceToNextLevel, getStatPointsGainedAtLevel,
-  StatType, JobId, Race
+  StatType, JobId, Race, processRacialOnDamage, applyRacialPotionHealing
 } from '@dust-saga/shared';
 import { AuthManager } from '../auth/AuthManager';
 import { CombatSystem } from '../ecs/systems/CombatSystem';
@@ -61,6 +61,7 @@ export class NetworkServer {
 
     this.setupCallbacks();
     this.setupEventHandlers();
+    this.setupPlayerCallbacks();
   }
 
   private setupCallbacks(): void {
@@ -146,14 +147,16 @@ export class NetworkServer {
       }
 
       const actualDamage = Math.max(1, damage - target.stats.defense * 0.2);
-      target.stats.health = Math.max(0, target.stats.health - actualDamage);
+      const racialResult = processRacialOnDamage(target, Math.floor(actualDamage), 'physical');
+      const finalDamage = racialResult.finalDamage;
+      target.stats.health = Math.max(0, target.stats.health - finalDamage);
 
       this.sendToPlayer(targetId, {
         type: PacketType.CHAT_MESSAGE,
         timestamp: Date.now(),
         data: {
           sender: 'DEBUG',
-          message: `HIT: ${enemyDef?.name || enemy.enemyType} [${enemyId}] enemy=(${enemy.position.x.toFixed(1)}, ${enemy.position.z.toFixed(1)}) you=(${target.position.x.toFixed(1)}, ${target.position.z.toFixed(1)}) dist=${dist.toFixed(1)} dmg=${Math.floor(actualDamage)}`,
+          message: `HIT: ${enemyDef?.name || enemy.enemyType} [${enemyId}] enemy=(${enemy.position.x.toFixed(1)}, ${enemy.position.z.toFixed(1)}) you=(${target.position.x.toFixed(1)}, ${target.position.z.toFixed(1)}) dist=${dist.toFixed(1)} dmg=${finalDamage}${racialResult.survivedFatal ? ' SURVIVED!' : ''}${racialResult.mpConverted > 0 ? ' MP+' + racialResult.mpConverted : ''}`,
           channel: 'system'
         }
       });
@@ -161,7 +164,7 @@ export class NetworkServer {
       this.sendToPlayer(targetId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
-        data: { attackerId: enemyId, targetId, damage: Math.floor(actualDamage), isCritical: false, damageType: 'physical' }
+        data: { attackerId: enemyId, targetId, damage: finalDamage, isCritical: false, damageType: 'physical' }
       });
 
       this.broadcastInZone(target.zoneId, {
@@ -212,6 +215,25 @@ export class NetworkServer {
           sender: 'DEBUG',
           message: `AGGRO: ${def?.name || enemyType} [${enemyId}] at (${enemyPos.x.toFixed(1)}, ${enemyPos.z.toFixed(1)}) spawn=(${spawnPos.x.toFixed(1)}, ${spawnPos.z.toFixed(1)}) → YOU`,
           channel: 'system'
+        }
+      });
+    });
+  }
+
+  private setupPlayerCallbacks(): void {
+    this.playerSys.onLevelUp((characterId: string, newLevel: number) => {
+      const session = this.findPlayerByCharacterId(characterId);
+      if (!session) return;
+
+      this.sendToPlayer(characterId, {
+        type: PacketType.LEVEL_UP,
+        timestamp: Date.now(),
+        data: {
+          level: newLevel,
+          statPoints: session.statPoints,
+          unspentStatPoints: session.unspentStatPoints,
+          unspentSkillPoints: session.unspentSkillPoints,
+          stats: session.stats
         }
       });
     });
@@ -810,10 +832,10 @@ export class NetworkServer {
 
     if (itemDef.type === 'consumable') {
       if (itemDef.stats.health && itemDef.type === 'consumable') {
-        session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + (itemDef.stats.health || 0));
+        session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + applyRacialPotionHealing(session.race, itemDef.stats.health || 0));
       }
       if (itemDef.stats.mana && itemDef.type === 'consumable') {
-        session.stats.mana = Math.min(session.stats.maxMana, session.stats.mana + (itemDef.stats.mana || 0));
+        session.stats.mana = Math.min(session.stats.maxMana, session.stats.mana + applyRacialPotionHealing(session.race, itemDef.stats.mana || 0));
       }
 
       this.playerSys.removeItemFromInventory(session, data.itemId, 1);

@@ -101,6 +101,17 @@
         @hide="notification.visible = false"
       />
 
+      <StatAllocationPanel
+        :visible="showStatPanel"
+        :stats="playerStats"
+        :stat-points="playerStatPoints"
+        :unspent-stat-points="playerUnspentStatPoints"
+        :race="playerRace"
+        :job-id="playerJobId"
+        @close="showStatPanel = false"
+        @allocate="handleAllocateStat"
+      />
+
       <div class="controls-hint">
         Click to lock | WASD move | Shift sprint | F attack | I inventory | J quests | E interact
       </div>
@@ -115,7 +126,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { GameClient } from './core/GameClient';
-import { PacketType, PlayerStats } from '@dust-saga/shared';
+import { PacketType, PlayerStats, StatPoints } from '@dust-saga/shared';
 import CharacterSelect from './ui/CharacterSelect.vue';
 import GameHUD from './ui/GameHUD.vue';
 import ChatPanel from './ui/ChatPanel.vue';
@@ -123,6 +134,7 @@ import InventoryUI from './ui/InventoryUI.vue';
 import QuestLog from './ui/QuestLog.vue';
 import DialogBox from './ui/DialogBox.vue';
 import NotificationPopup from './ui/NotificationPopup.vue';
+import StatAllocationPanel from './ui/StatAllocationPanel.vue';
 
 type GameState = 'auth' | 'character-select' | 'loading' | 'playing';
 
@@ -163,6 +175,12 @@ const dialogData = ref<any>({
 const currentNPCId = ref('');
 
 const notification = ref({ message: '', type: 'info', visible: false });
+const showStatPanel = ref(false);
+const playerStatPoints = ref<StatPoints | null>(null);
+const playerUnspentStatPoints = ref(0);
+const playerUnspentSkillPoints = ref(0);
+const playerRace = ref('');
+const playerJobId = ref('');
 
 let gameClient: GameClient | null = null;
 let currentDialogNPCId = '';
@@ -278,6 +296,11 @@ function handleBuyItem(itemId: string) {
   gameClient.buyFromShop(itemId);
 }
 
+function handleAllocateStat(stat: string) {
+  if (!gameClient) return;
+  gameClient.allocateStatPoint(stat);
+}
+
 function handleAcceptQuest(questId: string) {
   if (!gameClient) return;
   gameClient.acceptQuest(questId);
@@ -294,6 +317,11 @@ onMounted(async () => {
   gameClient.setCallbacks({
     onStatsUpdate: (stats) => {
       playerStats.value = stats;
+    },
+    onStatPointsUpdate: (sp, unspent, unspentSkill) => {
+      playerStatPoints.value = sp;
+      playerUnspentStatPoints.value = unspent;
+      playerUnspentSkillPoints.value = unspentSkill;
     },
     onInventoryUpdate: (inv, equip) => {
       inventory.value = inv;
@@ -371,8 +399,10 @@ onMounted(async () => {
     }
   });
 
-  network.onPacket(PacketType.CHARACTER_SELECT, () => {
+  network.onPacket(PacketType.CHARACTER_SELECT, (packet: any) => {
     gameState.value = 'playing';
+    playerRace.value = packet.data.race || '';
+    playerJobId.value = packet.data.jobId || '';
     nextTick(() => {
       setupGameCanvas();
     });
@@ -403,10 +433,13 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     showInventory.value = !showInventory.value;
   } else if (e.code === 'KeyJ') {
     showQuests.value = !showQuests.value;
+  } else if (e.code === 'KeyC') {
+    showStatPanel.value = !showStatPanel.value;
   } else if (e.code === 'Escape') {
     showInventory.value = false;
     showQuests.value = false;
     showDialog.value = false;
+    showStatPanel.value = false;
   }
 }
 
