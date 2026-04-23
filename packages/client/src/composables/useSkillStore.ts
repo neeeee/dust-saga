@@ -209,13 +209,16 @@ export function useSkillStore() {
 
   function buildAvailableSkills(): void {
     const skills: AvailableSkill[] = [];
+    const seen = new Set<string>();
 
     for (const [, catData] of Object.entries(CLASS_SKILL_DATA)) {
       const categoryData = catData as { skills: SkillSubCategory[] };
       for (const sub of categoryData.skills) {
         for (const [name, def] of Object.entries(sub.skills)) {
+          if (seen.has(name)) continue;
           const skillDef = def as SkillDefinition;
           if (isPassiveSkill(skillDef)) continue;
+          seen.add(name);
           skills.push({
             name,
             description: skillDef.description,
@@ -234,7 +237,9 @@ export function useSkillStore() {
 
     for (const [, jobSkills] of Object.entries(CLASS_SPECIFIC_SKILLS)) {
       for (const [name, def] of Object.entries(jobSkills)) {
+        if (seen.has(name)) continue;
         if (def.isPassive) continue;
+        seen.add(name);
         skills.push({
           name,
           description: def.description,

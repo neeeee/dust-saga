@@ -86,13 +86,16 @@ export class GameClient {
       const entity = this.knownEntities.get(entityId);
       if (entity?.type === 'enemy') {
         this.targetId = entityId;
+        this.engine.setTargetIndicator(entityId);
         const enemyData = this.enemies.get(entityId);
         this.callbacks.onTargetChange?.(entityId, enemyData ? { name: enemyData.name || 'Enemy', level: enemyData.level || 1, health: enemyData.health || 0, maxHealth: enemyData.maxHealth || 1 } : null);
       } else if (entity?.type === 'npc') {
         this.targetId = entityId;
+        this.engine.setTargetIndicator(entityId);
         this.callbacks.onTargetChange?.(entityId, { name: entity.data.name || 'NPC', level: 0, health: 0, maxHealth: 0 });
       } else {
         this.targetId = null;
+        this.engine.setTargetIndicator(null);
         this.callbacks.onTargetChange?.(null);
       }
     });
@@ -577,6 +580,7 @@ export class GameClient {
 
   setTarget(targetId: string | null): void {
     this.targetId = targetId;
+    this.engine.setTargetIndicator(targetId);
     this.callbacks.onTargetChange?.(targetId);
   }
 

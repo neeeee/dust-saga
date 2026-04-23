@@ -24,6 +24,7 @@ export interface EntityMeshGroup {
   healthBarBg?: AbstractMesh;
   healthBarFg?: AbstractMesh;
   namePlate?: AbstractMesh;
+  selectionCircle?: AbstractMesh;
 }
 
 export class GameEngine {
@@ -40,6 +41,7 @@ export class GameEngine {
   private playerMesh: AbstractMesh | null = null;
   private onClickCallbacks: Array<(entityId: string) => void> = [];
   private minimapCanvas: HTMLCanvasElement | null = null;
+  private targetedEntityId: string | null = null;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -124,10 +126,12 @@ export class GameEngine {
       group.healthBarBg?.dispose();
       group.healthBarFg?.dispose();
       group.namePlate?.dispose();
+      group.selectionCircle?.dispose();
     });
     this.meshes.clear();
     this.entityAnimations.clear();
     this.currentAnimation.clear();
+    this.targetedEntityId = null;
     this.mapBuilder.clear();
 
     try {
@@ -475,6 +479,11 @@ export class GameEngine {
         const hpOffset = group.healthBarBg ? 3 : 2.8;
         group.namePlate.position = position.add(new V3(0, hpOffset, 0));
       }
+      if (group.selectionCircle) {
+        group.selectionCircle.position.x = position.x;
+        group.selectionCircle.position.y = 0.05;
+        group.selectionCircle.position.z = position.z;
+      }
     }
   }
 
@@ -511,7 +520,11 @@ export class GameEngine {
       group.healthBarBg?.dispose();
       group.healthBarFg?.dispose();
       group.namePlate?.dispose();
+      group.selectionCircle?.dispose();
       this.meshes.delete(entityId);
+    }
+    if (this.targetedEntityId === entityId) {
+      this.targetedEntityId = null;
     }
     this.entityAnimations.delete(entityId);
   }
@@ -528,6 +541,42 @@ export class GameEngine {
     if (group?.root && this.camera) {
       this.camera.lockedTarget = group.root;
     }
+  }
+
+  setTargetIndicator(entityId: string | null): void {
+    if (!this.scene) return;
+
+    if (this.targetedEntityId) {
+      const oldGroup = this.meshes.get(this.targetedEntityId);
+      if (oldGroup?.selectionCircle) {
+        oldGroup.selectionCircle.dispose();
+        oldGroup.selectionCircle = undefined;
+      }
+    }
+
+    this.targetedEntityId = entityId;
+
+    if (!entityId) return;
+
+    const group = this.meshes.get(entityId);
+    if (!group?.root) return;
+
+    const circle = MeshBuilder.CreateDisc(`target_circle_${entityId}`, {
+      radius: 0.9,
+      tessellation: 32
+    }, this.scene);
+    const circleMat = new StandardMaterial(`target_circle_mat_${entityId}`, this.scene);
+    circleMat.diffuseColor = new Color3(0.2, 0.6, 1.0);
+    circleMat.emissiveColor = new Color3(0.15, 0.4, 0.9);
+    circleMat.disableLighting = true;
+    circleMat.alpha = 0.5;
+    circleMat.backFaceCulling = false;
+    circle.material = circleMat;
+    circle.rotation.x = Math.PI / 2;
+    circle.position = group.root.position.clone();
+    circle.position.y = 0.05;
+
+    group.selectionCircle = circle;
   }
 
   onClickEntity(callback: (entityId: string) => void): void {
@@ -648,10 +697,12 @@ export class GameEngine {
       group.healthBarBg?.dispose();
       group.healthBarFg?.dispose();
       group.namePlate?.dispose();
+      group.selectionCircle?.dispose();
     });
     this.meshes.clear();
     this.entityAnimations.clear();
     this.currentAnimation.clear();
+    this.targetedEntityId = null;
     this.mapBuilder?.clear();
     this.assetManager?.dispose();
     this.scene?.dispose();

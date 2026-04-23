@@ -1,20 +1,95 @@
-import { PlayerSession, SkillDefinition, SkillCooldownEntry, ActiveCast, isPassiveSkill, meetsRequirements, getRequiredProficiency, COMBAT_CONFIG, StatusEffect, StatusEffectType, STATUS_EFFECT_DEFS } from '@dust-saga/shared';
+import {
+  PlayerSession, SkillDefinition, SkillCooldownEntry, ActiveCast,
+  isPassiveSkill, meetsRequirements, getRequiredProficiency,
+  COMBAT_CONFIG, StatusEffect, StatusEffectType, STATUS_EFFECT_DEFS
+} from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
 import { CLASS_SPECIFIC_SKILLS } from '@dust-saga/shared';
+
+export interface TargetStats {
+  defense: number;
+  magicDefense: number;
+  health: number;
+  level: number;
+  dodge: number;
+}
 
 export interface SkillUseResult {
   success: boolean;
   damage?: number;
   healing?: number;
+  mpRestored?: number;
+  maxHpIncrease?: number;
   isCritical?: boolean;
+  missed?: boolean;
   damageType?: 'physical' | 'magical';
   statusEffects?: StatusEffect[];
   error?: string;
 }
 
+interface SkillClassification {
+  dealsDamage: boolean;
+  heals: boolean;
+  restoresMp: boolean;
+  drainsLife: boolean;
+  increasesMaxHp: boolean;
+  damageType: 'physical' | 'magical';
+}
+
 export class SkillSystem {
   private gcd: number = 1000;
   private globalCooldowns: Map<string, number> = new Map();
+
+  private classifySkill(skill: SkillDefinition): SkillClassification {
+    const desc = skill.description.toLowerCase();
+    const name = skill.name.toLowerCase();
+
+    if (skill.isPassive || name.includes('(passive)')) {
+      return { dealsDamage: false, heals: false, restoresMp: false, drainsLife: false, increasesMaxHp: false, damageType: 'physical' };
+    }
+
+    const restoresMp = /mp regen|restore mp|mana restore|increase mp|mp over time/i.test(desc)
+      || name === 'tranquil mind' || name === 'mana restore';
+
+    const increasesMaxHp = /increase lp|lp for|increase.*max.*hp|\+.*base lp|lp regen/i.test(desc);
+
+    const heals = /restore hp|heal|first aid|regenerat|sacrifice self|healing aura|restoration/i.test(desc)
+      || (desc.includes('restore') && desc.includes('hp'));
+
+    const drainsLife = desc.includes('drain life') || (desc.includes('drain') && desc.includes('heal'));
+
+    const damageWords = [
+      'attack', 'damage', 'strike', 'hit', 'slash', 'thrust', 'cleave',
+      'bash', 'stab', 'shoot', 'throw', 'hurl', 'explod', 'drain life',
+      'skewer', 'slice', 'blast', 'bomb', 'bolt', 'beam', 'storm',
+      'tempest', 'cremation', 'crash', 'smash', 'crush', 'knockback',
+      'knockdown', 'trip', 'impale', 'ranged attack', 'deal ', 'dealing',
+      'fire a bolt', 'rain holy', 'rain ', 'damage lp', 'damage mp',
+      'poison the', 'burn ', 'wasteland', 'genocide', 'pure arrow',
+      'psychic blade', 'dark frenzy', 'skewer', 'sins genocide',
+      'ramkyado', 'dagger throw', 'backstab', 'pierce armor',
+    ];
+
+    const dealsDamage = !heals && !restoresMp && skill.mpCost > 0
+      && (damageWords.some(w => desc.includes(w) || name.includes(w))
+        || skill.damageType === 'magical'
+        || skill.damageType === 'physical');
+
+    const magicWords = [
+      'magic', 'ice ', 'fire', 'lightning', 'dark ', 'holy', 'elemental',
+      'spell', 'arcane', 'shadow', 'psionic', 'mental', 'mind venom',
+      'darkness', 'abyss', 'meteor', 'thunder', 'cremation', 'holy rays',
+      'delay bomb', 'mind venom', 'pestilence', 'wasteland', 'siren storm',
+      'cursed bolt', 'twinkle extreme', 'ice spear', 'ice storm',
+      'firestorm', 'dark frenzy', 'thunder ball', 'thunderstorm',
+      'hailstone', 'ice tempest', 'glitter discharge', 'sandstorm',
+    ];
+
+    const isMagical = skill.damageType === 'magical'
+      || magicWords.some(w => desc.includes(w) || name.includes(w));
+
+    return { dealsDamage, heals, restoresMp, drainsLife, increasesMaxHp, damageType: isMagical ? 'magical' : 'physical' };
+  }
 
   canUseSkill(
     session: PlayerSession,
@@ -78,27 +153,42 @@ export class SkillSystem {
     const skill = this.findSkillDefinition(skillName);
     if (!skill) return { started: false, castTime: 0 };
 
-    const castTime = skill.castTime * 1000;
+    let baseCastTime = skill.castTime * 1000;
+    if (baseCastTime <= 0) {
+      return { started: true, castTime: 0 };
+    }
 
-    if (castTime <= 0) {
+    const classification = this.classifySkill(skill);
+
+    let reduction = 0;
+    if (classification.damageType === 'magical') {
+      reduction += session.statPoints.INT * 20;
+    } else {
+      reduction += session.statPoints.AGI * 20;
+    }
+    reduction += session.statPoints.SPI * 8;
+
+    const effectiveCastTime = Math.max(0, baseCastTime - reduction);
+
+    if (effectiveCastTime <= 0) {
       return { started: true, castTime: 0 };
     }
 
     session.activeCast = {
       skillName,
       startedAt: Date.now(),
-      castTime,
+      castTime: effectiveCastTime,
       targetId
     };
 
-    return { started: true, castTime };
+    return { started: true, castTime: effectiveCastTime };
   }
 
   executeSkill(
     session: PlayerSession,
     skillName: string,
     targetId: string | null,
-    getTargetStats: (id: string) => { defense: number; magicDefense: number; health: number } | null
+    getTargetStats: (id: string) => TargetStats | null
   ): SkillUseResult {
     const skill = this.findSkillDefinition(skillName);
     if (!skill) return { success: false, error: 'not_found' };
@@ -113,31 +203,43 @@ export class SkillSystem {
     });
 
     this.globalCooldowns.set(session.characterId, now + this.gcd);
-
     session.activeCast = null;
 
     if (skill.duration > 0 && !isPassiveSkill(skill)) {
       this.applyBuff(session, skill);
     }
 
-    const isAttack = skill.mpCost > 0 && !isPassiveSkill(skill) &&
-      !skill.description.toLowerCase().includes('restore') &&
-      !skill.description.toLowerCase().includes('heal') &&
-      !skill.description.toLowerCase().includes('cure') &&
-      !skill.description.toLowerCase().includes('increase') &&
-      !skill.description.toLowerCase().includes('reduce') === false;
+    const classification = this.classifySkill(skill);
 
-    if (targetId && isAttack) {
-      const target = getTargetStats(targetId);
-      if (target) {
-        return this.calculateSkillDamage(session, skill, target);
-      }
+    if (classification.restoresMp) {
+      const mpAmount = this.calculateMpRegen(session, skill);
+      session.stats.mana = Math.min(session.stats.maxMana, session.stats.mana + mpAmount);
+      return { success: true, mpRestored: mpAmount };
     }
 
-    if (skill.description.toLowerCase().includes('restore') ||
-        skill.description.toLowerCase().includes('heal')) {
+    if (classification.heals && !classification.dealsDamage) {
       const healAmount = this.calculateHealing(session, skill);
       return { success: true, healing: healAmount };
+    }
+
+    if (classification.increasesMaxHp) {
+      const hpIncrease = this.calculateMaxHpBuff(session, skill);
+      const healthRatio = session.stats.maxHealth > 0 ? session.stats.health / session.stats.maxHealth : 1;
+      session.stats.maxHealth += hpIncrease;
+      session.stats.health = Math.min(session.stats.maxHealth, Math.floor(session.stats.maxHealth * healthRatio) + hpIncrease);
+      return { success: true, maxHpIncrease: hpIncrease, healing: hpIncrease };
+    }
+
+    if (classification.dealsDamage && targetId) {
+      const target = getTargetStats(targetId);
+      if (target) {
+        const result = this.calculateSkillDamage(session, skill, target, classification.damageType);
+        if (classification.drainsLife && result.damage && result.damage > 0 && !result.missed) {
+          const drainHeal = Math.floor(result.damage * 0.3);
+          return { ...result, healing: drainHeal };
+        }
+        return result;
+      }
     }
 
     return { success: true };
@@ -146,102 +248,136 @@ export class SkillSystem {
   private calculateSkillDamage(
     session: PlayerSession,
     skill: SkillDefinition,
-    target: { defense: number; magicDefense: number; health: number }
+    target: TargetStats,
+    damageType: 'physical' | 'magical'
   ): SkillUseResult {
-    const isMagical = skill.damageType === 'magical' ||
-      skill.description.toLowerCase().includes('magic') ||
-      skill.description.toLowerCase().includes('ice') ||
-      skill.description.toLowerCase().includes('fire') ||
-      skill.description.toLowerCase().includes('lightning') ||
-      skill.description.toLowerCase().includes('dark') ||
-      skill.description.toLowerCase().includes('holy');
+    const isMagical = damageType === 'magical';
 
-    const attackStat = isMagical ? (session.stats as any).magicAttack || session.stats.attack : session.stats.attack;
+    const hitChance = this.calculateAccuracy(session, target);
+    if (Math.random() > hitChance) {
+      return { success: true, damage: 0, missed: true, damageType };
+    }
+
+    const attackStat = isMagical ? session.stats.magicAttack : session.stats.attack;
     const defenseStat = isMagical ? target.magicDefense : target.defense;
+    const primaryStat = isMagical ? session.statPoints.INT : session.statPoints.STR;
+    const secondaryStat = isMagical ? session.statPoints.SPI : session.statPoints.DEX;
 
-    let damage = Math.max(
-      COMBAT_CONFIG.MIN_DAMAGE,
-      Math.floor(attackStat * 1.5 + skill.mpCost * 0.3 - defenseStat * 0.5)
+    const skillPower = 1.0 + (skill.mpCost / 50);
+
+    let damage = Math.floor(
+      (attackStat * 1.5 + primaryStat * 1.0 + secondaryStat * 0.3) * skillPower
+      - defenseStat * 0.6
     );
 
-    const critChance = COMBAT_CONFIG.CRITICAL_CHANCE;
+    const critChance = COMBAT_CONFIG.CRITICAL_CHANCE + session.statPoints.DEX * 0.002;
     const isCritical = Math.random() < critChance;
     if (isCritical) {
       damage = Math.floor(damage * COMBAT_CONFIG.CRITICAL_MULTIPLIER);
     }
 
-    damage = Math.floor(damage * (0.9 + Math.random() * 0.2));
+    const levelDiff = session.stats.level - target.level;
+    if (levelDiff > 0) {
+      damage = Math.floor(damage * (1 + levelDiff * 0.03));
+    } else if (levelDiff < 0) {
+      damage = Math.floor(damage * Math.max(0.3, 1 + levelDiff * 0.02));
+    }
 
-    const statusEffects: StatusEffect[] = [];
-    if (skill.description.toLowerCase().includes('poison')) {
-      const def = STATUS_EFFECT_DEFS[StatusEffectType.POISON];
-      if (def) {
-        statusEffects.push({
-          id: `se_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          type: StatusEffectType.POISON,
-          sourceId: session.characterId,
-          targetId: '',
-          potency: damage * 0.1,
-          appliedAt: Date.now(),
-          duration: def.duration,
-          tickInterval: def.tickInterval,
-          lastTickAt: Date.now(),
-          stacks: 1
-        });
-      }
-    }
-    if (skill.description.toLowerCase().includes('stun')) {
-      const def = STATUS_EFFECT_DEFS[StatusEffectType.STUN];
-      if (def) {
-        statusEffects.push({
-          id: `se_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          type: StatusEffectType.STUN,
-          sourceId: session.characterId,
-          targetId: '',
-          potency: 0,
-          appliedAt: Date.now(),
-          duration: def.duration,
-          tickInterval: 0,
-          lastTickAt: Date.now(),
-          stacks: 1
-        });
-      }
-    }
-    if (skill.description.toLowerCase().includes('burn')) {
-      const def = STATUS_EFFECT_DEFS[StatusEffectType.BURN];
-      if (def) {
-        statusEffects.push({
-          id: `se_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-          type: StatusEffectType.BURN,
-          sourceId: session.characterId,
-          targetId: '',
-          potency: damage * 0.15,
-          appliedAt: Date.now(),
-          duration: def.duration,
-          tickInterval: def.tickInterval,
-          lastTickAt: Date.now(),
-          stacks: 1
-        });
-      }
-    }
+    damage = Math.floor(damage * (0.9 + Math.random() * 0.2));
+    damage = Math.max(COMBAT_CONFIG.MIN_DAMAGE, damage);
+
+    const statusEffects = this.buildStatusEffects(session, skill, damage);
 
     return {
       success: true,
       damage,
       isCritical,
-      damageType: isMagical ? 'magical' : 'physical',
+      damageType,
       statusEffects: statusEffects.length > 0 ? statusEffects : undefined
     };
   }
 
+  private buildStatusEffects(session: PlayerSession, skill: SkillDefinition, damage: number): StatusEffect[] {
+    const desc = skill.description.toLowerCase();
+    const effects: StatusEffect[] = [];
+
+    const addEffect = (type: StatusEffectType, potency: number) => {
+      const def = STATUS_EFFECT_DEFS[type];
+      if (def) {
+        effects.push({
+          id: `se_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          type,
+          sourceId: session.characterId,
+          targetId: '',
+          potency,
+          appliedAt: Date.now(),
+          duration: def.duration,
+          tickInterval: def.tickInterval,
+          lastTickAt: Date.now(),
+          stacks: 1
+        });
+      }
+    };
+
+    if (desc.includes('poison')) addEffect(StatusEffectType.POISON, Math.floor(damage * 0.1));
+    if (desc.includes('burn') || desc.includes('flaming')) addEffect(StatusEffectType.BURN, Math.floor(damage * 0.15));
+    if (desc.includes('bleed')) addEffect(StatusEffectType.BLEED, Math.floor(damage * 0.08));
+    if (desc.includes('stun') || desc.includes('knockdown') || desc.includes('knock out') || desc.includes('trip')) addEffect(StatusEffectType.STUN, 0);
+    if (desc.includes('freeze') || desc.includes('frozen')) addEffect(StatusEffectType.FREEZE, 0.5);
+    if (desc.includes('sleep') || (desc.includes('sandstorm') && desc.includes('sleep'))) addEffect(StatusEffectType.SLEEP, 0);
+    if (desc.includes('root') || desc.includes('tangled') || (desc.includes('bind') && !desc.includes('bind criminal'))) addEffect(StatusEffectType.ROOT, 0);
+    if (desc.includes('silence')) addEffect(StatusEffectType.SILENCE, 0);
+    if (desc.includes('slow') && !desc.includes('freeze') && !desc.includes('frozen')) addEffect(StatusEffectType.SLOW, 0.3);
+
+    return effects;
+  }
+
+  private calculateAccuracy(session: PlayerSession, target: TargetStats): number {
+    const base = 0.85;
+    const dexBonus = session.statPoints.DEX * 0.003;
+    const levelBonus = (session.stats.level - target.level) * 0.015;
+    const dodgePenalty = target.dodge * 0.002;
+    return Math.min(0.99, Math.max(0.2, base + dexBonus + levelBonus - dodgePenalty));
+  }
+
   private calculateHealing(session: PlayerSession, skill: SkillDefinition): number {
-    const baseHeal = skill.mpCost * 2;
-    const spi = (session as any).statPoints?.SPI || 0;
-    return Math.floor(baseHeal + spi * 0.5);
+    const spi = session.statPoints.SPI;
+    const int = session.statPoints.INT;
+    const level = session.stats.level;
+    const multiplier = 1.0 + (skill.mpCost / 30);
+    return Math.floor((spi * 2.0 + int * 1.0 + level * 2) * multiplier);
+  }
+
+  private calculateMpRegen(session: PlayerSession, skill: SkillDefinition): number {
+    const spi = session.statPoints.SPI;
+    const level = session.stats.level;
+    const multiplier = 1.0 + (skill.mpCost / 15);
+    return Math.floor((spi * 1.5 + level * 1.5) * multiplier);
+  }
+
+  private calculateMaxHpBuff(session: PlayerSession, skill: SkillDefinition): number {
+    const desc = skill.description.toLowerCase();
+    const baseHp = session.stats.maxHealth;
+    let increase = 0;
+
+    const percentMatch = desc.match(/(\d+)%.*(?:base lp|lp|hp)/);
+    const flatMatch = desc.match(/\+\s*(\d+)/);
+
+    if (percentMatch) {
+      increase += Math.floor(baseHp * (parseInt(percentMatch[1]) / 100));
+    }
+    if (flatMatch) {
+      increase += parseInt(flatMatch[1]);
+    }
+
+    if (increase === 0) {
+      increase = Math.floor(baseHp * 0.1 + session.stats.level * 5);
+    }
+
+    return increase;
   }
 
   private applyBuff(session: PlayerSession, skill: SkillDefinition): void {
-    // Buff tracking handled via status effects system
   }
 
   updateCooldowns(session: PlayerSession): void {
@@ -307,7 +443,7 @@ export class SkillSystem {
       }
     }
 
-    const jobSkills = CLASS_SPECIFIC_SKILLS[0]; // TODO: map jobId to numeric ID
+    const jobSkills = CLASS_SPECIFIC_SKILLS[0];
     if (jobSkills) {
       for (const [name, def] of Object.entries(jobSkills)) {
         if (!def.reqLevel || def.reqLevel <= session.stats.level) {

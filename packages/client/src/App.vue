@@ -467,6 +467,12 @@ onMounted(async () => {
     }
   });
 
+  network.onPacket(PacketType.DAMAGE, (packet: any) => {
+    if (packet.data.targetId === targetId.value && !packet.data.missed) {
+      targetHealth.value = Math.max(0, targetHealth.value - packet.data.damage);
+    }
+  });
+
   window.addEventListener('keydown', handleGlobalKeyDown);
 });
 

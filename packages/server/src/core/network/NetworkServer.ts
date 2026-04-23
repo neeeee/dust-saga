@@ -687,11 +687,23 @@ export class NetworkServer {
       const enemy = this.spawnMgr.getEnemy(id);
       if (enemy) {
         const def = getEnemyDefinition(enemy.enemyType);
-        return { defense: def?.defense || 0, magicDefense: Math.floor((def?.defense || 0) * 0.3), health: enemy.health };
+        return {
+          defense: def?.defense || 0,
+          magicDefense: Math.floor((def?.defense || 0) * 0.3),
+          health: enemy.health,
+          level: enemy.level,
+          dodge: Math.floor(enemy.level * 0.5)
+        };
       }
       const player = this.state.players.get(id);
       if (player) {
-        return { defense: player.stats.defense, magicDefense: Math.floor(player.stats.defense * 0.3), health: player.stats.health };
+        return {
+          defense: player.stats.defense,
+          magicDefense: Math.floor(player.stats.defense * 0.3),
+          health: player.stats.health,
+          level: player.stats.level,
+          dodge: player.statPoints.AGI
+        };
       }
       return null;
     };
@@ -717,7 +729,21 @@ export class NetworkServer {
       data: { characterId, stats: session.stats }
     });
 
-    if (result.damage && targetId) {
+    if (result.missed && targetId) {
+      this.broadcastInZone(session.zoneId, {
+        type: PacketType.DAMAGE,
+        timestamp: Date.now(),
+        data: {
+          attackerId: characterId,
+          targetId,
+          damage: 0,
+          isCritical: false,
+          damageType: result.damageType || 'physical',
+          skillName,
+          missed: true
+        }
+      });
+    } else if (result.damage && targetId) {
       const enemy = this.spawnMgr.getEnemy(targetId);
       if (enemy) {
         enemy.health = Math.max(0, enemy.health - result.damage);
@@ -788,6 +814,19 @@ export class NetworkServer {
         type: PacketType.HEAL,
         timestamp: Date.now(),
         data: { targetId: characterId, amount: result.healing }
+      });
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId, stats: session.stats }
+      });
+    }
+
+    if (result.mpRestored) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.HEAL,
+        timestamp: Date.now(),
+        data: { targetId: characterId, amount: result.mpRestored, mpRestore: true }
       });
       this.sendToPlayer(characterId, {
         type: PacketType.STATS_UPDATE,
@@ -1211,11 +1250,23 @@ export class NetworkServer {
           const enemy = this.spawnMgr.getEnemy(id);
           if (enemy) {
             const def = getEnemyDefinition(enemy.enemyType);
-            return { defense: def?.defense || 0, magicDefense: Math.floor((def?.defense || 0) * 0.3), health: enemy.health };
+            return {
+              defense: def?.defense || 0,
+              magicDefense: Math.floor((def?.defense || 0) * 0.3),
+              health: enemy.health,
+              level: enemy.level,
+              dodge: Math.floor(enemy.level * 0.5)
+            };
           }
           const player = this.state.players.get(id);
           if (player) {
-            return { defense: player.stats.defense, magicDefense: Math.floor(player.stats.defense * 0.3), health: player.stats.health };
+            return {
+              defense: player.stats.defense,
+              magicDefense: Math.floor(player.stats.defense * 0.3),
+              health: player.stats.health,
+              level: player.stats.level,
+              dodge: player.statPoints.AGI
+            };
           }
           return null;
         };
@@ -1235,7 +1286,21 @@ export class NetworkServer {
           }
         });
 
-        if (result.damage && castResult.targetId) {
+        if (result.missed && castResult.targetId) {
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.DAMAGE,
+            timestamp: Date.now(),
+            data: {
+              attackerId: session.characterId,
+              targetId: castResult.targetId,
+              damage: 0,
+              isCritical: false,
+              damageType: result.damageType || 'physical',
+              skillName: castResult.skillName,
+              missed: true
+            }
+          });
+        } else if (result.damage && castResult.targetId) {
           const enemy = this.spawnMgr.getEnemy(castResult.targetId);
           if (enemy) {
             enemy.health = Math.max(0, enemy.health - result.damage);
@@ -1273,9 +1338,38 @@ export class NetworkServer {
                 timestamp: Date.now(),
                 data: { entityId: castResult.targetId }
               });
+            } else {
+              this.broadcastInZone(session.zoneId, {
+                type: PacketType.STATS_UPDATE,
+                timestamp: Date.now(),
+                data: { entityId: castResult.targetId, health: enemy.health, maxHealth: enemy.maxHealth }
+              });
             }
           }
         }
+
+        if (result.healing) {
+          session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + result.healing);
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.HEAL,
+            timestamp: Date.now(),
+            data: { targetId: session.characterId, amount: result.healing }
+          });
+        }
+
+        if (result.mpRestored) {
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.HEAL,
+            timestamp: Date.now(),
+            data: { targetId: session.characterId, amount: result.mpRestored, mpRestore: true }
+          });
+        }
+
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { characterId: session.characterId, stats: session.stats }
+        });
       }
 
       if (session.statusEffects && session.statusEffects.length > 0) {
