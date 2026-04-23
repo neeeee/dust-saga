@@ -7,6 +7,7 @@
         <div class="level-badge">Lv. {{ stats?.level || 1 }}</div>
       </div>
       <div class="bars">
+        <CastBar />
         <div class="bar-container">
           <div class="bar health-bar" :style="{ width: healthPercent + '%' }"></div>
           <span class="bar-text">{{ stats?.health || 0 }} / {{ stats?.maxHealth || 100 }}</span>
@@ -42,11 +43,7 @@
     </div>
 
     <div class="hud-bottom-center">
-      <div class="skill-bar">
-        <div class="skill-slot" v-for="i in 5" :key="i">
-          <span class="skill-key">{{ i }}</span>
-        </div>
-      </div>
+      <SkillBar @use-skill="$emit('use-skill', $event)" />
     </div>
 
     <div class="hud-bottom-right">
@@ -54,6 +51,7 @@
         <button class="action-btn" @click="$emit('toggle-inventory')" title="Inventory (I)">B</button>
         <button class="action-btn" @click="$emit('toggle-quests')" title="Quests (J)">Q</button>
         <button class="action-btn" @click="$emit('toggle-character')" title="Character (C)">C</button>
+        <button class="action-btn" @click="$emit('toggle-skills')" title="Skills (K)">K</button>
       </div>
     </div>
   </div>
@@ -62,6 +60,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { PlayerStats } from '@dust-saga/shared';
+import SkillBar from './SkillBar.vue';
+import CastBar from './CastBar.vue';
 
 const props = defineProps<{
   stats: PlayerStats | null;
@@ -78,7 +78,9 @@ defineEmits<{
   'toggle-inventory': [];
   'toggle-quests': [];
   'toggle-character': [];
+  'toggle-skills': [];
   'clear-target': [];
+  'use-skill': [slotIndex: number];
 }>();
 
 const minimapCanvas = ref<HTMLCanvasElement | null>(null);
@@ -302,32 +304,6 @@ defineExpose({ minimapCanvas });
   bottom: 15px;
   left: 50%;
   transform: translateX(-50%);
-}
-
-.skill-bar {
-  display: flex;
-  gap: 4px;
-  background: rgba(0, 0, 0, 0.75);
-  padding: 6px 10px;
-  border-radius: 8px;
-}
-
-.skill-slot {
-  width: 44px;
-  height: 44px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.skill-key {
-  color: #667eea;
-  font-size: 0.8rem;
-  font-weight: bold;
 }
 
 .hud-bottom-right {

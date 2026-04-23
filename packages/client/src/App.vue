@@ -52,7 +52,9 @@
         @toggle-inventory="showInventory = !showInventory"
         @toggle-quests="showQuests = !showQuests"
         @toggle-character="showInventory = !showInventory"
+        @toggle-skills="showSkillWindow = !showSkillWindow"
         @clear-target="gameClient?.setTarget(null)"
+        @use-skill="handleUseSkillSlot"
       />
 
       <ChatPanel
@@ -112,8 +114,13 @@
         @allocate="handleAllocateStat"
       />
 
+      <SkillWindow
+        v-if="showSkillWindow"
+        @close="showSkillWindow = false"
+      />
+
       <div class="controls-hint">
-        Click to lock | WASD move | Shift sprint | F attack | I inventory | J quests | E interact
+        Click to lock | WASD move | Shift sprint | F attack | I inventory | J quests | K skills | 1-0 skill bar | E interact
       </div>
     </div>
 
@@ -135,6 +142,8 @@ import QuestLog from './ui/QuestLog.vue';
 import DialogBox from './ui/DialogBox.vue';
 import NotificationPopup from './ui/NotificationPopup.vue';
 import StatAllocationPanel from './ui/StatAllocationPanel.vue';
+import SkillWindow from './ui/SkillWindow.vue';
+import { useSkillStore } from './composables/useSkillStore';
 
 type GameState = 'auth' | 'character-select' | 'loading' | 'playing';
 
@@ -181,6 +190,8 @@ const playerUnspentStatPoints = ref(0);
 const playerUnspentSkillPoints = ref(0);
 const playerRace = ref('');
 const playerJobId = ref('');
+const showSkillWindow = ref(false);
+const skillStore = useSkillStore();
 
 let gameClient: GameClient | null = null;
 let currentDialogNPCId = '';
@@ -301,6 +312,18 @@ function handleAllocateStat(stat: string) {
   gameClient.allocateStatPoint(stat);
 }
 
+function handleUseSkillSlot(slotIndex: number) {
+  if (!gameClient) return;
+  const slot = skillStore.getSkillInSlot(slotIndex);
+  if (!slot?.skillName) return;
+  if (skillStore.isOnCooldown(slot.skillName)) return;
+  gameClient.useSkill(slot.skillName, targetId.value);
+}
+
+function handleSkillBarKey(slotIndex: number) {
+  handleUseSkillSlot(slotIndex);
+}
+
 function handleAcceptQuest(questId: string) {
   if (!gameClient) return;
   gameClient.acceptQuest(questId);
@@ -369,10 +392,37 @@ onMounted(async () => {
       showNotification(`Entered: ${zoneName}`, 'info');
     },
     onEnemyListUpdate: (enemies) => {
-    }
+    },
+    onCastStart: (skillName, castTime) => {
+      skillStore.startCast(skillName, castTime);
+    },
+    onCastComplete: (skillName) => {
+      skillStore.endCast();
+    },
+    onSkillUsed: (skillName, mpCost, cooldownRemaining) => {
+      skillStore.endCast();
+      if (cooldownRemaining > 0) {
+        skillStore.startCooldown(skillName, cooldownRemaining);
+      }
+    },
+    onSkillError: (skillName, error) => {
+      skillStore.endCast();
+      const messages: Record<string, string> = {
+        cooldown: 'Skill is on cooldown',
+        no_mana: 'Not enough MP',
+        silenced: 'You are silenced',
+        passive: 'Cannot use passive skill',
+        not_found: 'Skill not found',
+        dead: 'You are dead',
+        cc: 'Cannot cast while crowd controlled',
+      };
+      showNotification(messages[error] || `Cannot use skill: ${error}`, 'error');
+    },
   });
 
   await gameClient.initialize();
+
+  gameClient.setSkillBarHandler(handleSkillBarKey);
 
   const network = gameClient.getNetworkClient();
 
@@ -435,11 +485,14 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     showQuests.value = !showQuests.value;
   } else if (e.code === 'KeyC') {
     showStatPanel.value = !showStatPanel.value;
+  } else if (e.code === 'KeyK') {
+    showSkillWindow.value = !showSkillWindow.value;
   } else if (e.code === 'Escape') {
     showInventory.value = false;
     showQuests.value = false;
     showDialog.value = false;
     showStatPanel.value = false;
+    showSkillWindow.value = false;
   }
 }
 

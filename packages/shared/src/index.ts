@@ -19,6 +19,8 @@ export * from './constants/quests';
 export { RACE_DATA, getRaceData, LEVEL_UP_BONUSES, STAT_POINT_COSTS, getStatPointCost, getLevelUpBonuses, MAX_LEVEL, MAX_STAT_VALUE } from './constants/races';
 export { SKILL_CATEGORIES, CLASS_SKILL_DATA } from './constants/skills';
 export { CLASS_SPECIFIC_SKILLS } from './constants/classSkills';
+export * from './types/skillBar';
+export * from './utils/skillAnimations';
 export * from './utils/math';
 export * from './utils/validator';
 export * from './utils/racialPassives';

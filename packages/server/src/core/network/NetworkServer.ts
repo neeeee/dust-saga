@@ -3,7 +3,8 @@ import {
   Packet, PacketType, PlayerSession, Validator,
   JOB_DEFINITIONS, RACE_DATA, createDefaultStatPoints, createDefaultSkillProficiencies,
   getBaseClassForJob, calculateDerivedStats, getExperienceToNextLevel, getStatPointsGainedAtLevel,
-  StatType, JobId, Race, processRacialOnDamage, applyRacialPotionHealing
+  StatType, JobId, Race, processRacialOnDamage, applyRacialPotionHealing,
+  REGEN_CONFIG
 } from '@dust-saga/shared';
 import { AuthManager } from '../auth/AuthManager';
 import { CombatSystem } from '../ecs/systems/CombatSystem';
@@ -663,9 +664,9 @@ export class NetworkServer {
     const check = this.skillSys.canUseSkill(session, skillName, targetId || null);
     if (!check.canUse) {
       this.sendToPlayer(characterId, {
-        type: PacketType.ERROR,
+        type: PacketType.SKILL_USE,
         timestamp: Date.now(),
-        data: { message: `Cannot use skill: ${check.error}` }
+        data: { skillName, error: check.error }
       });
       return;
     }
@@ -1224,7 +1225,14 @@ export class NetworkServer {
         this.sendToPlayer(session.characterId, {
           type: PacketType.COOLDOWN_UPDATE,
           timestamp: Date.now(),
-          data: { skillName: castResult.skillName, type: 'used' }
+          data: {
+            skillName: castResult.skillName,
+            type: 'used',
+            mpCost: this.skillSys.findSkillDefinition(castResult.skillName)?.mpCost || 0,
+            cooldownRemaining: session.skillCooldowns.find(c => c.skillName === castResult.skillName)?.readyAt
+              ? Math.max(0, (session.skillCooldowns.find(c => c.skillName === castResult.skillName)!.readyAt - Date.now()))
+              : 0
+          }
         });
 
         if (result.damage && castResult.targetId) {
@@ -1284,6 +1292,37 @@ export class NetworkServer {
           }
         }
         if (tick.expired.length > 0) {
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: session.characterId, stats: session.stats }
+          });
+        }
+      }
+
+      if (session.stats.health > 0 && now - session.lastRegenTick >= REGEN_CONFIG.TICK_INTERVAL_MS) {
+        const inCombat = now - session.lastAttackTime < REGEN_CONFIG.OUT_OF_COMBAT_DELAY_MS;
+        const lpRegen = Math.floor(session.stats.maxHealth / REGEN_CONFIG.LP_DIVISOR)
+          + Math.floor(session.statPoints.STA / REGEN_CONFIG.LP_STA_DIVISOR);
+        const mpRegen = Math.floor(session.stats.maxMana / REGEN_CONFIG.MP_DIVISOR)
+          + Math.floor(session.statPoints.SPI / REGEN_CONFIG.MP_SPI_DIVISOR);
+
+        const lpGain = inCombat ? Math.floor(lpRegen * REGEN_CONFIG.IN_COMBAT_LP_MULTIPLIER) : lpRegen;
+        const mpGain = inCombat ? Math.floor(mpRegen * REGEN_CONFIG.IN_COMBAT_MP_MULTIPLIER) : mpRegen;
+
+        let changed = false;
+        if (lpGain > 0 && session.stats.health < session.stats.maxHealth) {
+          session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + lpGain);
+          changed = true;
+        }
+        if (mpGain > 0 && session.stats.mana < session.stats.maxMana) {
+          session.stats.mana = Math.min(session.stats.maxMana, session.stats.mana + mpGain);
+          changed = true;
+        }
+
+        session.lastRegenTick = now;
+
+        if (changed) {
           this.sendToPlayer(session.characterId, {
             type: PacketType.STATS_UPDATE,
             timestamp: Date.now(),

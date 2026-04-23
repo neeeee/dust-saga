@@ -36,6 +36,7 @@ export interface PlayerSession {
   zoneId: string;
   targetId: string | null;
   lastAttackTime: number;
+  lastRegenTick: number;
   invulnerableUntil: number;
   skillCooldowns: SkillCooldownEntry[];
   activeCast: ActiveCast | null;

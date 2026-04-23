@@ -1,6 +1,6 @@
 import { GameEngine } from './engine/GameEngine';
 import { NetworkClient } from './network/NetworkClient';
-import { InputManager } from './input/InputManager';
+import { InputManager, SkillBarKeyHandler } from './input/InputManager';
 import { ClientEntityManager, InterpolationManager } from './ecs/ClientEntityManager';
 import { Vector3 as BabylonVector3 } from '@babylonjs/core';
 import {
@@ -26,6 +26,10 @@ export interface GameCallbacks {
   onTargetChange: (id: string | null, data?: { name: string; level: number; health: number; maxHealth: number } | null) => void;
   onZoneChange: (zoneId: string, zoneName: string) => void;
   onEnemyListUpdate: (enemies: any[]) => void;
+  onCastStart: (skillName: string, castTime: number) => void;
+  onCastComplete: (skillName: string) => void;
+  onSkillUsed: (skillName: string, mpCost: number, cooldownRemaining: number) => void;
+  onSkillError: (skillName: string, error: string) => void;
 }
 
 export class GameClient {
@@ -366,6 +370,23 @@ export class GameClient {
       this.callbacks.onNotification?.(packet.data.message, 'error');
     });
 
+    this.network.onPacket(PacketType.SKILL_USE, (packet: any) => {
+      const data = packet.data;
+      if (data.error) {
+        this.callbacks.onSkillError?.(data.skillName || '', data.error);
+      }
+    });
+
+    this.network.onPacket(PacketType.COOLDOWN_UPDATE, (packet: any) => {
+      const data = packet.data;
+      if (data.type === 'cast_start') {
+        this.callbacks.onCastStart?.(data.skillName, data.castTime);
+      } else if (data.type === 'used') {
+        this.callbacks.onSkillUsed?.(data.skillName, data.mpCost || 0, data.cooldownRemaining || 0);
+        this.playSkillAnimation(data.skillName);
+      }
+    });
+
     this.network.onPacket(PacketType.ENTER_ZONE, (packet: any) => {
       this.currentZoneId = packet.data.zoneId;
     });
@@ -593,6 +614,21 @@ export class GameClient {
 
   getPlayerId(): string | null {
     return this.playerId;
+  }
+
+  useSkill(skillName: string, targetId: string | null): void {
+    this.network.useSkill(skillName, targetId || this.targetId);
+  }
+
+  setSkillBarHandler(handler: SkillBarKeyHandler): void {
+    this.input?.setSkillBarHandler(handler);
+  }
+
+  private playSkillAnimation(_skillName: string): void {
+    if (!this.playerId || !this.engine) return;
+    this.engine.startAnimationOnce(this.playerId, 'Attack', () => {
+      this.engine?.startAnimation(this.playerId!, 'Idle');
+    });
   }
 
   dispose(): void {

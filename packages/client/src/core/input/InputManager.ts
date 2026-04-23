@@ -11,12 +11,20 @@ export interface InputState {
   interact: boolean;
 }
 
+export type SkillBarKeyHandler = (slotIndex: number) => void;
+
+const SKILL_BAR_KEYS = [
+  'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
+  'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0'
+];
+
 export class InputManager {
   private keys: Map<string, boolean> = new Map();
   private mousePosition: { x: number; y: number } = { x: 0, y: 0 };
   private mouseDelta: { x: number; y: number } = { x: 0, y: 0 };
   private pointerLocked: boolean = false;
   private chatFocused: boolean = false;
+  private skillBarHandler: SkillBarKeyHandler | null = null;
 
   constructor() {
     this.setupEventListeners();
@@ -24,6 +32,10 @@ export class InputManager {
 
   setChatFocused(focused: boolean): void {
     this.chatFocused = focused;
+  }
+
+  setSkillBarHandler(handler: SkillBarKeyHandler): void {
+    this.skillBarHandler = handler;
   }
 
   private setupEventListeners(): void {
@@ -41,6 +53,11 @@ export class InputManager {
 
     if (e.code === 'Escape' && this.pointerLocked) {
       document.exitPointerLock();
+    }
+
+    const skillIdx = SKILL_BAR_KEYS.indexOf(e.code);
+    if (skillIdx >= 0 && this.skillBarHandler) {
+      this.skillBarHandler(skillIdx);
     }
   }
 
