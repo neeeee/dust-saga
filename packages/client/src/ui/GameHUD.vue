@@ -7,7 +7,6 @@
         <div class="level-badge">Lv. {{ stats?.level || 1 }}</div>
       </div>
       <div class="bars">
-        <CastBar />
         <div class="bar-container">
           <div class="bar health-bar" :style="{ width: healthPercent + '%' }"></div>
           <span class="bar-text">{{ stats?.health || 0 }} / {{ stats?.maxHealth || 100 }}</span>
@@ -21,17 +20,36 @@
           <span class="bar-text">XP: {{ stats?.experience || 0 }} / {{ stats?.experienceToNext || 100 }}</span>
         </div>
       </div>
+      <div class="status-effects" v-if="activeEffects.length > 0">
+        <div
+          v-for="eff in activeEffects"
+          :key="eff.id"
+          class="effect-icon"
+          :class="{ buff: eff.isBuff, debuff: !eff.isBuff }"
+          :title="eff.type + ' (' + eff.remaining + 's)'"
+        >
+          {{ eff.label }}
+          <span class="effect-timer">{{ eff.remaining }}</span>
+        </div>
+      </div>
       <div class="target-info" v-if="targetId">
         <div class="target-header">
           <div class="target-identity">
-            <span class="target-name">{{ targetName }}</span>
+            <span class="target-name" :class="{ 'player-target': targetType === 'player' }">{{ targetName }}</span>
             <span class="target-level" v-if="targetLevel > 0">Lv. {{ targetLevel }}</span>
+            <span class="target-class" v-if="targetClass">{{ targetClass }}</span>
           </div>
           <button class="target-close" @click="$emit('clear-target')">x</button>
         </div>
-        <div class="bar-container target-bar">
-          <div class="bar target-health" :style="{ width: targetHealthPercent + '%' }"></div>
+        <div class="bar-container target-bar" v-if="targetMaxHealth > 0">
+          <div class="bar target-health" :class="{ 'player-health': targetType === 'player' }" :style="{ width: targetHealthPercent + '%' }"></div>
           <span class="bar-text">{{ targetHealth }} / {{ targetMaxHealth }}</span>
+        </div>
+        <div class="target-actions" v-if="targetType === 'player'">
+          <button class="social-btn" title="Add Friend" @click="$emit('whisper-player', targetName)">F</button>
+          <button class="social-btn" title="Add to Party" @click="$emit('party-action', targetId)">P</button>
+          <button class="social-btn" title="Add to Guild">G</button>
+          <button class="social-btn" title="Whisper" @click="$emit('whisper-player', targetName)">W</button>
         </div>
       </div>
     </div>
@@ -43,6 +61,7 @@
     </div>
 
     <div class="hud-bottom-center">
+      <CastBar />
       <SkillBar @use-skill="$emit('use-skill', $event)" />
     </div>
 
@@ -58,10 +77,42 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { PlayerStats } from '@dust-saga/shared';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { PlayerStats, StatusEffectType } from '@dust-saga/shared';
 import SkillBar from './SkillBar.vue';
 import CastBar from './CastBar.vue';
+
+const BUFF_TYPES = new Set([
+  StatusEffectType.HASTE,
+  StatusEffectType.BUFF_DEFENSE,
+  StatusEffectType.BUFF_CAST_SPEED,
+  StatusEffectType.BUFF_MAX_HP,
+  StatusEffectType.BUFF_MP_REGEN,
+  StatusEffectType.BUFF_GENERIC,
+]);
+
+const DEBUFF_ICONS: Record<string, string> = {
+  [StatusEffectType.POISON]: 'Ps',
+  [StatusEffectType.BURN]: 'Br',
+  [StatusEffectType.FREEZE]: 'Fr',
+  [StatusEffectType.STUN]: 'St',
+  [StatusEffectType.SILENCE]: 'Si',
+  [StatusEffectType.SLEEP]: 'Sl',
+  [StatusEffectType.KNOCKDOWN]: 'Kd',
+  [StatusEffectType.CHARM]: 'Ch',
+  [StatusEffectType.BLEED]: 'Bl',
+  [StatusEffectType.ROOT]: 'Rt',
+  [StatusEffectType.SLOW]: 'Sw',
+};
+
+function getEffectLabel(e: any): string {
+  if (e.skillName) {
+    const words = e.skillName.split(/\s+/);
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+    return e.skillName.substring(0, 2).toUpperCase();
+  }
+  return DEBUFF_ICONS[e.type] || '??';
+}
 
 const props = defineProps<{
   stats: PlayerStats | null;
@@ -72,6 +123,9 @@ const props = defineProps<{
   targetHealth: number;
   targetMaxHealth: number;
   targetLevel: number;
+  targetType: string;
+  targetClass: string;
+  statusEffects: any[];
 }>();
 
 defineEmits<{
@@ -81,9 +135,21 @@ defineEmits<{
   'toggle-skills': [];
   'clear-target': [];
   'use-skill': [slotIndex: number];
+  'whisper-player': [playerName: string];
+  'party-action': [targetId: string];
 }>();
 
 const minimapCanvas = ref<HTMLCanvasElement | null>(null);
+const effectNow = ref(Date.now());
+let effectTimer: ReturnType<typeof setInterval> | null = null;
+
+onMounted(() => {
+  effectTimer = setInterval(() => { effectNow.value = Date.now(); }, 500);
+});
+
+onUnmounted(() => {
+  if (effectTimer) clearInterval(effectTimer);
+});
 
 const healthPercent = computed(() => {
   if (!props.stats) return 100;
@@ -103,6 +169,20 @@ const expPercent = computed(() => {
 const targetHealthPercent = computed(() => {
   if (!props.targetMaxHealth) return 0;
   return (props.targetHealth / props.targetMaxHealth) * 100;
+});
+
+const activeEffects = computed(() => {
+  void effectNow.value;
+  return (props.statusEffects || []).map(e => {
+    const remaining = Math.max(0, (e.appliedAt + e.duration - Date.now()) / 1000);
+    return {
+      ...e,
+      label: getEffectLabel(e),
+      isBuff: BUFF_TYPES.has(e.type),
+      remaining: remaining.toFixed(1),
+      expired: remaining <= 0,
+    };
+  }).filter(e => !e.expired);
 });
 
 onMounted(() => {
@@ -271,6 +351,77 @@ defineExpose({ minimapCanvas });
   color: #f44336;
 }
 
+.target-name.player-target {
+  color: #42a5f5;
+}
+
+.target-class {
+  font-size: 0.7rem;
+  color: #aaa;
+  text-transform: capitalize;
+}
+
+.target-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.social-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #ccc;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.social-btn:hover {
+  background: rgba(66, 165, 245, 0.3);
+  color: white;
+}
+
+.player-health {
+  background: linear-gradient(to bottom, #42a5f5, #1565c0) !important;
+}
+
+.status-effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.effect-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: bold;
+  color: white;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.effect-icon.buff {
+  background: rgba(76, 175, 80, 0.7);
+}
+
+.effect-icon.debuff {
+  background: rgba(244, 67, 54, 0.7);
+}
+
+.effect-timer {
+  font-size: 0.5rem;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1;
+}
+
 .target-level {
   font-size: 0.75rem;
   color: #aaa;
@@ -304,6 +455,10 @@ defineExpose({ minimapCanvas });
   bottom: 15px;
   left: 50%;
   transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
 .hud-bottom-right {

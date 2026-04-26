@@ -170,11 +170,15 @@ export class NetworkClient {
     });
   }
 
-  useSkill(skillName: string, targetId: string | null = null): void {
+  useSkill(skillName: string, targetId: string | null = null, aoePosition?: { x: number; y: number; z: number }): void {
+    const data: any = { skillName, targetId };
+    if (aoePosition) {
+      data.aoePosition = aoePosition;
+    }
     this.sendPacket({
       type: PacketType.SKILL_USE,
       timestamp: Date.now(),
-      data: { skillName, targetId }
+      data
     });
   }
 
@@ -263,6 +267,14 @@ export class NetworkClient {
       type: PacketType.STAT_ALLOCATE,
       timestamp: Date.now(),
       data: { stat }
+    });
+  }
+
+  allocateStatBatch(allocations: Record<string, number>): void {
+    this.sendPacket({
+      type: PacketType.STAT_ALLOCATE,
+      timestamp: Date.now(),
+      data: { allocations }
     });
   }
 

@@ -1,9 +1,9 @@
 <template>
-  <div v-if="cast.active" class="cast-bar-container">
+  <div v-if="state.cast.active" class="cast-bar-container">
     <div class="cast-bar-bg">
-      <div class="cast-bar-fill" :style="{ width: (cast.progress * 100) + '%' }"></div>
+      <div class="cast-bar-fill" :style="{ width: (state.cast.progress * 100) + '%' }"></div>
     </div>
-    <span class="cast-bar-text">{{ cast.skillName }}</span>
+    <span class="cast-bar-text">{{ state.cast.skillName }}</span>
   </div>
 </template>
 
@@ -11,18 +11,14 @@
 import { onMounted, onUnmounted } from 'vue';
 import { useSkillStore } from '../composables/useSkillStore';
 
-const { state: { cast }, updateCastProgress } = useSkillStore();
+const { state, updateCastProgress } = useSkillStore();
 
 let tickInterval: number | null = null;
 
 onMounted(() => {
   tickInterval = window.setInterval(() => {
-    if (cast.active) {
+    if (state.cast.active) {
       updateCastProgress();
-      const elapsed = Date.now() - cast.startedAt;
-      if (elapsed >= cast.castTime) {
-        updateCastProgress();
-      }
     }
   }, 50);
 });

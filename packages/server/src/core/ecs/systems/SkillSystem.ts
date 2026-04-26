@@ -1,7 +1,8 @@
 import {
   PlayerSession, SkillDefinition, SkillCooldownEntry, ActiveCast,
   isPassiveSkill, meetsRequirements, getRequiredProficiency,
-  COMBAT_CONFIG, StatusEffect, StatusEffectType, STATUS_EFFECT_DEFS
+  COMBAT_CONFIG, StatusEffect, StatusEffectType, STATUS_EFFECT_DEFS,
+  SKILL_TARGET_RULES, SkillTargetType
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
 import { CLASS_SPECIFIC_SKILLS } from '@dust-saga/shared';
@@ -142,33 +143,45 @@ export class SkillSystem {
       return { canUse: false, error: 'cc' };
     }
 
+    const targetType = SKILL_TARGET_RULES[skillName];
+    if (targetType) {
+      if (targetType === SkillTargetType.SELF) {
+        if (targetId !== null && targetId !== session.characterId) {
+          return { canUse: false, error: 'self_only' };
+        }
+      } else if (targetType === SkillTargetType.OTHER_ONLY) {
+        if (!targetId || targetId === session.characterId) {
+          return { canUse: false, error: 'no_self_target' };
+        }
+      }
+    }
+
     return { canUse: true };
   }
 
   beginCast(
     session: PlayerSession,
     skillName: string,
-    targetId: string | null
+    targetId: string | null,
+    aoePosition?: { x: number; y: number; z: number }
   ): { started: boolean; castTime: number } {
     const skill = this.findSkillDefinition(skillName);
     if (!skill) return { started: false, castTime: 0 };
 
-    let baseCastTime = skill.castTime * 1000;
+    const baseCastTime = skill.castTime * 1000;
     if (baseCastTime <= 0) {
       return { started: true, castTime: 0 };
     }
 
-    const classification = this.classifySkill(skill);
+    const castSpd = 100 + Math.floor(session.statPoints.DEX / 10) * 5;
 
-    let reduction = 0;
-    if (classification.damageType === 'magical') {
-      reduction += session.statPoints.INT * 20;
-    } else {
-      reduction += session.statPoints.AGI * 20;
+    let castTimeMultiplier = 100;
+    const castSpeedBuff = session.statusEffects?.find(e => e.type === StatusEffectType.BUFF_CAST_SPEED);
+    if (castSpeedBuff) {
+      castTimeMultiplier = Math.floor(castTimeMultiplier * (100 - castSpeedBuff.potency * 100) / 100);
     }
-    reduction += session.statPoints.SPI * 8;
 
-    const effectiveCastTime = Math.max(0, baseCastTime - reduction);
+    const effectiveCastTime = Math.max(0, Math.floor(baseCastTime * (100 / castSpd) * (castTimeMultiplier / 100)));
 
     if (effectiveCastTime <= 0) {
       return { started: true, castTime: 0 };
@@ -178,7 +191,8 @@ export class SkillSystem {
       skillName,
       startedAt: Date.now(),
       castTime: effectiveCastTime,
-      targetId
+      targetId,
+      aoePosition
     };
 
     return { started: true, castTime: effectiveCastTime };
@@ -197,16 +211,26 @@ export class SkillSystem {
 
     const now = Date.now();
     if (!session.skillCooldowns) session.skillCooldowns = [];
+    const cooldownMultiplier = Math.max(0, 100 - Math.floor(session.statPoints.INT / 10) * 2) / 100;
+    const effectiveCooldown = Math.floor(skill.cooldown * 1000 * cooldownMultiplier);
     session.skillCooldowns.push({
       skillName,
-      readyAt: now + skill.cooldown * 1000
+      readyAt: now + effectiveCooldown
     });
 
     this.globalCooldowns.set(session.characterId, now + this.gcd);
     session.activeCast = null;
 
     if (skill.duration > 0 && !isPassiveSkill(skill)) {
-      this.applyBuff(session, skill);
+      const targetType = SKILL_TARGET_RULES[skillName];
+      if (!targetType || targetType === SkillTargetType.SELF) {
+        this.applyBuff(session, skill);
+      } else if (
+        (targetType === SkillTargetType.SELF_OR_TARGET || targetType === SkillTargetType.PARTY)
+        && (!targetId || targetId === session.characterId)
+      ) {
+        this.applyBuff(session, skill);
+      }
     }
 
     const classification = this.classifySkill(skill);
@@ -245,7 +269,34 @@ export class SkillSystem {
     return { success: true };
   }
 
+  calculateAOEDamage(
+    session: PlayerSession,
+    skillName: string,
+    targetId: string,
+    getTargetStats: (id: string) => TargetStats | null
+  ): SkillUseResult {
+    const skill = this.findSkillDefinition(skillName);
+    if (!skill) return { success: false, error: 'not_found' };
+
+    const classification = this.classifySkill(skill);
+    if (!classification.dealsDamage) return { success: true };
+
+    const target = getTargetStats(targetId);
+    if (!target) return { success: true, missed: true };
+
+    return this.calculateSkillDamageInternal(session, skill, target, classification.damageType);
+  }
+
   private calculateSkillDamage(
+    session: PlayerSession,
+    skill: SkillDefinition,
+    target: TargetStats,
+    damageType: 'physical' | 'magical'
+  ): SkillUseResult {
+    return this.calculateSkillDamageInternal(session, skill, target, damageType);
+  }
+
+  private calculateSkillDamageInternal(
     session: PlayerSession,
     skill: SkillDefinition,
     target: TargetStats,
@@ -344,6 +395,19 @@ export class SkillSystem {
     const spi = session.statPoints.SPI;
     const int = session.statPoints.INT;
     const level = session.stats.level;
+    const prayer = session.skillProficiencies?.prayer || 0;
+    const name = skill.name.toLowerCase();
+
+    if (name === 'first aid') {
+      return Math.floor(25 + (level * 2.5) + (prayer * 1.4) + int);
+    }
+    if (name === 'heal') {
+      return Math.floor(50 + (level * 2) + (prayer * 3) + (int * 6));
+    }
+    if (name === 'regenerate' || name === 'restoration') {
+      return Math.floor(15 + (spi / 10) + (prayer / 10));
+    }
+
     const multiplier = 1.0 + (skill.mpCost / 30);
     return Math.floor((spi * 2.0 + int * 1.0 + level * 2) * multiplier);
   }
@@ -378,6 +442,42 @@ export class SkillSystem {
   }
 
   private applyBuff(session: PlayerSession, skill: SkillDefinition): void {
+    this.applyBuffToTarget(session, session.characterId, skill);
+  }
+
+  applyBuffToTarget(target: PlayerSession, sourceId: string, skill: SkillDefinition): void {
+    const now = Date.now();
+    const desc = skill.description.toLowerCase();
+    let effectType = StatusEffectType.BUFF_GENERIC;
+    let potency = 0;
+    const duration = (skill.duration || 300) * 1000;
+
+    if (desc.includes('defense') || desc.includes('defensive')) {
+      effectType = StatusEffectType.BUFF_DEFENSE;
+    } else if (desc.includes('cast time') || desc.includes('cast speed')) {
+      effectType = StatusEffectType.BUFF_CAST_SPEED;
+      const bt = (skill as any).buffEffectTable;
+      potency = bt?.castTime ? Math.abs(bt.castTime) / 100 : 0.5;
+    } else if (desc.includes('increase lp') || desc.includes('max hp') || desc.includes('base lp')) {
+      effectType = StatusEffectType.BUFF_MAX_HP;
+    } else if (desc.includes('mp regen') || desc.includes('mana regen')) {
+      effectType = StatusEffectType.BUFF_MP_REGEN;
+    }
+
+    target.statusEffects = target.statusEffects.filter(e => e.skillName !== skill.name);
+    target.statusEffects.push({
+      id: `buff_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      type: effectType,
+      sourceId,
+      targetId: target.characterId,
+      potency,
+      appliedAt: now,
+      duration,
+      tickInterval: 0,
+      lastTickAt: now,
+      stacks: 1,
+      skillName: skill.name,
+    });
   }
 
   updateCooldowns(session: PlayerSession): void {
@@ -386,7 +486,7 @@ export class SkillSystem {
     session.skillCooldowns = session.skillCooldowns.filter(c => now < c.readyAt);
   }
 
-  checkCasting(session: PlayerSession): { completed: boolean; skillName: string; targetId: string | null } | null {
+  checkCasting(session: PlayerSession): { completed: boolean; skillName: string; targetId: string | null; aoePosition?: { x: number; y: number; z: number } } | null {
     if (!session.activeCast) return null;
 
     const elapsed = Date.now() - session.activeCast.startedAt;
@@ -394,7 +494,8 @@ export class SkillSystem {
       return {
         completed: true,
         skillName: session.activeCast.skillName,
-        targetId: session.activeCast.targetId
+        targetId: session.activeCast.targetId,
+        aoePosition: session.activeCast.aoePosition
       };
     }
 

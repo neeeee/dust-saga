@@ -39,7 +39,12 @@ export interface AvailableSkill {
   subCategoryId: number;
 }
 
-const STORAGE_KEY = 'dust-saga-skillbar';
+const STORAGE_KEY_PREFIX = 'dust-saga-skillbar';
+let currentCharacterId: string | null = null;
+
+function getStorageKey(): string {
+  return currentCharacterId ? `${STORAGE_KEY_PREFIX}-${currentCharacterId}` : STORAGE_KEY_PREFIX;
+}
 
 interface SkillStoreState {
   bar: SkillBarSlot[];
@@ -49,7 +54,7 @@ interface SkillStoreState {
 }
 
 const state = reactive<SkillStoreState>({
-  bar: loadSkillBar(),
+  bar: createEmptySkillBar(),
   cooldowns: {},
   cast: {
     active: false,
@@ -89,7 +94,7 @@ startTick();
 
 function loadSkillBar(): SkillBarSlot[] {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(getStorageKey());
     if (saved) {
       const parsed = JSON.parse(saved) as SkillBarSlot[];
       if (Array.isArray(parsed) && parsed.length === SKILL_BAR_SIZE) {
@@ -102,13 +107,20 @@ function loadSkillBar(): SkillBarSlot[] {
 
 function saveSkillBar(): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.bar));
+    localStorage.setItem(getStorageKey(), JSON.stringify(state.bar));
   } catch {}
 }
 
 watch(() => state.bar, saveSkillBar, { deep: true });
 
 export function useSkillStore() {
+  function initForCharacter(characterId: string): void {
+    currentCharacterId = characterId;
+    const saved = loadSkillBar();
+    for (let i = 0; i < SKILL_BAR_SIZE; i++) {
+      state.bar[i] = saved[i];
+    }
+  }
   function setSkillInSlot(slotIndex: number, skillName: string, category: string, subCategory: string): void {
     if (slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return;
 
@@ -277,6 +289,7 @@ export function useSkillStore() {
   return {
     state,
     now,
+    initForCharacter,
     setSkillInSlot,
     removeFromSlot,
     swapSlots,

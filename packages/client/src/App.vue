@@ -49,12 +49,16 @@
         :target-health="targetHealth"
         :target-max-health="targetMaxHealth"
         :target-level="targetLevel"
+        :target-type="targetType"
+        :target-class="targetClass"
+        :status-effects="playerStatusEffects"
         @toggle-inventory="showInventory = !showInventory"
         @toggle-quests="showQuests = !showQuests"
         @toggle-character="showInventory = !showInventory"
         @toggle-skills="showSkillWindow = !showSkillWindow"
         @clear-target="gameClient?.setTarget(null)"
         @use-skill="handleUseSkillSlot"
+        @party-action="handlePartyAction"
       />
 
       <ChatPanel
@@ -112,11 +116,41 @@
         :job-id="playerJobId"
         @close="showStatPanel = false"
         @allocate="handleAllocateStat"
+        @allocate-batch="handleAllocateBatch"
       />
 
       <SkillWindow
         v-if="showSkillWindow"
         @close="showSkillWindow = false"
+      />
+
+      <PartyPanel
+        v-if="partyData"
+        :party="partyData"
+        :loot-pool="partyLootPool"
+        :my-id="gameClient?.getPlayerId() || ''"
+        @leave-party="handlePartyLeave"
+        @kick-member="handlePartyKick"
+        @promote-member="handlePartyPromote"
+        @roll-loot="handlePartyLootRoll"
+      />
+
+      <PartyCreateDialog
+        :visible="showPartyCreate"
+        :target-name="partyCreateTargetName"
+        :target-id="partyCreateTargetId"
+        @create="handlePartyCreate"
+        @cancel="showPartyCreate = false"
+      />
+
+      <PartyInviteDialog
+        :visible="showPartyInvite"
+        :party-id="partyInviteData.partyId"
+        :leader-name="partyInviteData.leaderName"
+        :settings="partyInviteData.settings"
+        :member-count="partyInviteData.memberCount"
+        @accept="handlePartyJoin"
+        @reject="showPartyInvite = false"
       />
 
       <div class="controls-hint">
@@ -133,7 +167,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { GameClient } from './core/GameClient';
-import { PacketType, PlayerStats, StatPoints } from '@dust-saga/shared';
+import { PacketType, PlayerStats, StatPoints, PartyData, PartyLootItem } from '@dust-saga/shared';
 import CharacterSelect from './ui/CharacterSelect.vue';
 import GameHUD from './ui/GameHUD.vue';
 import ChatPanel from './ui/ChatPanel.vue';
@@ -143,6 +177,9 @@ import DialogBox from './ui/DialogBox.vue';
 import NotificationPopup from './ui/NotificationPopup.vue';
 import StatAllocationPanel from './ui/StatAllocationPanel.vue';
 import SkillWindow from './ui/SkillWindow.vue';
+import PartyPanel from './ui/PartyPanel.vue';
+import PartyCreateDialog from './ui/PartyCreateDialog.vue';
+import PartyInviteDialog from './ui/PartyInviteDialog.vue';
 import { useSkillStore } from './composables/useSkillStore';
 
 type GameState = 'auth' | 'character-select' | 'loading' | 'playing';
@@ -174,6 +211,8 @@ const targetName = ref('');
 const targetHealth = ref(0);
 const targetMaxHealth = ref(0);
 const targetLevel = ref(0);
+const targetType = ref('');
+const targetClass = ref('');
 
 const dialogData = ref<any>({
   npcName: '',
@@ -192,6 +231,17 @@ const playerRace = ref('');
 const playerJobId = ref('');
 const showSkillWindow = ref(false);
 const skillStore = useSkillStore();
+const playerStatusEffects = ref<any[]>([]);
+
+const partyData = ref<PartyData | null>(null);
+const partyLootPool = ref<PartyLootItem[]>([]);
+const showPartyCreate = ref(false);
+const partyCreateTargetId = ref('');
+const partyCreateTargetName = ref('');
+const showPartyInvite = ref(false);
+const partyInviteData = ref<{ partyId: string; leaderName: string; settings: any; memberCount: number }>({
+  partyId: '', leaderName: '', settings: null, memberCount: 0
+});
 
 let gameClient: GameClient | null = null;
 let currentDialogNPCId = '';
@@ -312,6 +362,11 @@ function handleAllocateStat(stat: string) {
   gameClient.allocateStatPoint(stat);
 }
 
+function handleAllocateBatch(allocations: Record<string, number>) {
+  if (!gameClient) return;
+  gameClient.allocateStatBatch(allocations);
+}
+
 function handleUseSkillSlot(slotIndex: number) {
   if (!gameClient) return;
   const slot = skillStore.getSkillInSlot(slotIndex);
@@ -322,6 +377,48 @@ function handleUseSkillSlot(slotIndex: number) {
 
 function handleSkillBarKey(slotIndex: number) {
   handleUseSkillSlot(slotIndex);
+}
+
+function handlePartyAction(targetIdStr: string) {
+  if (partyData.value) {
+    showNotification('You are already in a party. Leave first.', 'error');
+    return;
+  }
+  partyCreateTargetId.value = targetIdStr;
+  partyCreateTargetName.value = targetName.value;
+  showPartyCreate.value = true;
+}
+
+function handlePartyCreate(data: { targetId: string; visibility: string; lootRule: string }) {
+  if (!gameClient) return;
+  gameClient.sendPartyCreate(data.targetId, data.visibility, data.lootRule);
+  showPartyCreate.value = false;
+}
+
+function handlePartyJoin(partyId: string) {
+  if (!gameClient) return;
+  gameClient.sendPartyJoin(partyId);
+  showPartyInvite.value = false;
+}
+
+function handlePartyLeave() {
+  if (!gameClient) return;
+  gameClient.sendPartyLeave();
+}
+
+function handlePartyKick(targetId: string) {
+  if (!gameClient) return;
+  gameClient.sendPartyKick(targetId);
+}
+
+function handlePartyPromote(targetId: string) {
+  if (!gameClient) return;
+  gameClient.sendPartyPromote(targetId);
+}
+
+function handlePartyLootRoll(lootId: string) {
+  if (!gameClient) return;
+  gameClient.sendPartyLootRoll(lootId);
 }
 
 function handleAcceptQuest(questId: string) {
@@ -381,11 +478,15 @@ onMounted(async () => {
         targetHealth.value = 0;
         targetMaxHealth.value = 0;
         targetLevel.value = 0;
+        targetType.value = '';
+        targetClass.value = '';
       } else {
         targetName.value = data.name;
         targetHealth.value = data.health;
         targetMaxHealth.value = data.maxHealth;
         targetLevel.value = data.level;
+        targetType.value = data.type || '';
+        targetClass.value = data.class || '';
       }
     },
     onZoneChange: (zoneId, zoneName) => {
@@ -417,6 +518,9 @@ onMounted(async () => {
         cc: 'Cannot cast while crowd controlled',
       };
       showNotification(messages[error] || `Cannot use skill: ${error}`, 'error');
+    },
+    onStatusEffects: (effects) => {
+      playerStatusEffects.value = effects;
     },
   });
 
@@ -453,6 +557,7 @@ onMounted(async () => {
     gameState.value = 'playing';
     playerRace.value = packet.data.race || '';
     playerJobId.value = packet.data.jobId || '';
+    skillStore.initForCharacter(packet.data.characterId);
     nextTick(() => {
       setupGameCanvas();
     });
@@ -463,6 +568,16 @@ onMounted(async () => {
       if (packet.data.entityId === targetId.value) {
         targetHealth.value = packet.data.health || 0;
         targetMaxHealth.value = packet.data.maxHealth || 0;
+        if (packet.data.level !== undefined) {
+          targetLevel.value = packet.data.level;
+        }
+      }
+    }
+    if (packet.data.stats && packet.data.characterId && packet.data.characterId === targetId.value && packet.data.characterId !== gameClient?.getPlayerId()) {
+      targetHealth.value = packet.data.stats.health || 0;
+      targetMaxHealth.value = packet.data.stats.maxHealth || 0;
+      if (packet.data.stats.level !== undefined) {
+        targetLevel.value = packet.data.stats.level;
       }
     }
   });
@@ -471,6 +586,55 @@ onMounted(async () => {
     if (packet.data.targetId === targetId.value && !packet.data.missed) {
       targetHealth.value = Math.max(0, targetHealth.value - packet.data.damage);
     }
+  });
+
+  network.onPacket(PacketType.HEAL, (packet: any) => {
+    if (packet.data.targetId === targetId.value && !packet.data.mpRestore) {
+      targetHealth.value = Math.min(targetMaxHealth.value, targetHealth.value + packet.data.amount);
+    }
+  });
+
+  network.onPacket(PacketType.PARTY_UPDATE, (packet: any) => {
+    partyData.value = {
+      partyId: packet.data.partyId,
+      leaderId: packet.data.leaderId,
+      members: packet.data.members,
+      settings: packet.data.settings,
+    };
+    partyLootPool.value = packet.data.lootPool || [];
+  });
+
+  network.onPacket(PacketType.PARTY_INVITE, (packet: any) => {
+    partyInviteData.value = {
+      partyId: packet.data.partyId,
+      leaderName: packet.data.leaderName,
+      settings: packet.data.settings,
+      memberCount: packet.data.memberCount,
+    };
+    showPartyInvite.value = true;
+  });
+
+  network.onPacket(PacketType.PARTY_DISBAND, () => {
+    partyData.value = null;
+    partyLootPool.value = [];
+  });
+
+  network.onPacket(PacketType.PARTY_LOOT_ROLL, (packet: any) => {
+    const existing = partyLootPool.value.find(i => i.lootId === packet.data.lootId);
+    if (!existing) {
+      partyLootPool.value.push({
+        lootId: packet.data.lootId,
+        itemId: packet.data.itemId,
+        itemName: packet.data.itemName,
+        quantity: packet.data.quantity,
+        rolls: {}
+      });
+    }
+  });
+
+  network.onPacket(PacketType.PARTY_LOOT_RESULT, (packet: any) => {
+    partyLootPool.value = partyLootPool.value.filter(i => i.lootId !== packet.data.lootId);
+    showNotification(`${packet.data.winnerName} won ${packet.data.itemName}!`, 'info');
   });
 
   window.addEventListener('keydown', handleGlobalKeyDown);

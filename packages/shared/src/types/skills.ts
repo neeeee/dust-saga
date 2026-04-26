@@ -35,6 +35,12 @@ export interface SkillRequirement {
 
 export type SkillReqPoints = number | SkillRequirement[];
 
+export enum AOETargetMode {
+  SELF_CENTERED = 'self_centered',
+  TARGET_CENTERED = 'target_centered',
+  GROUND_TARGETED = 'ground_targeted',
+}
+
 export interface SkillDefinition {
   name: string;
   reqPoints: SkillReqPoints;
@@ -47,6 +53,8 @@ export interface SkillDefinition {
   damageSubType?: DamageSubType;
   isPassive?: boolean;
   isAOE?: boolean;
+  aoeTargetMode?: AOETargetMode;
+  aoeRadius?: number;
   range?: number;
   buffEffectTable?: Record<string, any>;
 }
@@ -70,6 +78,12 @@ export interface ClassSpecificSkill {
   cooldown: number;
   duration: number;
   description: string;
+  damageType?: DamageType;
+  damageSubType?: DamageSubType;
+  isAOE?: boolean;
+  aoeTargetMode?: AOETargetMode;
+  aoeRadius?: number;
+  range?: number;
   isPassive?: boolean;
 }
 
@@ -85,6 +99,7 @@ export interface ActiveCast {
   startedAt: number;
   castTime: number;
   targetId: string | null;
+  aoePosition?: { x: number; y: number; z: number };
 }
 
 export interface SkillAllocation {
@@ -93,6 +108,75 @@ export interface SkillAllocation {
 }
 
 export type SkillAllocations = SkillAllocation[];
+
+export enum SkillTargetType {
+  SELF = 'self',
+  SELF_OR_TARGET = 'self_or_target',
+  PARTY = 'party',
+  OTHER_ONLY = 'other_only'
+}
+
+export const SKILL_TARGET_RULES: Record<string, SkillTargetType> = {
+  'Ossify': SkillTargetType.SELF,
+  'Concentration': SkillTargetType.SELF,
+  'Parapet': SkillTargetType.SELF,
+  'Auto-guard': SkillTargetType.SELF,
+  'Defensive March': SkillTargetType.SELF,
+  'Toxify': SkillTargetType.SELF,
+  'Rush': SkillTargetType.SELF,
+  'Quick Step': SkillTargetType.SELF,
+  'Avoidance': SkillTargetType.SELF,
+  'Elemental Absorption': SkillTargetType.SELF,
+  'Green Song': SkillTargetType.SELF,
+  'Blue Song': SkillTargetType.SELF,
+  'Red Song': SkillTargetType.SELF,
+  'Yellow Song': SkillTargetType.SELF,
+  'Mana Shield': SkillTargetType.SELF,
+  'Clear Mind': SkillTargetType.SELF,
+  'Gloom': SkillTargetType.SELF,
+  'Raging Soul': SkillTargetType.SELF,
+  'War Cry': SkillTargetType.SELF,
+  'Lunge': SkillTargetType.SELF,
+  'Desperado': SkillTargetType.SELF,
+  'Skill Focus': SkillTargetType.SELF,
+  'Invigorate': SkillTargetType.SELF,
+  'Hide': SkillTargetType.SELF,
+  'Snipers Nest': SkillTargetType.SELF,
+  'Watchful Eye': SkillTargetType.SELF,
+  'Horse Archer': SkillTargetType.SELF,
+  'Cloak': SkillTargetType.SELF,
+  'Magical Aid': SkillTargetType.SELF,
+
+  'Mental Aid': SkillTargetType.SELF_OR_TARGET,
+  'Physical Barrier': SkillTargetType.SELF_OR_TARGET,
+  'Magical Barrier': SkillTargetType.SELF_OR_TARGET,
+  'Regenerate': SkillTargetType.SELF_OR_TARGET,
+  'Velox': SkillTargetType.SELF_OR_TARGET,
+  'Battle Prayer': SkillTargetType.SELF_OR_TARGET,
+  'Enchantment': SkillTargetType.SELF_OR_TARGET,
+  'Locomitigation': SkillTargetType.SELF_OR_TARGET,
+  'Spirit Protection': SkillTargetType.SELF_OR_TARGET,
+  'Bless Weapon': SkillTargetType.SELF_OR_TARGET,
+  'Resist Fire': SkillTargetType.SELF_OR_TARGET,
+  'Resist Ice': SkillTargetType.SELF_OR_TARGET,
+  'Resist Lightning': SkillTargetType.SELF_OR_TARGET,
+  'Resist Malice': SkillTargetType.SELF_OR_TARGET,
+  'Resist Charm': SkillTargetType.SELF_OR_TARGET,
+  'Accelerate': SkillTargetType.SELF_OR_TARGET,
+  'Mana Restore': SkillTargetType.SELF_OR_TARGET,
+
+  'Providence': SkillTargetType.PARTY,
+  'Lapis Mediow': SkillTargetType.PARTY,
+  'Group Barrier': SkillTargetType.PARTY,
+  'Third Eye': SkillTargetType.PARTY,
+  'Tranquil Mind': SkillTargetType.PARTY,
+  'Divine Aid': SkillTargetType.PARTY,
+  'Speedy Gale': SkillTargetType.PARTY,
+  'Restoration': SkillTargetType.PARTY,
+
+  'Saltio': SkillTargetType.OTHER_ONLY,
+  'Devotion': SkillTargetType.OTHER_ONLY,
+};
 
 export function isPassiveSkill(skill: SkillDefinition): boolean {
   return skill.isPassive || skill.name.includes('(Passive)');

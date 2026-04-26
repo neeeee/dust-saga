@@ -13,7 +13,7 @@ import {
   ShadowGenerator,
   FloatArray,
   Scene as SceneType,
-  AnimationGroup
+  AnimationGroup,
 } from '@babylonjs/core';
 import { AssetManager } from './AssetManager';
 import { MapBuilder, MapData } from './MapBuilder';
@@ -41,7 +41,12 @@ export class GameEngine {
   private playerMesh: AbstractMesh | null = null;
   private onClickCallbacks: Array<(entityId: string) => void> = [];
   private minimapCanvas: HTMLCanvasElement | null = null;
+  private currentZoneDef: ZoneDefinition | null = null;
   private targetedEntityId: string | null = null;
+  private aoeTargetCircle: AbstractMesh | null = null;
+  private aoeIndicatorMat: StandardMaterial | null = null;
+  private aoeValid: boolean = true;
+  private aoeTargetingActive: boolean = false;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -97,6 +102,7 @@ export class GameEngine {
     this.shadowGenerator.blurKernel = 32;
 
     this.scene.onPointerDown = (evt, pickResult) => {
+      if (this.aoeTargetingActive) return;
       if (evt.button === 0 && pickResult?.hit && pickResult.pickedMesh) {
         for (const [id, group] of this.meshes) {
           if (pickResult.pickedMesh === group.root || group.root.getChildMeshes().includes(pickResult.pickedMesh)) {
@@ -302,7 +308,7 @@ export class GameEngine {
     }
   }
 
-  async createPlayerEntity(entityId: string, position: V3, modelFile: string): Promise<AbstractMesh | null> {
+  async createPlayerEntity(entityId: string, position: V3, modelFile: string, name?: string): Promise<AbstractMesh | null> {
     if (!this.scene || !this.assetManager) return null;
 
     let mesh: AbstractMesh | null = null;
@@ -330,6 +336,13 @@ export class GameEngine {
     }
 
     const group: EntityMeshGroup = { root: mesh };
+
+    if (name) {
+      const namePlate = this.assetManager.createNamePlate(name, entityId);
+      namePlate.position = position.add(new V3(0, 2.8, 0));
+      group.namePlate = namePlate;
+    }
+
     this.meshes.set(entityId, group);
 
     return mesh;
@@ -589,12 +602,19 @@ export class GameEngine {
 
   private renderMinimap(zoneDef: ZoneDefinition): void {
     if (!this.minimapCanvas) return;
+    this.currentZoneDef = zoneDef;
+    this.drawMinimapBackground();
+  }
+
+  private drawMinimapBackground(): void {
+    if (!this.minimapCanvas || !this.currentZoneDef) return;
     const ctx = this.minimapCanvas.getContext('2d');
     if (!ctx) return;
 
     const size = this.minimapCanvas.width;
+    const gc = this.currentZoneDef.groundColor;
 
-    ctx.fillStyle = `rgb(${Math.floor(zoneDef.groundColor.r * 255)}, ${Math.floor(zoneDef.groundColor.g * 255)}, ${Math.floor(zoneDef.groundColor.b * 255)})`;
+    ctx.fillStyle = `rgb(${Math.floor(gc.r * 255)}, ${Math.floor(gc.g * 255)}, ${Math.floor(gc.b * 255)})`;
     ctx.fillRect(0, 0, size, size);
 
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
@@ -606,6 +626,8 @@ export class GameEngine {
     if (!this.minimapCanvas) return;
     const ctx = this.minimapCanvas.getContext('2d');
     if (!ctx) return;
+
+    this.drawMinimapBackground();
 
     const size = this.minimapCanvas.width;
     const scale = size / zoneSize;
@@ -691,7 +713,113 @@ export class GameEngine {
     }
   }
 
+  showAOETargetCircle(radius: number): void {
+    if (!this.scene) return;
+    this.hideAOETargetCircle();
+    this.aoeTargetingActive = true;
+
+    const circle = MeshBuilder.CreateDisc('aoe_target_circle', {
+      radius,
+      tessellation: 64,
+    }, this.scene);
+
+    const mat = new StandardMaterial('aoe_target_mat', this.scene);
+    mat.diffuseColor = new Color3(1.0, 0.3, 0.3);
+    mat.emissiveColor = new Color3(0.6, 0.15, 0.15);
+    mat.disableLighting = true;
+    mat.alpha = 0.4;
+    mat.backFaceCulling = false;
+    circle.material = mat;
+    circle.rotation.x = Math.PI / 2;
+    circle.position.y = 0.1;
+    circle.isPickable = false;
+
+    this.aoeTargetCircle = circle;
+    this.aoeIndicatorMat = mat;
+    this.aoeValid = true;
+  }
+
+  hideAOETargetCircle(): void {
+    this.aoeTargetingActive = false;
+    if (this.aoeTargetCircle) {
+      this.aoeTargetCircle.dispose();
+      this.aoeTargetCircle = null;
+    }
+    if (this.aoeIndicatorMat) {
+      this.aoeIndicatorMat.dispose();
+      this.aoeIndicatorMat = null;
+    }
+  }
+
+  updateAOETargetCircle(screenX: number, screenY: number): { position: { x: number; y: number; z: number }; valid: boolean } | null {
+    if (!this.scene || !this.aoeTargetCircle || !this.camera) return null;
+
+    const pickResult = this.scene.pick(screenX, screenY, (mesh) => {
+      if (mesh === this.aoeTargetCircle) return false;
+      if (mesh.isPickable === false) return false;
+      const n = mesh.name;
+      return n.startsWith('map_ground') || n.startsWith('zone_ground')
+        || n.startsWith('map_struct_') || n.startsWith('map_pillar_')
+        || n.startsWith('map_rock_') || n.startsWith('platform_')
+        || n.startsWith('heightmap_');
+    });
+
+    if (!pickResult || !pickResult.hit || !pickResult.pickedPoint) {
+      this.aoeValid = false;
+      if (this.aoeIndicatorMat) {
+        this.aoeIndicatorMat.diffuseColor = new Color3(0.5, 0.5, 0.5);
+        this.aoeIndicatorMat.emissiveColor = new Color3(0.2, 0.2, 0.2);
+        this.aoeIndicatorMat.alpha = 0.2;
+      }
+      return null;
+    }
+
+    const normal = pickResult.getNormal(true);
+    const flatThreshold = 0.85;
+    const isValid = !normal || Math.abs(normal.y) >= flatThreshold;
+
+    this.aoeValid = isValid;
+    this.aoeTargetCircle.position.x = pickResult.pickedPoint.x;
+    this.aoeTargetCircle.position.z = pickResult.pickedPoint.z;
+    this.aoeTargetCircle.position.y = pickResult.pickedPoint.y + 0.1;
+
+    if (normal && Math.abs(normal.y) < 1.0) {
+      this.aoeTargetCircle.rotation.x = Math.PI / 2;
+      this.aoeTargetCircle.rotation.z = 0;
+    }
+
+    if (this.aoeIndicatorMat) {
+      if (isValid) {
+        this.aoeIndicatorMat.diffuseColor = new Color3(0.2, 0.8, 0.2);
+        this.aoeIndicatorMat.emissiveColor = new Color3(0.1, 0.5, 0.1);
+        this.aoeIndicatorMat.alpha = 0.45;
+      } else {
+        this.aoeIndicatorMat.diffuseColor = new Color3(0.8, 0.2, 0.2);
+        this.aoeIndicatorMat.emissiveColor = new Color3(0.5, 0.1, 0.1);
+        this.aoeIndicatorMat.alpha = 0.35;
+      }
+    }
+
+    return {
+      position: {
+        x: pickResult.pickedPoint.x,
+        y: pickResult.pickedPoint.y,
+        z: pickResult.pickedPoint.z,
+      },
+      valid: isValid,
+    };
+  }
+
+  isAOETargetValid(): boolean {
+    return this.aoeValid;
+  }
+
+  isAOETargeting(): boolean {
+    return this.aoeTargetCircle !== null;
+  }
+
   dispose(): void {
+    this.hideAOETargetCircle();
     this.meshes.forEach(group => {
       group.root.dispose();
       group.healthBarBg?.dispose();

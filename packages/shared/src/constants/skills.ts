@@ -4,7 +4,20 @@ import {
   SkillDefinition,
   ClassSpecificSkill,
   ClassSpecificSkills,
+  AOETargetMode,
 } from '../types/skills';
+
+export const GROUND_TARGETED_AOE_SKILLS = new Set([
+  'Firestorm',
+  'Ice Storm',
+  'Thunderstorm',
+  'Meteor Storm',
+  'Despair Swamp',
+  'Ice Tempest',
+  'Wasteland',
+]);
+
+export const DEFAULT_AOE_RADIUS = 5;
 
 export const SKILL_CATEGORIES: Record<number, SkillCategoryData> = {
   0: {
@@ -1288,6 +1301,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 6,
             cooldown: 60,
             duration: 0,
+            isAOE: true,
             description: "Rain holy beams from above",
           },
           "Banish": {
@@ -1297,6 +1311,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 5,
             cooldown: 10,
             duration: 0,
+            isAOE: true,
             description: "Banish a summoned object or monster",
           },
           "Devotion": {
@@ -1318,6 +1333,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 5,
             cooldown: 12,
             duration: 120,
+            isAOE: true,
             description: "Create a field that negates all field spells, targeted and non-targeted",
           },
           "Twinkle Extreme": {
@@ -1467,6 +1483,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 5,
             description: "Summon a firestorm that damages all enemies in range",
             isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 6,
           },
           "Resist Fire": {
             name: "Resist Fire",
@@ -1504,6 +1522,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 3,
             description: "Summon a storm of ice that damages all enemies in range",
             isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 6,
           },
           "Delay Bomb": {
             name: "Delay Bomb",
@@ -1526,6 +1546,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 0,
             description: "Call down a storm of lightning bolts in an area",
             isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 8,
           },
           "Meteor Storm": {
             name: "Meteor Storm",
@@ -1539,6 +1561,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 0,
             description: "Unleash a massive meteor storm, dealing heavy damage to all enemies nearby",
             isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 10,
           },
           "Despair Swamp": {
             name: "Despair Swamp",
@@ -1552,6 +1576,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 0,
             description: "Summon a swamp that damages, slows, and poisons all enemies in range",
             isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 7,
           },
           "Ice Tempest": {
             name: "Ice Tempest",
@@ -1562,6 +1588,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 0,
             description: "Summon a storm of ice that damages all enemies in range",
             isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 8,
           },
           "Cremation": {
             name: "Cremation",
@@ -1893,6 +1921,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 30,
             description: "Summon a poion wasteland that damages and slows all enemies in range",
             isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 8,
           },
           "Siren Storm": {
             name: "Siren Storm",

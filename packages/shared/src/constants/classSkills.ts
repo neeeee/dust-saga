@@ -1,4 +1,4 @@
-import type { ClassSpecificSkills } from '../types/skills';
+import type { ClassSpecificSkills, AOETargetMode } from '../types/skills';
 
 export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
   0: {

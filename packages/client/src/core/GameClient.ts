@@ -2,14 +2,16 @@ import { GameEngine } from './engine/GameEngine';
 import { NetworkClient } from './network/NetworkClient';
 import { InputManager, SkillBarKeyHandler } from './input/InputManager';
 import { ClientEntityManager, InterpolationManager } from './ecs/ClientEntityManager';
-import { Vector3 as BabylonVector3 } from '@babylonjs/core';
+import { Vector3 as BabylonVector3, PointerEventTypes } from '@babylonjs/core';
 import {
   PacketType,
   GAME_CONFIG,
   PlayerStats,
   ZoneDefinition,
   getZoneDefinition,
-  StatPoints
+  StatPoints,
+  GROUND_TARGETED_AOE_SKILLS,
+  DEFAULT_AOE_RADIUS,
 } from '@dust-saga/shared';
 
 export interface GameCallbacks {
@@ -19,11 +21,12 @@ export interface GameCallbacks {
   onQuestUpdate: (quests: any) => void;
   onChatMessage: (sender: string, message: string, channel?: string) => void;
   onNotification: (message: string, type: string) => void;
+  onStatusEffects: (effects: any[]) => void;
   onDeath: (data: any) => void;
   onExperienceGain: (data: any) => void;
   onLevelUp: (level: number) => void;
   onNPCDialog: (data: any) => void;
-  onTargetChange: (id: string | null, data?: { name: string; level: number; health: number; maxHealth: number } | null) => void;
+  onTargetChange: (id: string | null, data?: { name: string; level: number; health: number; maxHealth: number; type?: string; class?: string } | null) => void;
   onZoneChange: (zoneId: string, zoneName: string) => void;
   onEnemyListUpdate: (enemies: any[]) => void;
   onCastStart: (skillName: string, castTime: number) => void;
@@ -41,6 +44,8 @@ export class GameClient {
   private isRunning: boolean = false;
   private lastUpdate: number = 0;
   private lastTeleportTime: number = 0;
+  private zoneLoading: boolean = false;
+  private pendingSpawns: Array<{ id: string; type: string; position: any; data: any }> = [];
   private playerId: string | null = null;
   private playerMesh: any = null;
   private callbacks: Partial<GameCallbacks> = {};
@@ -54,6 +59,9 @@ export class GameClient {
   private enemies: Map<string, any> = new Map();
   private lootBeacons: Map<string, any> = new Map();
   private knownEntities: Map<string, { type: string; data: any }> = new Map();
+  private aoeTargetingActive: boolean = false;
+  private aoeTargetingSkillName: string | null = null;
+  private aoeLastPosition: { x: number; y: number; z: number } | null = null;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.engine = new GameEngine(canvas);
@@ -79,26 +87,140 @@ export class GameClient {
     this.input = new InputManager();
     await this.engine.initialize();
     this.setupClickHandler();
+    this.setupAOETargeting(canvas);
   }
 
   private setupClickHandler(): void {
     this.engine.onClickEntity((entityId) => {
+      if (this.aoeTargetingActive) return;
       const entity = this.knownEntities.get(entityId);
       if (entity?.type === 'enemy') {
         this.targetId = entityId;
         this.engine.setTargetIndicator(entityId);
         const enemyData = this.enemies.get(entityId);
-        this.callbacks.onTargetChange?.(entityId, enemyData ? { name: enemyData.name || 'Enemy', level: enemyData.level || 1, health: enemyData.health || 0, maxHealth: enemyData.maxHealth || 1 } : null);
+        this.callbacks.onTargetChange?.(entityId, enemyData ? { name: enemyData.name || 'Enemy', level: enemyData.level || 1, health: enemyData.health || 0, maxHealth: enemyData.maxHealth || 1, type: 'enemy' } : null);
       } else if (entity?.type === 'npc') {
         this.targetId = entityId;
         this.engine.setTargetIndicator(entityId);
-        this.callbacks.onTargetChange?.(entityId, { name: entity.data.name || 'NPC', level: 0, health: 0, maxHealth: 0 });
+        this.callbacks.onTargetChange?.(entityId, { name: entity.data.name || 'NPC', level: 0, health: 0, maxHealth: 0, type: 'npc' });
+      } else if (entity?.type === 'player') {
+        this.targetId = entityId;
+        this.engine.setTargetIndicator(entityId);
+        this.callbacks.onTargetChange?.(entityId, {
+          name: entity.data.name || 'Player',
+          level: entity.data.level || 0,
+          health: entity.data.health || 0,
+          maxHealth: entity.data.maxHealth || 0,
+          type: 'player',
+          class: entity.data.class || entity.data.jobId || ''
+        });
       } else {
         this.targetId = null;
         this.engine.setTargetIndicator(null);
         this.callbacks.onTargetChange?.(null);
       }
     });
+  }
+
+  private setupAOETargeting(_canvas: HTMLCanvasElement): void {
+    let mouseMoveThrottle = 0;
+
+    const scene = this.engine.getScene();
+
+    scene?.onPointerObservable.add((pointerInfo) => {
+      if (!this.aoeTargetingActive) return;
+
+      if (pointerInfo.type === PointerEventTypes.POINTERMOVE) {
+        const now = Date.now();
+        if (now - mouseMoveThrottle < 16) return;
+        mouseMoveThrottle = now;
+        const result = this.engine.updateAOETargetCircle(scene.pointerX, scene.pointerY);
+        if (result) {
+          this.aoeLastPosition = result.position;
+          const mesh = this.playerMesh;
+          const pp = mesh ? mesh.position : null;
+          this.callbacks.onChatMessage?.(
+            'Debug',
+            `[AOE] cursor=(${result.position.x.toFixed(1)}, ${result.position.y.toFixed(1)}, ${result.position.z.toFixed(1)}) player=(${pp ? pp.x.toFixed(1) : '?'}, ${pp ? pp.y.toFixed(1) : '?'}, ${pp ? pp.z.toFixed(1) : '?'}) scene.xy=(${scene.pointerX.toFixed(0)}, ${scene.pointerY.toFixed(0)}) valid=${result.valid}`,
+            'system'
+          );
+        } else {
+          this.callbacks.onChatMessage?.(
+            'Debug',
+            `[AOE] pick missed scene.xy=(${scene.pointerX.toFixed(0)}, ${scene.pointerY.toFixed(0)})`,
+            'system'
+          );
+        }
+      }
+
+      if (pointerInfo.type === PointerEventTypes.POINTERDOWN) {
+        const evt = pointerInfo.event;
+        if (evt.button === 0) {
+          if (!this.aoeLastPosition) {
+            const result = this.engine.updateAOETargetCircle(scene.pointerX, scene.pointerY);
+            if (result) {
+              this.aoeLastPosition = result.position;
+            }
+          }
+          this.callbacks.onChatMessage?.(
+            'Debug',
+            `[AOE Click] pos=${this.aoeLastPosition ? `(${this.aoeLastPosition.x.toFixed(1)},${this.aoeLastPosition.y.toFixed(1)},${this.aoeLastPosition.z.toFixed(1)})` : 'null'} valid=${this.engine.isAOETargetValid()}`,
+            'system'
+          );
+          if (!this.aoeLastPosition || !this.engine.isAOETargetValid()) return;
+          const pos = this.aoeLastPosition;
+          const skillName = this.aoeTargetingSkillName!;
+          this.cancelAOETargeting();
+          this.network.useSkill(
+            skillName,
+            this.targetId,
+            { x: pos.x, y: pos.y, z: pos.z }
+          );
+        } else if (evt.button === 2) {
+          this.cancelAOETargeting();
+        }
+      }
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (!this.aoeTargetingActive) return;
+      if (e.key === 'Escape') {
+        this.cancelAOETargeting();
+      }
+    });
+
+    scene?.onPointerObservable.add((pointerInfo) => {
+      if (this.aoeTargetingActive && pointerInfo.type === PointerEventTypes.POINTERDOWN) {
+        if ((pointerInfo.event as PointerEvent).button === 2) {
+          pointerInfo.event.preventDefault();
+        }
+      }
+    });
+  }
+
+  startAOETargeting(skillName: string, radius: number): void {
+    this.aoeTargetingActive = true;
+    this.aoeTargetingSkillName = skillName;
+    this.aoeLastPosition = null;
+    this.engine.showAOETargetCircle(radius);
+    const mesh = this.playerMesh;
+    const pp = mesh ? mesh.position : null;
+    this.callbacks.onChatMessage?.(
+      'Debug',
+      `[AOE Start] skill=${skillName} radius=${radius} player=(${pp ? pp.x.toFixed(1) : '?'}, ${pp ? pp.y.toFixed(1) : '?'}, ${pp ? pp.z.toFixed(1) : '?'})`,
+      'system'
+    );
+  }
+
+  cancelAOETargeting(): void {
+    this.aoeTargetingActive = false;
+    this.aoeTargetingSkillName = null;
+    this.aoeLastPosition = null;
+    this.engine.hideAOETargetCircle();
+  }
+
+  isAOETargeting(): boolean {
+    return this.aoeTargetingActive;
   }
 
   private setupNetworkHandlers(): void {
@@ -126,6 +248,7 @@ export class GameClient {
     this.network.onPacket(PacketType.WORLD_STATE, async (packet: any) => {
       const { zoneId, zoneDef, enemies, npcs, players } = packet.data;
       this.currentZoneId = zoneId;
+      this.zoneLoading = true;
 
       await this.engine.loadZone(zoneDef as ZoneDefinition);
       this.callbacks.onZoneChange?.(zoneId, (zoneDef as ZoneDefinition).name);
@@ -159,7 +282,8 @@ export class GameClient {
         await this.engine.createPlayerEntity(
           player.id,
           new BabylonVector3(player.position.x, player.position.y, player.position.z),
-          player.data.modelFile
+          player.data.modelFile,
+          player.data.name
         );
         this.knownEntities.set(player.id, { type: 'player', data: player.data });
         this.entityManager.createEntity(player.id);
@@ -173,33 +297,25 @@ export class GameClient {
         }
       }
 
+      this.zoneLoading = false;
+      const pending = [...this.pendingSpawns];
+      this.pendingSpawns = [];
+      for (const spawn of pending) {
+        await this.processEntitySpawn(spawn.id, spawn.type, spawn.position, spawn.data);
+      }
+
       this.callbacks.onEnemyListUpdate?.(Array.from(this.enemies.values()));
     });
 
     this.network.onPacket(PacketType.ENTITY_SPAWN, async (packet: any) => {
       const { id, type, position, data } = packet.data;
-      const pos = new BabylonVector3(position.x, position.y, position.z);
 
-      this.knownEntities.set(id, { type, data });
-      this.entityManager.createEntity(id);
-
-      if (type === 'player') {
-        await this.engine.createPlayerEntity(id, pos, data.modelFile);
-
-        if (id === this.playerId) {
-          this.engine.setPlayerMesh(id);
-          this.playerMesh = this.engine.getPlayerMesh();
-          if (this.playerMesh) {
-            this.engine.attachCameraToEntity(id);
-          }
-        }
-      } else if (type === 'enemy') {
-        await this.engine.createEnemyEntity(id, pos, data.modelFile, data.health, data.maxHealth, data.name);
-        this.enemies.set(id, data);
-        this.callbacks.onEnemyListUpdate?.(Array.from(this.enemies.values()));
-      } else if (type === 'npc') {
-        await this.engine.createNPCEntity(id, pos, data.modelFile, data.name);
+      if (this.zoneLoading) {
+        this.pendingSpawns.push({ id, type, position, data });
+        return;
       }
+
+      await this.processEntitySpawn(id, type, position, data);
     });
 
     this.network.onPacket(PacketType.ENTITY_DESPAWN, (packet: any) => {
@@ -267,6 +383,9 @@ export class GameClient {
           enemyData.health = Math.max(0, enemyData.health - damage);
         }
       }
+      if (entity?.type === 'player') {
+        entity.data.health = Math.max(0, (entity.data.health || 0) - damage);
+      }
 
       if (targetId === this.playerId && this.stats) {
         this.stats.health = Math.max(0, this.stats.health - damage);
@@ -276,18 +395,43 @@ export class GameClient {
 
     this.network.onPacket(PacketType.STATS_UPDATE, (packet: any) => {
       const data = packet.data;
-      if (data.stats) {
+      if (data.stats && data.characterId === this.playerId) {
         this.stats = data.stats;
         this.callbacks.onStatsUpdate?.(data.stats);
       }
-      if (data.statPoints) {
+      if (data.statPoints && data.characterId === this.playerId) {
         this.statPoints = data.statPoints;
         this.unspentStatPoints = data.unspentStatPoints ?? this.unspentStatPoints;
         this.unspentSkillPoints = data.unspentSkillPoints ?? this.unspentSkillPoints;
         this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints);
       }
       if (data.health !== undefined && data.maxHealth) {
-        this.engine.updateEntityHealth(data.entityId || data.characterId, data.health, data.maxHealth);
+        const eid = data.entityId || data.characterId;
+        this.engine.updateEntityHealth(eid, data.health, data.maxHealth);
+        const entity = this.knownEntities.get(eid);
+        if (entity?.type === 'player') {
+          entity.data.health = data.health;
+          entity.data.maxHealth = data.maxHealth;
+          if (data.level !== undefined) entity.data.level = data.level;
+        }
+      }
+    });
+
+    this.network.onPacket(PacketType.HEAL, (packet: any) => {
+      const { targetId, amount } = packet.data;
+      if (targetId === this.playerId && this.stats) {
+        if (packet.data.mpRestore) {
+          this.stats.mana = Math.min(this.stats.maxMana, this.stats.mana + amount);
+        } else {
+          this.stats.health = Math.min(this.stats.maxHealth, this.stats.health + amount);
+        }
+        this.callbacks.onStatsUpdate?.(this.stats);
+      }
+      if (!packet.data.mpRestore) {
+        const entity = this.knownEntities.get(targetId);
+        if (entity?.type === 'player') {
+          entity.data.health = Math.min(entity.data.maxHealth || 0, (entity.data.health || 0) + amount);
+        }
       }
     });
 
@@ -311,7 +455,10 @@ export class GameClient {
       const data = packet.data;
       if (this.stats) {
         this.stats.level = data.level;
-        this.callbacks.onStatsUpdate?.(this.stats);
+        if (data.stats) {
+          this.stats = data.stats;
+        }
+        this.callbacks.onStatsUpdate?.(this.stats!);
       }
       if (data.statPoints) {
         this.statPoints = data.statPoints;
@@ -390,9 +537,38 @@ export class GameClient {
       }
     });
 
+    this.network.onPacket(PacketType.STATUS_EFFECT_UPDATE, (packet: any) => {
+      this.callbacks.onStatusEffects?.(packet.data.effects || []);
+    });
+
     this.network.onPacket(PacketType.ENTER_ZONE, (packet: any) => {
       this.currentZoneId = packet.data.zoneId;
     });
+  }
+
+  private async processEntitySpawn(id: string, type: string, position: any, data: any): Promise<void> {
+    const pos = new BabylonVector3(position.x, position.y, position.z);
+
+    this.knownEntities.set(id, { type, data });
+    this.entityManager.createEntity(id);
+
+    if (type === 'player') {
+      await this.engine.createPlayerEntity(id, pos, data.modelFile, data.name);
+
+      if (id === this.playerId) {
+        this.engine.setPlayerMesh(id);
+        this.playerMesh = this.engine.getPlayerMesh();
+        if (this.playerMesh) {
+          this.engine.attachCameraToEntity(id);
+        }
+      }
+    } else if (type === 'enemy') {
+      await this.engine.createEnemyEntity(id, pos, data.modelFile, data.health, data.maxHealth, data.name);
+      this.enemies.set(id, data);
+      this.callbacks.onEnemyListUpdate?.(Array.from(this.enemies.values()));
+    } else if (type === 'npc') {
+      await this.engine.createNPCEntity(id, pos, data.modelFile, data.name);
+    }
   }
 
   private gameLoop(): void {
@@ -439,8 +615,10 @@ export class GameClient {
       const angle = Math.atan2(moveDirection.x, moveDirection.z);
       this.playerMesh.rotation.y = angle;
       this.engine.startAnimation(this.playerId!, 'Walk');
+      this.engine.updateEntityPosition(this.playerId!, this.playerMesh.position);
     } else {
       this.engine.startAnimation(this.playerId!, 'Idle');
+      this.engine.updateEntityPosition(this.playerId!, this.playerMesh.position);
     }
 
     const now = Date.now();
@@ -608,6 +786,10 @@ export class GameClient {
     this.network.allocateStatPoint(stat);
   }
 
+  allocateStatBatch(allocations: Record<string, number>): void {
+    this.network.allocateStatBatch(allocations);
+  }
+
   getCurrentZoneId(): string | null {
     return this.currentZoneId;
   }
@@ -621,7 +803,41 @@ export class GameClient {
   }
 
   useSkill(skillName: string, targetId: string | null): void {
+    if (GROUND_TARGETED_AOE_SKILLS.has(skillName)) {
+      if (this.aoeTargetingActive && this.aoeTargetingSkillName === skillName) {
+        return;
+      }
+      this.startAOETargeting(skillName, DEFAULT_AOE_RADIUS);
+      return;
+    }
+    if (this.aoeTargetingActive) {
+      this.cancelAOETargeting();
+    }
     this.network.useSkill(skillName, targetId || this.targetId);
+  }
+
+  sendPartyCreate(targetId: string, visibility: string, lootRule: string): void {
+    this.network.sendPacket({ type: PacketType.PARTY_CREATE_REQUEST, timestamp: Date.now(), data: { targetId, visibility, lootRule } });
+  }
+
+  sendPartyJoin(partyId: string): void {
+    this.network.sendPacket({ type: PacketType.PARTY_JOIN_REQUEST, timestamp: Date.now(), data: { partyId, accept: true } });
+  }
+
+  sendPartyLeave(): void {
+    this.network.sendPacket({ type: PacketType.PARTY_LEAVE, timestamp: Date.now(), data: {} });
+  }
+
+  sendPartyKick(targetId: string): void {
+    this.network.sendPacket({ type: PacketType.PARTY_KICK, timestamp: Date.now(), data: { targetId } });
+  }
+
+  sendPartyPromote(targetId: string): void {
+    this.network.sendPacket({ type: PacketType.PARTY_PROMOTE, timestamp: Date.now(), data: { targetId } });
+  }
+
+  sendPartyLootRoll(lootId: string): void {
+    this.network.sendPacket({ type: PacketType.PARTY_LOOT_ROLL, timestamp: Date.now(), data: { lootId } });
   }
 
   setSkillBarHandler(handler: SkillBarKeyHandler): void {
