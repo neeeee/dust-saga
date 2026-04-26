@@ -309,7 +309,11 @@ export class SkillSystem {
       return { success: true, damage: 0, missed: true, damageType };
     }
 
-    const attackStat = isMagical ? session.stats.magicAttack : session.stats.attack;
+    let attackStat = isMagical ? session.stats.magicAttack : session.stats.attack;
+    const attackBuff = session.statusEffects?.find(e => e.type === StatusEffectType.BUFF_ATTACK);
+    if (attackBuff && !isMagical) {
+      attackStat = Math.floor(attackStat * attackBuff.potency);
+    }
     const defenseStat = isMagical ? target.magicDefense : target.defense;
     const primaryStat = isMagical ? session.statPoints.INT : session.statPoints.STR;
     const secondaryStat = isMagical ? session.statPoints.SPI : session.statPoints.DEX;
@@ -451,12 +455,15 @@ export class SkillSystem {
     let effectType = StatusEffectType.BUFF_GENERIC;
     let potency = 0;
     const duration = (skill.duration || 300) * 1000;
+    const bt = skill.buffEffectTable || (skill as any).buffEffectTable;
 
-    if (desc.includes('defense') || desc.includes('defensive')) {
+    if (bt?.attackPowerMultiplier) {
+      effectType = StatusEffectType.BUFF_ATTACK;
+      potency = bt.attackPowerMultiplier;
+    } else if (desc.includes('defense') || desc.includes('defensive')) {
       effectType = StatusEffectType.BUFF_DEFENSE;
     } else if (desc.includes('cast time') || desc.includes('cast speed')) {
       effectType = StatusEffectType.BUFF_CAST_SPEED;
-      const bt = (skill as any).buffEffectTable;
       potency = bt?.castTime ? Math.abs(bt.castTime) / 100 : 0.5;
     } else if (desc.includes('increase lp') || desc.includes('max hp') || desc.includes('base lp')) {
       effectType = StatusEffectType.BUFF_MAX_HP;

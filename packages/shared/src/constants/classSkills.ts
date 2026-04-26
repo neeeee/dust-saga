@@ -78,6 +78,11 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "Increase attack power of all allies",
+      isAOE: true,
+      aoeRadius: 15,
+      buffEffectTable: {
+        attackPowerMultiplier: 1.4,
+      },
     },
     "Raging Soul": {
       reqLevel: 35,

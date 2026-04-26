@@ -80,11 +80,12 @@ export interface ClassSpecificSkill {
   description: string;
   damageType?: DamageType;
   damageSubType?: DamageSubType;
+  isPassive?: boolean;
   isAOE?: boolean;
   aoeTargetMode?: AOETargetMode;
   aoeRadius?: number;
   range?: number;
-  isPassive?: boolean;
+  buffEffectTable?: Record<string, any>;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;

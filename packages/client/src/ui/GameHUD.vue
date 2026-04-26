@@ -88,6 +88,7 @@ const BUFF_TYPES = new Set([
   StatusEffectType.BUFF_CAST_SPEED,
   StatusEffectType.BUFF_MAX_HP,
   StatusEffectType.BUFF_MP_REGEN,
+  StatusEffectType.BUFF_ATTACK,
   StatusEffectType.BUFF_GENERIC,
 ]);
 

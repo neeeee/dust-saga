@@ -15,6 +15,7 @@ export enum StatusEffectType {
   BUFF_CAST_SPEED = 'buff_cast_speed',
   BUFF_MAX_HP = 'buff_max_hp',
   BUFF_MP_REGEN = 'buff_mp_regen',
+  BUFF_ATTACK = 'buff_attack',
   BUFF_GENERIC = 'buff_generic',
 }
 
@@ -58,6 +59,7 @@ export const STATUS_EFFECT_DEFS: Partial<Record<StatusEffectType, StatusEffectDe
   [StatusEffectType.BUFF_CAST_SPEED]: { type: StatusEffectType.BUFF_CAST_SPEED, duration: 90000, tickInterval: 0, potency: 0.5, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_MAX_HP]: { type: StatusEffectType.BUFF_MAX_HP, duration: 480000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_MP_REGEN]: { type: StatusEffectType.BUFF_MP_REGEN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_ATTACK]: { type: StatusEffectType.BUFF_ATTACK, duration: 480000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_GENERIC]: { type: StatusEffectType.BUFF_GENERIC, duration: 300000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
 };
 
