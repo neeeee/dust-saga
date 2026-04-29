@@ -23,6 +23,15 @@
         <div class="member-bar-container">
           <div class="member-hp-bar" :style="{ width: hpPercent(member) + '%' }"></div>
         </div>
+        <div class="member-effects" v-if="getMemberEffects(member.characterId).length > 0">
+          <div
+            v-for="eff in getMemberEffects(member.characterId)"
+            :key="eff.id"
+            class="member-effect-icon"
+            :class="isBuff(eff) ? 'buff' : 'debuff'"
+            :title="eff.type"
+          >{{ getEffectLabel(eff) }}</div>
+        </div>
         <div class="member-actions" v-if="isLeader && member.characterId !== myId">
           <button class="tiny-btn" @click="$emit('kick-member', member.characterId)" title="Kick">✕</button>
           <button class="tiny-btn" @click="$emit('promote-member', member.characterId)" title="Make Leader">★</button>
@@ -45,12 +54,23 @@
 </template>
 
 <script setup lang="ts">
-import { PartyData, PartyLootItem } from '@dust-saga/shared';
+import { PartyData, PartyLootItem, StatusEffectType } from '@dust-saga/shared';
+
+const BUFF_TYPES = new Set([
+  StatusEffectType.HASTE,
+  StatusEffectType.BUFF_DEFENSE,
+  StatusEffectType.BUFF_CAST_SPEED,
+  StatusEffectType.BUFF_MAX_HP,
+  StatusEffectType.BUFF_MP_REGEN,
+  StatusEffectType.BUFF_ATTACK,
+  StatusEffectType.BUFF_GENERIC,
+]);
 
 const props = defineProps<{
   party: PartyData | null;
   lootPool: PartyLootItem[];
   myId: string;
+  entityStatusEffects: Record<string, any[]>;
 }>();
 
 defineEmits<{
@@ -69,6 +89,39 @@ function hpPercent(m: { health: number; maxHealth: number }): number {
 
 function hasRolled(item: PartyLootItem): boolean {
   return item.rolls[props.myId] !== undefined;
+}
+
+function getMemberEffects(characterId: string): any[] {
+  const effects = props.entityStatusEffects[characterId];
+  if (!effects) return [];
+  const now = Date.now();
+  return effects.filter(e => (e.appliedAt + e.duration - now) > 0);
+}
+
+function isBuff(e: any): boolean {
+  return BUFF_TYPES.has(e.type);
+}
+
+function getEffectLabel(e: any): string {
+  if (e.skillName) {
+    const words = e.skillName.split(/\s+/);
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+    return e.skillName.substring(0, 2).toUpperCase();
+  }
+  const DEBUFF_ICONS: Record<string, string> = {
+    [StatusEffectType.POISON]: 'Ps',
+    [StatusEffectType.BURN]: 'Br',
+    [StatusEffectType.FREEZE]: 'Fr',
+    [StatusEffectType.STUN]: 'St',
+    [StatusEffectType.SILENCE]: 'Si',
+    [StatusEffectType.SLEEP]: 'Sl',
+    [StatusEffectType.KNOCKDOWN]: 'Kd',
+    [StatusEffectType.CHARM]: 'Ch',
+    [StatusEffectType.BLEED]: 'Bl',
+    [StatusEffectType.ROOT]: 'Rt',
+    [StatusEffectType.SLOW]: 'Sw',
+  };
+  return DEBUFF_ICONS[e.type] || '??';
 }
 </script>
 
@@ -147,6 +200,26 @@ function hasRolled(item: PartyLootItem): boolean {
   background: #4a4;
   transition: width 0.3s;
 }
+.member-effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 2px;
+}
+.member-effect-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.4rem;
+  font-weight: bold;
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.member-effect-icon.buff { background: rgba(76, 175, 80, 0.6); }
+.member-effect-icon.debuff { background: rgba(244, 67, 54, 0.6); }
 .member-actions {
   display: flex;
   gap: 4px;

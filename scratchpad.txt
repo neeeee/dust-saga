@@ -1,5 +1,0 @@
-current problems:
-1. target player doesn't show current level. if I cast a heal on a target player, their max hp shows. for example, target player is level 4 with 107 hp. on initial target with no heal cast, they show as level 1 with 89 hp. after casting a heal, they are level 1 with 107 hp in the target window. this happens no matter who clicks the player - even the player themselves.
-2. target player taking damage does not reflect the damage in the target window. after player takes damage, their hp is reset to the level 1 value. the damage a player takes needs to reflect in the target window so anyone looking at that player knows to heal them.
-3. dex still isn't affecting cast speed. I gave a character 70 dex and the cast speed was unchanged from the base. saltio is still the only thing making faster casts.
-> add debug message when a spell is cast that shows its cast speed and cooldown.

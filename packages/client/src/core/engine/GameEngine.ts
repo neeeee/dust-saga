@@ -87,7 +87,7 @@ export class GameEngine {
     this.camera.upperBetaLimit = Math.PI / 2.2;
     this.camera.wheelPrecision = 30;
     this.camera.panningSensibility = 0;
-    this.camera.inertia = 0.8;
+    this.camera.inertia = 0.5;
 
     const hemiLight = new HemisphericLight('hemiLight', new V3(0, 1, 0), this.scene);
     hemiLight.intensity = 0.6;

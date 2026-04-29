@@ -423,7 +423,7 @@ export class SkillSystem {
     return Math.floor((spi * 1.5 + level * 1.5) * multiplier);
   }
 
-  private calculateMaxHpBuff(session: PlayerSession, skill: SkillDefinition): number {
+  calculateMaxHpBuff(session: PlayerSession, skill: SkillDefinition): number {
     const desc = skill.description.toLowerCase();
     const baseHp = session.stats.maxHealth;
     let increase = 0;
@@ -530,7 +530,11 @@ export class SkillSystem {
           cooldown: s.cooldown,
           duration: s.duration,
           description: s.description,
-          isPassive: s.isPassive
+          isPassive: s.isPassive,
+          isAOE: s.isAOE,
+          aoeTargetMode: s.aoeTargetMode,
+          aoeRadius: s.aoeRadius,
+          buffEffectTable: s.buffEffectTable,
         };
       }
     }

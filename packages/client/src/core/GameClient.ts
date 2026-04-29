@@ -33,6 +33,7 @@ export interface GameCallbacks {
   onCastComplete: (skillName: string) => void;
   onSkillUsed: (skillName: string, mpCost: number, cooldownRemaining: number) => void;
   onSkillError: (skillName: string, error: string) => void;
+  onEntityStatusEffects: (entityId: string, effects: any[]) => void;
 }
 
 export class GameClient {
@@ -139,17 +140,17 @@ export class GameClient {
           this.aoeLastPosition = result.position;
           const mesh = this.playerMesh;
           const pp = mesh ? mesh.position : null;
-          this.callbacks.onChatMessage?.(
-            'Debug',
-            `[AOE] cursor=(${result.position.x.toFixed(1)}, ${result.position.y.toFixed(1)}, ${result.position.z.toFixed(1)}) player=(${pp ? pp.x.toFixed(1) : '?'}, ${pp ? pp.y.toFixed(1) : '?'}, ${pp ? pp.z.toFixed(1) : '?'}) scene.xy=(${scene.pointerX.toFixed(0)}, ${scene.pointerY.toFixed(0)}) valid=${result.valid}`,
-            'system'
-          );
+          // this.callbacks.onChatMessage?.(
+          //   'Debug',
+          //   `[AOE] cursor=(${result.position.x.toFixed(1)}, ${result.position.y.toFixed(1)}, ${result.position.z.toFixed(1)}) player=(${pp ? pp.x.toFixed(1) : '?'}, ${pp ? pp.y.toFixed(1) : '?'}, ${pp ? pp.z.toFixed(1) : '?'}) scene.xy=(${scene.pointerX.toFixed(0)}, ${scene.pointerY.toFixed(0)}) valid=${result.valid}`,
+          //   'system'
+          // );
         } else {
-          this.callbacks.onChatMessage?.(
-            'Debug',
-            `[AOE] pick missed scene.xy=(${scene.pointerX.toFixed(0)}, ${scene.pointerY.toFixed(0)})`,
-            'system'
-          );
+          // this.callbacks.onChatMessage?.(
+          //   'Debug',
+          //   `[AOE] pick missed scene.xy=(${scene.pointerX.toFixed(0)}, ${scene.pointerY.toFixed(0)})`,
+          //   'system'
+          // );
         }
       }
 
@@ -162,11 +163,11 @@ export class GameClient {
               this.aoeLastPosition = result.position;
             }
           }
-          this.callbacks.onChatMessage?.(
-            'Debug',
-            `[AOE Click] pos=${this.aoeLastPosition ? `(${this.aoeLastPosition.x.toFixed(1)},${this.aoeLastPosition.y.toFixed(1)},${this.aoeLastPosition.z.toFixed(1)})` : 'null'} valid=${this.engine.isAOETargetValid()}`,
-            'system'
-          );
+          // this.callbacks.onChatMessage?.(
+          //   'Debug',
+          //   `[AOE Click] pos=${this.aoeLastPosition ? `(${this.aoeLastPosition.x.toFixed(1)},${this.aoeLastPosition.y.toFixed(1)},${this.aoeLastPosition.z.toFixed(1)})` : 'null'} valid=${this.engine.isAOETargetValid()}`,
+          //   'system'
+          // );
           if (!this.aoeLastPosition || !this.engine.isAOETargetValid()) return;
           const pos = this.aoeLastPosition;
           const skillName = this.aoeTargetingSkillName!;
@@ -205,11 +206,11 @@ export class GameClient {
     this.engine.showAOETargetCircle(radius);
     const mesh = this.playerMesh;
     const pp = mesh ? mesh.position : null;
-    this.callbacks.onChatMessage?.(
-      'Debug',
-      `[AOE Start] skill=${skillName} radius=${radius} player=(${pp ? pp.x.toFixed(1) : '?'}, ${pp ? pp.y.toFixed(1) : '?'}, ${pp ? pp.z.toFixed(1) : '?'})`,
-      'system'
-    );
+    // this.callbacks.onChatMessage?.(
+    //   'Debug',
+    //   `[AOE Start] skill=${skillName} radius=${radius} player=(${pp ? pp.x.toFixed(1) : '?'}, ${pp ? pp.y.toFixed(1) : '?'}, ${pp ? pp.z.toFixed(1) : '?'})`,
+    //   'system'
+    // );
   }
 
   cancelAOETargeting(): void {
@@ -539,6 +540,15 @@ export class GameClient {
 
     this.network.onPacket(PacketType.STATUS_EFFECT_UPDATE, (packet: any) => {
       this.callbacks.onStatusEffects?.(packet.data.effects || []);
+    });
+
+    this.network.onPacket(PacketType.ENTITY_STATUS_EFFECTS, (packet: any) => {
+      const { entityId, effects } = packet.data;
+      const entity = this.knownEntities.get(entityId);
+      if (entity) {
+        entity.data.statusEffects = effects || [];
+      }
+      this.callbacks.onEntityStatusEffects?.(entityId, effects || []);
     });
 
     this.network.onPacket(PacketType.ENTER_ZONE, (packet: any) => {

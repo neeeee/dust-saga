@@ -51,6 +51,7 @@
         :target-level="targetLevel"
         :target-type="targetType"
         :target-class="targetClass"
+        :target-status-effects="targetStatusEffects"
         :status-effects="playerStatusEffects"
         @toggle-inventory="showInventory = !showInventory"
         @toggle-quests="showQuests = !showQuests"
@@ -129,6 +130,7 @@
         :party="partyData"
         :loot-pool="partyLootPool"
         :my-id="gameClient?.getPlayerId() || ''"
+        :entity-status-effects="entityStatusEffects"
         @leave-party="handlePartyLeave"
         @kick-member="handlePartyKick"
         @promote-member="handlePartyPromote"
@@ -213,6 +215,8 @@ const targetMaxHealth = ref(0);
 const targetLevel = ref(0);
 const targetType = ref('');
 const targetClass = ref('');
+const targetStatusEffects = ref<any[]>([]);
+const entityStatusEffects = ref<Record<string, any[]>>({});
 
 const dialogData = ref<any>({
   npcName: '',
@@ -480,6 +484,7 @@ onMounted(async () => {
         targetLevel.value = 0;
         targetType.value = '';
         targetClass.value = '';
+        targetStatusEffects.value = [];
       } else {
         targetName.value = data.name;
         targetHealth.value = data.health;
@@ -487,6 +492,7 @@ onMounted(async () => {
         targetLevel.value = data.level;
         targetType.value = data.type || '';
         targetClass.value = data.class || '';
+        targetStatusEffects.value = entityStatusEffects.value[id] || [];
       }
     },
     onZoneChange: (zoneId, zoneName) => {
@@ -521,6 +527,12 @@ onMounted(async () => {
     },
     onStatusEffects: (effects) => {
       playerStatusEffects.value = effects;
+    },
+    onEntityStatusEffects: (entityId, effects) => {
+      entityStatusEffects.value = { ...entityStatusEffects.value, [entityId]: effects };
+      if (entityId === targetId.value) {
+        targetStatusEffects.value = effects;
+      }
     },
   });
 

@@ -6,30 +6,32 @@
         <div class="player-class">{{ playerClass }}</div>
         <div class="level-badge">Lv. {{ stats?.level || 1 }}</div>
       </div>
-      <div class="bars">
-        <div class="bar-container">
-          <div class="bar health-bar" :style="{ width: healthPercent + '%' }"></div>
-          <span class="bar-text">{{ stats?.health || 0 }} / {{ stats?.maxHealth || 100 }}</span>
+      <div class="player-bars">
+        <div class="bars">
+          <div class="bar-container">
+            <div class="bar health-bar" :style="{ width: healthPercent + '%' }"></div>
+            <span class="bar-text">{{ stats?.health || 0 }} / {{ stats?.maxHealth || 100 }}</span>
+          </div>
+          <div class="bar-container">
+            <div class="bar mana-bar" :style="{ width: manaPercent + '%' }"></div>
+            <span class="bar-text">{{ stats?.mana || 0 }} / {{ stats?.maxMana || 50 }}</span>
+          </div>
+          <div class="bar-container">
+            <div class="bar exp-bar" :style="{ width: expPercent + '%' }"></div>
+            <span class="bar-text">XP: {{ stats?.experience || 0 }} / {{ stats?.experienceToNext || 100 }}</span>
+          </div>
         </div>
-        <div class="bar-container">
-          <div class="bar mana-bar" :style="{ width: manaPercent + '%' }"></div>
-          <span class="bar-text">{{ stats?.mana || 0 }} / {{ stats?.maxMana || 50 }}</span>
-        </div>
-        <div class="bar-container">
-          <div class="bar exp-bar" :style="{ width: expPercent + '%' }"></div>
-          <span class="bar-text">XP: {{ stats?.experience || 0 }} / {{ stats?.experienceToNext || 100 }}</span>
-        </div>
-      </div>
-      <div class="status-effects" v-if="activeEffects.length > 0">
-        <div
-          v-for="eff in activeEffects"
-          :key="eff.id"
-          class="effect-icon"
-          :class="{ buff: eff.isBuff, debuff: !eff.isBuff }"
-          :title="eff.type + ' (' + eff.remaining + 's)'"
-        >
-          {{ eff.label }}
-          <span class="effect-timer">{{ eff.remaining }}</span>
+        <div class="status-effects" v-if="activeEffects.length > 0">
+          <div
+            v-for="eff in activeEffects"
+            :key="eff.id"
+            class="effect-icon"
+            :class="{ buff: eff.isBuff, debuff: !eff.isBuff }"
+            :title="eff.type + ' (' + eff.remaining + 's)'"
+          >
+            {{ eff.label }}
+            <span class="effect-timer">{{ eff.remaining }}</span>
+          </div>
         </div>
       </div>
       <div class="target-info" v-if="targetId">
@@ -44,6 +46,17 @@
         <div class="bar-container target-bar" v-if="targetMaxHealth > 0">
           <div class="bar target-health" :class="{ 'player-health': targetType === 'player' }" :style="{ width: targetHealthPercent + '%' }"></div>
           <span class="bar-text">{{ targetHealth }} / {{ targetMaxHealth }}</span>
+        </div>
+        <div class="target-effects" v-if="targetStatusEffects.length > 0">
+          <div
+            v-for="eff in targetEffectsDisplay"
+            :key="eff.id"
+            class="effect-icon mini"
+            :class="{ buff: eff.isBuff, debuff: !eff.isBuff }"
+            :title="eff.type + ' (' + eff.remaining + 's)'"
+          >
+            {{ eff.label }}
+          </div>
         </div>
         <div class="target-actions" v-if="targetType === 'player'">
           <button class="social-btn" title="Add Friend" @click="$emit('whisper-player', targetName)">F</button>
@@ -126,6 +139,7 @@ const props = defineProps<{
   targetLevel: number;
   targetType: string;
   targetClass: string;
+  targetStatusEffects: any[];
   statusEffects: any[];
 }>();
 
@@ -175,6 +189,20 @@ const targetHealthPercent = computed(() => {
 const activeEffects = computed(() => {
   void effectNow.value;
   return (props.statusEffects || []).map(e => {
+    const remaining = Math.max(0, (e.appliedAt + e.duration - Date.now()) / 1000);
+    return {
+      ...e,
+      label: getEffectLabel(e),
+      isBuff: BUFF_TYPES.has(e.type),
+      remaining: remaining.toFixed(1),
+      expired: remaining <= 0,
+    };
+  }).filter(e => !e.expired);
+});
+
+const targetEffectsDisplay = computed(() => {
+  void effectNow.value;
+  return (props.targetStatusEffects || []).map(e => {
     const remaining = Math.max(0, (e.appliedAt + e.duration - Date.now()) / 1000);
     return {
       ...e,
@@ -249,6 +277,11 @@ defineExpose({ minimapCanvas });
   font-size: 0.75rem;
   display: inline-block;
   margin-top: 4px;
+}
+
+.player-bars {
+  display: flex;
+  flex-direction: column;
 }
 
 .bars {
@@ -421,6 +454,20 @@ defineExpose({ minimapCanvas });
   font-size: 0.5rem;
   color: rgba(255, 255, 255, 0.8);
   line-height: 1;
+}
+
+.target-effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 3px;
+}
+
+.effect-icon.mini {
+  width: 20px;
+  height: 20px;
+  font-size: 0.5rem;
+  border-radius: 3px;
 }
 
 .target-level {
