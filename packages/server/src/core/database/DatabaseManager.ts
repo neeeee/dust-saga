@@ -120,6 +120,7 @@ export class DatabaseManager {
         unspent_stat_points INTEGER DEFAULT 0,
         unspent_skill_points INTEGER DEFAULT 0,
         skill_proficiencies JSONB DEFAULT '{"melee":0,"technique":0,"prayer":0,"magic":0,"special":0}',
+        experience BIGINT DEFAULT 0,
         created_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(player_id, name)
       );
@@ -166,6 +167,7 @@ export class DatabaseManager {
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS unspent_stat_points INTEGER DEFAULT 0`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS unspent_skill_points INTEGER DEFAULT 0`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS skill_proficiencies JSONB DEFAULT '{"melee":0,"technique":0,"prayer":0,"magic":0,"special":0}'`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS experience BIGINT DEFAULT 0`,
     ];
 
     for (const sql of migrations) {

@@ -47,6 +47,10 @@ async function startServer() {
       networkServer.gameLoop();
     }, 1000 / tickRate);
 
+    setInterval(() => {
+      networkServer.saveAllCharacters().catch(err => console.error('Autosave error:', err));
+    }, 60000);
+
     httpServer.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`WebSocket server ready`);
@@ -54,6 +58,7 @@ async function startServer() {
 
     process.on('SIGINT', async () => {
       console.log('\nShutting down server...');
+      await networkServer.saveAllCharacters();
       await db.disconnect();
       httpServer.close();
       process.exit(0);

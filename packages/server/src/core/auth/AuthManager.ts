@@ -28,6 +28,7 @@ export interface MockCharacter {
   unspent_stat_points: number;
   unspent_skill_points: number;
   skill_proficiencies: string;
+  experience: number;
 }
 
 export class AuthManager {
@@ -158,7 +159,7 @@ export class AuthManager {
 
     try {
       const result = await this.db.postgres!.query(
-        'SELECT id, name, class, race, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies FROM characters WHERE player_id = $1',
+        'SELECT id, name, class, race, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies, experience FROM characters WHERE player_id = $1',
         [playerId]
       );
       return result.rows;
@@ -195,7 +196,8 @@ export class AuthManager {
         stat_points: JSON.stringify(defaultStats),
         unspent_stat_points: 0,
         unspent_skill_points: 0,
-        skill_proficiencies: JSON.stringify(defaultSkills)
+        skill_proficiencies: JSON.stringify(defaultSkills),
+        experience: 0
       };
       characters.push(newChar);
       this.mockCharacters.set(playerId, characters);
@@ -246,6 +248,59 @@ export class AuthManager {
     } catch (error) {
       console.error('Delete character error:', error);
       return false;
+    }
+  }
+
+  async saveCharacter(characterId: string, data: {
+    level: number;
+    experience: number;
+    position: { x: number; y: number; z: number };
+    zoneId: string;
+    statPoints: any;
+    unspentStatPoints: number;
+    unspentSkillPoints: number;
+    skillProficiencies: any;
+    jobId: string;
+  }): Promise<void> {
+    if (!this.db.isPostgresConnected()) {
+      for (const [, chars] of this.mockCharacters) {
+        const ch = chars.find(c => c.id === characterId);
+        if (ch) {
+          ch.level = data.level;
+          ch.job_id = data.jobId;
+          ch.position_x = data.position.x;
+          ch.position_y = data.position.y;
+          ch.position_z = data.position.z;
+          ch.zone_id = data.zoneId;
+          ch.stat_points = JSON.stringify(data.statPoints);
+          ch.unspent_stat_points = data.unspentStatPoints;
+          ch.unspent_skill_points = data.unspentSkillPoints;
+          ch.skill_proficiencies = JSON.stringify(data.skillProficiencies);
+          ch.experience = data.experience;
+          break;
+        }
+      }
+      return;
+    }
+
+    try {
+      await this.db.postgres!.query(
+        `UPDATE characters SET
+          level = $1, experience = $2, position_x = $3, position_y = $4, position_z = $5,
+          zone_id = $6, stat_points = $7, unspent_stat_points = $8,
+          unspent_skill_points = $9, skill_proficiencies = $10, job_id = $11
+         WHERE id = $12`,
+        [
+          data.level, data.experience,
+          data.position.x, data.position.y, data.position.z,
+          data.zoneId, JSON.stringify(data.statPoints),
+          data.unspentStatPoints, data.unspentSkillPoints,
+          JSON.stringify(data.skillProficiencies), data.jobId,
+          characterId
+        ]
+      );
+    } catch (error) {
+      console.error('Save character error:', error);
     }
   }
 

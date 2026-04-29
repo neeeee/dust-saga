@@ -35,7 +35,8 @@ export class PlayerSystem extends System {
     statPoints: any,
     unspentStatPoints: number,
     unspentSkillPoints: number,
-    skillProficiencies: any
+    skillProficiencies: any,
+    experience: number = 0
   ): PlayerSession {
     const baseClass = getBaseClassForJob(jobId);
     const stats = calculateDerivedStats(race as any, jobId, level, statPoints);
@@ -60,7 +61,7 @@ export class PlayerSystem extends System {
         speed: stats.speed,
         magicAttack: stats.magicAttack,
         level,
-        experience: 0,
+        experience,
         experienceToNext: xpToNext
       },
       statPoints,

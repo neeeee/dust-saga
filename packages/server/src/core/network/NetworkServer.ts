@@ -630,7 +630,8 @@ export class NetworkServer {
       char.stat_points ? (typeof char.stat_points === 'string' ? JSON.parse(char.stat_points) : char.stat_points) : createDefaultStatPoints(),
       char.unspent_stat_points || 0,
       char.unspent_skill_points || 0,
-      char.skill_proficiencies ? (typeof char.skill_proficiencies === 'string' ? JSON.parse(char.skill_proficiencies) : char.skill_proficiencies) : createDefaultSkillProficiencies()
+      char.skill_proficiencies ? (typeof char.skill_proficiencies === 'string' ? JSON.parse(char.skill_proficiencies) : char.skill_proficiencies) : createDefaultSkillProficiencies(),
+      char.experience || 0
     );
 
     session.zoneId = char.zone_id || 'starter_zone';
@@ -1139,6 +1140,14 @@ export class NetworkServer {
       data: { characterId, stats: session.stats }
     });
 
+    if (session.statusEffects.length > 0) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATUS_EFFECT_UPDATE,
+        timestamp: Date.now(),
+        data: { effects: session.statusEffects }
+      });
+    }
+
     if (result.damage && firstTargetId) {
       const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
 
@@ -1470,6 +1479,14 @@ export class NetworkServer {
         type: PacketType.HEAL,
         timestamp: Date.now(),
         data: { targetId: characterId, amount: result.healing }
+      });
+    }
+
+    if (session.statusEffects.length > 0) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATUS_EFFECT_UPDATE,
+        timestamp: Date.now(),
+        data: { effects: session.statusEffects }
       });
     }
   }
@@ -2141,6 +2158,18 @@ export class NetworkServer {
     if (characterId) {
       const session = this.state.players.get(characterId);
       if (session) {
+        this.auth.saveCharacter(characterId, {
+          level: session.stats.level,
+          experience: session.stats.experience,
+          position: session.position,
+          zoneId: session.zoneId,
+          statPoints: session.statPoints,
+          unspentStatPoints: session.unspentStatPoints,
+          unspentSkillPoints: session.unspentSkillPoints,
+          skillProficiencies: session.skillProficiencies,
+          jobId: session.jobId
+        }).catch(err => console.error('Failed to save character on disconnect:', err));
+
         this.broadcastInZone(session.zoneId, {
           type: PacketType.ENTITY_DESPAWN,
           timestamp: Date.now(),
@@ -2250,6 +2279,13 @@ export class NetworkServer {
             timestamp: Date.now(),
             data: { characterId: session.characterId, stats: session.stats }
           });
+          if (session.statusEffects.length > 0) {
+            this.sendToPlayer(session.characterId, {
+              type: PacketType.STATUS_EFFECT_UPDATE,
+              timestamp: Date.now(),
+              data: { effects: session.statusEffects }
+            });
+          }
           return;
         }
         const getTargetStats = (id: string) => {
@@ -2423,6 +2459,14 @@ export class NetworkServer {
           timestamp: Date.now(),
           data: { characterId: session.characterId, stats: session.stats }
         });
+
+        if (session.statusEffects.length > 0) {
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.STATUS_EFFECT_UPDATE,
+            timestamp: Date.now(),
+            data: { effects: session.statusEffects }
+          });
+        }
       }
 
       if (session.statusEffects && session.statusEffects.length > 0) {
@@ -2581,6 +2625,25 @@ export class NetworkServer {
         this.io.to(socketId).emit('packet', packet);
       }
     });
+  }
+
+  async saveAllCharacters(): Promise<void> {
+    const saves: Promise<void>[] = [];
+    this.state.players.forEach(session => {
+      saves.push(this.auth.saveCharacter(session.characterId, {
+        level: session.stats.level,
+        experience: session.stats.experience,
+        position: session.position,
+        zoneId: session.zoneId,
+        statPoints: session.statPoints,
+        unspentStatPoints: session.unspentStatPoints,
+        unspentSkillPoints: session.unspentSkillPoints,
+        skillProficiencies: session.skillProficiencies,
+        jobId: session.jobId
+      }));
+    });
+    await Promise.all(saves);
+    console.log(`Saved ${saves.length} character(s)`);
   }
 
   getSpawnManager(): SpawnManager {
