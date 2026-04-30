@@ -1,4 +1,5 @@
 import type { ClassSpecificSkills, AOETargetMode } from '../types/skills';
+import { BaseClass } from '../types/jobs';
 
 export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
   0: {
@@ -1411,3 +1412,49 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
 };
+
+const BASE_CLASS_OFFSETS: Record<string, number> = {
+  [BaseClass.WARRIOR]: 0,
+  [BaseClass.SCOUT]: 7,
+  [BaseClass.ACOLYTE]: 14,
+  [BaseClass.MAGE]: 21,
+};
+
+export const JOB_TO_CLASS_SKILLS_INDEX: Record<string, number> = {
+  'warrior': 0,
+  'gladiator': 1,
+  'juggernaut': 2,
+  'dragoon': 3,
+  'knight': 4,
+  'paladin': 5,
+  'scout': 7,
+  'hunter': 8,
+  'ranger': 9,
+  'thief': 11,
+  'assassin': 13,
+  'shadowblade': 12,
+  'acolyte': 14,
+  'priest': 15,
+  'bishop': 16,
+  'druid': 17,
+  'monk': 18,
+  'champion': 19,
+  'mage': 21,
+  'wizard': 22,
+  'warlock': 23,
+  'sage': 24,
+  'sorcerer': 25,
+  'necromancer': 26,
+};
+
+export function getClassSpecificSkillsForJob(jobId: string, baseClass: BaseClass): ClassSpecificSkills {
+  const index = JOB_TO_CLASS_SKILLS_INDEX[jobId];
+  if (index !== undefined && CLASS_SPECIFIC_SKILLS[index]) {
+    return CLASS_SPECIFIC_SKILLS[index];
+  }
+  const offset = BASE_CLASS_OFFSETS[baseClass];
+  if (offset !== undefined && CLASS_SPECIFIC_SKILLS[offset]) {
+    return CLASS_SPECIFIC_SKILLS[offset];
+  }
+  return {};
+}

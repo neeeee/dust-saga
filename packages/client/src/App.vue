@@ -122,6 +122,7 @@
 
       <SkillWindow
         v-if="showSkillWindow"
+        :game-client="gameClient"
         @close="showSkillWindow = false"
       />
 
@@ -446,6 +447,14 @@ onMounted(async () => {
       playerStatPoints.value = sp;
       playerUnspentStatPoints.value = unspent;
       playerUnspentSkillPoints.value = unspentSkill;
+    },
+    onSkillProficienciesUpdate: (proficiencies) => {
+      skillStore.updateSkillProficiencies(
+        proficiencies,
+        gameClient?.getJobId() || 'warrior',
+        gameClient?.getBaseClass() || 'warrior',
+        gameClient?.getUnspentSkillPoints() || 0,
+      );
     },
     onInventoryUpdate: (inv, equip) => {
       inventory.value = inv;

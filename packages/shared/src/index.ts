@@ -18,7 +18,13 @@ export * from './constants/npcs';
 export * from './constants/quests';
 export { RACE_DATA, getRaceData, LEVEL_UP_BONUSES, STAT_POINT_COSTS, getStatPointCost, getLevelUpBonuses, MAX_LEVEL, MAX_STAT_VALUE } from './constants/races';
 export { SKILL_CATEGORIES, CLASS_SKILL_DATA, GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS } from './constants/skills';
-export { CLASS_SPECIFIC_SKILLS } from './constants/classSkills';
+export {
+  SUB_CATEGORY_TO_CATEGORY,
+  getCategoryTotal,
+  recalculateCategoryTotals,
+  getValidSubCategoryNames,
+} from './types/jobs';
+export { CLASS_SPECIFIC_SKILLS, JOB_TO_CLASS_SKILLS_INDEX, getClassSpecificSkillsForJob } from './constants/classSkills';
 export * from './types/skillBar';
 export * from './types/party';
 export * from './utils/skillAnimations';

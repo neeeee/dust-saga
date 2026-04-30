@@ -3,7 +3,12 @@
     <div class="skill-window">
       <div class="skill-window-header">
         <h3>Skills</h3>
-        <button class="close-btn" @click="$emit('close')">x</button>
+        <div class="header-right">
+          <span class="unspent-pts" v-if="skillStore.state.unspentSkillPoints > 0">
+            {{ skillStore.state.unspentSkillPoints }} pts available
+          </span>
+          <button class="close-btn" @click="$emit('close')">x</button>
+        </div>
       </div>
 
       <div class="skill-category-tabs">
@@ -15,70 +20,105 @@
           @click="activeCategory = cat.key"
         >
           {{ cat.label }}
+          <span class="cat-pts" v-if="getCatPoints(cat.key) > 0">{{ getCatPoints(cat.key) }}</span>
         </button>
       </div>
 
       <div class="skill-list">
-        <template v-if="activeCategory === 'all'">
-          <div v-for="(skills, cat) in groupedSkills" :key="cat" class="skill-group">
-            <div class="group-label">{{ cat }}</div>
-            <div
-              v-for="skill in skills"
-              :key="skill.name"
-              class="skill-entry"
-              draggable="true"
-              @dragstart="onDragStart(skill, $event)"
-              @click="onSkillClick(skill)"
-            >
-              <div class="skill-entry-icon" :style="{ backgroundColor: getCategoryColor(skill.category) }">
-                {{ getAbbrev(skill.name) }}
-              </div>
-              <div class="skill-entry-info">
-                <div class="skill-entry-name">{{ skill.name }}</div>
-                <div class="skill-entry-desc">{{ skill.description }}</div>
-              </div>
-              <div class="skill-entry-stats">
-                <span v-if="skill.mpCost" class="stat mp">{{ skill.mpCost }} MP</span>
-                <span v-if="skill.castTime > 0" class="stat cast">{{ skill.castTime }}s</span>
-                <span v-if="skill.cooldown > 0" class="stat cd">{{ skill.cooldown }}s CD</span>
-                <span v-if="skill.isAOE" class="stat aoe">AOE</span>
-                <span v-if="skill.castTime === 0" class="stat instant">Instant</span>
-              </div>
-            </div>
-          </div>
-        </template>
-        <template v-else>
+        <template v-if="activeCategory === 'class'">
+          <div class="class-section-label">Class Skills</div>
           <div
-            v-for="skill in filteredSkills"
+            v-for="skill in classSkills"
             :key="skill.name"
             class="skill-entry"
+            :class="{ locked: !skill.unlocked }"
             draggable="true"
             @dragstart="onDragStart(skill, $event)"
             @click="onSkillClick(skill)"
           >
-            <div class="skill-entry-icon" :style="{ backgroundColor: getCategoryColor(skill.category) }">
+            <div class="skill-entry-icon class-icon">
               {{ getAbbrev(skill.name) }}
             </div>
             <div class="skill-entry-info">
-              <div class="skill-entry-name">{{ skill.name }}</div>
+              <div class="skill-entry-name">
+                {{ skill.name }}
+                <span class="req-tag" v-if="!skill.unlocked">Lv {{ skill.reqPoints }}</span>
+              </div>
               <div class="skill-entry-desc">{{ skill.description }}</div>
             </div>
             <div class="skill-entry-stats">
               <span v-if="skill.mpCost" class="stat mp">{{ skill.mpCost }} MP</span>
-              <span v-if="skill.castTime > 0" class="stat cast">{{ skill.castTime }}s cast</span>
+              <span v-if="skill.castTime > 0" class="stat cast">{{ skill.castTime }}s</span>
               <span v-if="skill.cooldown > 0" class="stat cd">{{ skill.cooldown }}s CD</span>
               <span v-if="skill.isAOE" class="stat aoe">AOE</span>
-              <span v-if="skill.castTime === 0" class="stat instant">Instant</span>
+              <span v-if="skill.castTime === 0 && !skill.isPassive" class="stat instant">Instant</span>
             </div>
           </div>
-          <div v-if="filteredSkills.length === 0" class="empty-msg">
+          <div v-if="classSkills.length === 0" class="empty-msg">
+            No class skills available.
+          </div>
+        </template>
+        <template v-else>
+          <div v-for="subCat in filteredSubCategories" :key="subCat.name" class="sub-category-group">
+            <div class="sub-category-header">
+              <div class="sub-cat-info">
+                <span class="sub-cat-name">{{ subCat.name }}</span>
+                <span class="sub-cat-pts">{{ subCat.currentPoints }} pts</span>
+              </div>
+              <button
+                class="allocate-btn"
+                :disabled="skillStore.state.unspentSkillPoints <= 0"
+                @click="onAllocate(subCat.name)"
+                title="Allocate 1 point"
+              >
+                +1
+              </button>
+            </div>
+            <div
+              v-for="skill in getSortedSkills(subCat)"
+              :key="skill.name"
+              class="skill-entry"
+              :class="{ locked: !skill.unlocked, passive: skill.isPassive }"
+              draggable="skill.unlocked && !skill.isPassive"
+              @dragstart="onDragStart(skill, $event)"
+              @click="onSkillClick(skill)"
+            >
+              <div
+                class="skill-entry-icon"
+                :style="{ backgroundColor: skill.unlocked ? getCategoryColor(subCat.category) : 'rgba(255,255,255,0.05)' }"
+              >
+                {{ skill.unlocked ? getAbbrev(skill.name) : '?' }}
+              </div>
+              <div class="skill-entry-info">
+                <div class="skill-entry-name">
+                  {{ skill.unlocked ? skill.name : '???' }}
+                  <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">
+                    {{ subCat.currentPoints }}/{{ skill.reqPoints }}
+                  </span>
+                  <span class="req-tag cross" v-else-if="!skill.unlocked && skill.crossReqs">
+                    {{ formatCrossReqs(skill.crossReqs) }}
+                  </span>
+                  <span class="passive-tag" v-if="skill.isPassive">Passive</span>
+                </div>
+                <div class="skill-entry-desc" v-if="skill.unlocked">{{ skill.description }}</div>
+              </div>
+              <div class="skill-entry-stats" v-if="skill.unlocked">
+                <span v-if="skill.mpCost" class="stat mp">{{ skill.mpCost }} MP</span>
+                <span v-if="skill.castTime > 0" class="stat cast">{{ skill.castTime }}s</span>
+                <span v-if="skill.cooldown > 0" class="stat cd">{{ skill.cooldown }}s CD</span>
+                <span v-if="skill.isAOE" class="stat aoe">AOE</span>
+                <span v-if="skill.castTime === 0 && !skill.isPassive" class="stat instant">Instant</span>
+              </div>
+            </div>
+          </div>
+          <div v-if="filteredSubCategories.length === 0" class="empty-msg">
             No skills in this category yet.
           </div>
         </template>
       </div>
 
       <div class="skill-window-footer">
-        <span class="hint">Drag skills to the skill bar | Right-click bar slot to remove</span>
+        <span class="hint">Drag unlocked skills to the skill bar | Click +1 to invest points</span>
       </div>
     </div>
   </div>
@@ -86,18 +126,22 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { useSkillStore, AvailableSkill } from '../composables/useSkillStore';
+import { useSkillStore, AvailableSkill, SubCategoryInfo } from '../composables/useSkillStore';
 import { getCategoryColor } from '@dust-saga/shared';
+
+const props = defineProps<{
+  gameClient?: any;
+}>();
 
 defineEmits<{
   close: [];
+  allocateSkill: (subCategoryName: string) => void;
 }>();
 
 const skillStore = useSkillStore();
-const activeCategory = ref('all');
+const activeCategory = ref('melee');
 
 const categories = [
-  { key: 'all', label: 'All' },
   { key: 'melee', label: 'Melee' },
   { key: 'technique', label: 'Technique' },
   { key: 'prayer', label: 'Prayer' },
@@ -106,12 +150,25 @@ const categories = [
   { key: 'class', label: 'Class' },
 ];
 
-const groupedSkills = computed(() => skillStore.getSkillsByCategory());
-
-const filteredSkills = computed(() => {
-  if (activeCategory.value === 'all') return skillStore.state.availableSkills;
-  return skillStore.state.availableSkills.filter(s => s.category === activeCategory.value);
+const filteredSubCategories = computed(() => {
+  if (activeCategory.value === 'class') return [];
+  return skillStore.getSubCategoriesByCategory(activeCategory.value);
 });
+
+const classSkills = computed(() => {
+  return skillStore.state.availableSkills.filter(s => s.category === 'class');
+});
+
+function getCatPoints(key: string): number {
+  return skillStore.getCategoryPoints(key);
+}
+
+function getSortedSkills(subCat: SubCategoryInfo): AvailableSkill[] {
+  return [...subCat.skills].sort((a, b) => {
+    if (a.unlocked !== b.unlocked) return a.unlocked ? -1 : 1;
+    return (a.reqPoints >= 0 ? a.reqPoints : 999) - (b.reqPoints >= 0 ? b.reqPoints : 999);
+  });
+}
 
 function getAbbrev(name: string): string {
   const clean = name.replace(/\(.*\)/, '').trim();
@@ -122,7 +179,16 @@ function getAbbrev(name: string): string {
   return clean.substring(0, 2).toUpperCase();
 }
 
+function formatCrossReqs(reqs: Array<{ skillName: string; points: number }> | undefined): string {
+  if (!reqs) return '';
+  return reqs.map(r => `${r.skillName} ${r.points}`).join(', ');
+}
+
 function onDragStart(skill: AvailableSkill, event: DragEvent): void {
+  if (!skill.unlocked || skill.isPassive) {
+    event.preventDefault();
+    return;
+  }
   if (!event.dataTransfer) return;
   event.dataTransfer.setData('text/plain', skill.name);
   event.dataTransfer.effectAllowed = 'copy';
@@ -135,9 +201,16 @@ function onDragStart(skill: AvailableSkill, event: DragEvent): void {
 }
 
 function onSkillClick(skill: AvailableSkill): void {
+  if (!skill.unlocked || skill.isPassive) return;
   const firstEmpty = skillStore.state.bar.findIndex(s => s.skillName === null);
   if (firstEmpty >= 0) {
     skillStore.setSkillInSlot(firstEmpty, skill.name, skill.category, skill.subCategory);
+  }
+}
+
+function onAllocate(subCategoryName: string): void {
+  if (props.gameClient) {
+    props.gameClient.allocateSkillPoint(subCategoryName);
   }
 }
 
@@ -161,8 +234,8 @@ onMounted(() => {
 }
 
 .skill-window {
-  width: 600px;
-  max-height: 80vh;
+  width: 700px;
+  max-height: 85vh;
   background: rgba(15, 15, 25, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 10px;
@@ -183,6 +256,21 @@ onMounted(() => {
   color: white;
   margin: 0;
   font-size: 1rem;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.unspent-pts {
+  color: #66bb6a;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: rgba(102, 187, 106, 0.15);
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 
 .close-btn {
@@ -221,6 +309,9 @@ onMounted(() => {
   font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .cat-tab:hover {
@@ -232,6 +323,12 @@ onMounted(() => {
   background: rgba(102, 126, 234, 0.3);
   border-color: rgba(102, 126, 234, 0.5);
   color: white;
+}
+
+.cat-pts {
+  font-size: 0.65rem;
+  color: #66bb6a;
+  font-weight: 600;
 }
 
 .skill-list {
@@ -253,19 +350,70 @@ onMounted(() => {
   border-radius: 3px;
 }
 
-.skill-group {
-  margin-bottom: 12px;
-}
-
-.group-label {
+.class-section-label {
   color: #667eea;
   font-size: 0.75rem;
   font-weight: bold;
   text-transform: uppercase;
   letter-spacing: 1px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   padding-bottom: 4px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sub-category-group {
+  margin-bottom: 12px;
+}
+
+.sub-category-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.sub-cat-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sub-cat-name {
+  color: #667eea;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sub-cat-pts {
+  color: #888;
+  font-size: 0.7rem;
+}
+
+.allocate-btn {
+  background: rgba(102, 187, 106, 0.2);
+  border: 1px solid rgba(102, 187, 106, 0.4);
+  color: #66bb6a;
+  padding: 2px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  transition: all 0.15s;
+}
+
+.allocate-btn:hover:not(:disabled) {
+  background: rgba(102, 187, 106, 0.35);
+  border-color: rgba(102, 187, 106, 0.6);
+}
+
+.allocate-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .skill-entry {
@@ -287,6 +435,19 @@ onMounted(() => {
   cursor: grabbing;
 }
 
+.skill-entry.locked {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.skill-entry.locked:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.skill-entry.passive {
+  cursor: default;
+}
+
 .skill-entry-icon {
   width: 36px;
   height: 36px;
@@ -300,6 +461,10 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
+.skill-entry-icon.class-icon {
+  background: rgba(156, 39, 176, 0.5);
+}
+
 .skill-entry-info {
   flex: 1;
   min-width: 0;
@@ -308,6 +473,32 @@ onMounted(() => {
 .skill-entry-name {
   color: white;
   font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.req-tag {
+  font-size: 0.65rem;
+  color: #ef9a9a;
+  background: rgba(244, 67, 54, 0.15);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.req-tag.cross {
+  color: #ffb74d;
+  background: rgba(255, 152, 0, 0.15);
+}
+
+.passive-tag {
+  font-size: 0.6rem;
+  color: #ce93d8;
+  background: rgba(156, 39, 176, 0.2);
+  padding: 1px 5px;
+  border-radius: 3px;
   font-weight: 600;
 }
 

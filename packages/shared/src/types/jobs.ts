@@ -51,16 +51,65 @@ export interface JobDefinition {
   mpPerSpi: number;
 }
 
+export type SkillCategoryKey = 'melee' | 'technique' | 'prayer' | 'magic' | 'special';
+
 export interface SkillProficiencies {
   melee: number;
   technique: number;
   prayer: number;
   magic: number;
   special: number;
+  [subCategoryName: string]: number;
+}
+
+const ALL_SUB_CATEGORY_NAMES = [
+  'Slash', 'Thrust', 'Cleave', 'Bash', 'Defend',
+  'Shot', 'Alchemy', 'Assassination', 'Trap', 'Dodge',
+  'Grace', 'Blessing', 'Exorcism', 'Hymn',
+  'Elemental', 'Invocation', 'Darkness', 'Confusion',
+  'Racial', 'Horsemanship',
+] as const;
+
+export const SUB_CATEGORY_TO_CATEGORY: Record<string, SkillCategoryKey> = {
+  'Slash': 'melee', 'Thrust': 'melee', 'Cleave': 'melee', 'Bash': 'melee', 'Defend': 'melee',
+  'Shot': 'technique', 'Alchemy': 'technique', 'Assassination': 'technique', 'Trap': 'technique', 'Dodge': 'technique',
+  'Grace': 'prayer', 'Blessing': 'prayer', 'Exorcism': 'prayer', 'Hymn': 'prayer',
+  'Elemental': 'magic', 'Invocation': 'magic', 'Darkness': 'magic', 'Confusion': 'magic',
+  'Racial': 'special', 'Horsemanship': 'special',
+  'Ranged': 'technique',
+};
+
+export function getCategoryTotal(proficiencies: SkillProficiencies, category: SkillCategoryKey): number {
+  let total = 0;
+  for (const [subName, cat] of Object.entries(SUB_CATEGORY_TO_CATEGORY)) {
+    if (cat === category) {
+      total += proficiencies[subName] || 0;
+    }
+  }
+  return total;
+}
+
+export function recalculateCategoryTotals(proficiencies: SkillProficiencies): void {
+  (Object.keys(SUB_CATEGORY_TO_CATEGORY) as string[]).reduce((acc, subName) => {
+    const cat = SUB_CATEGORY_TO_CATEGORY[subName];
+    acc[cat] = (acc[cat] || 0) + (proficiencies[subName] || 0);
+    return acc;
+  }, proficiencies as Record<string, number>);
+  for (const cat of ['melee', 'technique', 'prayer', 'magic', 'special'] as SkillCategoryKey[]) {
+    proficiencies[cat] = getCategoryTotal(proficiencies, cat);
+  }
 }
 
 export function createDefaultSkillProficiencies(): SkillProficiencies {
-  return { melee: 0, technique: 0, prayer: 0, magic: 0, special: 0 };
+  const proficiencies: SkillProficiencies = { melee: 0, technique: 0, prayer: 0, magic: 0, special: 0 };
+  for (const subName of ALL_SUB_CATEGORY_NAMES) {
+    proficiencies[subName] = 0;
+  }
+  return proficiencies;
+}
+
+export function getValidSubCategoryNames(): string[] {
+  return [...ALL_SUB_CATEGORY_NAMES];
 }
 
 export interface CharacterInfo {

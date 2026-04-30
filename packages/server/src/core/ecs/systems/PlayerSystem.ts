@@ -9,7 +9,9 @@ import {
   ITEM_DATABASE,
   EquipmentSlot,
   GAME_CONFIG,
-  MAX_LEVEL
+  MAX_LEVEL,
+  getValidSubCategoryNames,
+  recalculateCategoryTotals,
 } from '@dust-saga/shared';
 
 export class PlayerSystem extends System {
@@ -123,6 +125,18 @@ export class PlayerSystem extends System {
     session.unspentStatPoints -= cost;
 
     this.recalcStats(session);
+    return true;
+  }
+
+  allocateSkillPoint(session: PlayerSession, subCategoryName: string, count: number = 1): boolean {
+    const validNames = getValidSubCategoryNames();
+    if (!validNames.includes(subCategoryName)) return false;
+    if (count <= 0 || !Number.isFinite(count)) return false;
+    if (session.unspentSkillPoints < count) return false;
+
+    session.skillProficiencies[subCategoryName] = (session.skillProficiencies[subCategoryName] || 0) + count;
+    session.unspentSkillPoints -= count;
+    recalculateCategoryTotals(session.skillProficiencies);
     return true;
   }
 

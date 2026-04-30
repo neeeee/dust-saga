@@ -440,6 +440,10 @@ export class NetworkServer {
           this.handleStatAllocate(socket, packet.data);
           break;
 
+        case PacketType.SKILL_ALLOCATE:
+          this.handleSkillAllocate(socket, packet.data);
+          break;
+
         case PacketType.JOB_ADVANCE:
           this.handleJobAdvance(socket, packet.data);
           break;
@@ -1924,6 +1928,35 @@ export class NetworkServer {
           stats: session.stats,
           jobId: session.jobId,
           baseClass: session.baseClass
+        }
+      });
+    }
+  }
+
+  private handleSkillAllocate(socket: Socket, data: any): void {
+    const characterId = this.findCharacterBySocket(socket.id);
+    if (!characterId) return;
+
+    const session = this.state.players.get(characterId);
+    if (!session) return;
+
+    const subCategoryName = data.subCategoryName as string;
+    const count = typeof data.count === 'number' ? Math.floor(data.count) : 1;
+
+    if (!subCategoryName) return;
+
+    const success = this.playerSys.allocateSkillPoint(session, subCategoryName, count);
+    if (success) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: {
+          characterId,
+          stats: session.stats,
+          statPoints: session.statPoints,
+          unspentStatPoints: session.unspentStatPoints,
+          unspentSkillPoints: session.unspentSkillPoints,
+          skillProficiencies: session.skillProficiencies,
         }
       });
     }

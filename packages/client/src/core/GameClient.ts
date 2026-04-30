@@ -17,6 +17,7 @@ import {
 export interface GameCallbacks {
   onStatsUpdate: (stats: PlayerStats) => void;
   onStatPointsUpdate: (statPoints: StatPoints | null, unspentStatPoints: number, unspentSkillPoints: number) => void;
+  onSkillProficienciesUpdate: (skillProficiencies: any) => void;
   onInventoryUpdate: (inventory: any, equipment: any) => void;
   onQuestUpdate: (quests: any) => void;
   onChatMessage: (sender: string, message: string, channel?: string) => void;
@@ -54,6 +55,9 @@ export class GameClient {
   private statPoints: StatPoints | null = null;
   private unspentStatPoints: number = 0;
   private unspentSkillPoints: number = 0;
+  private skillProficiencies: any = null;
+  private currentJobId: string = 'warrior';
+  private currentBaseClass: string = 'warrior';
   private currentZoneId: string | null = null;
   private targetId: string | null = null;
   private lastMoveSend: number = 0;
@@ -240,6 +244,12 @@ export class GameClient {
       this.unspentStatPoints = data.unspentStatPoints || 0;
       this.unspentSkillPoints = data.unspentSkillPoints || 0;
       this.currentZoneId = data.zoneId;
+      this.currentJobId = data.jobId || 'warrior';
+      this.currentBaseClass = data.baseClass || 'warrior';
+      if (data.skillProficiencies) {
+        this.skillProficiencies = data.skillProficiencies;
+        this.callbacks.onSkillProficienciesUpdate?.(data.skillProficiencies);
+      }
       this.callbacks.onStatsUpdate?.(data.stats);
       this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints);
       this.callbacks.onInventoryUpdate?.(data.inventory, data.equipment);
@@ -405,6 +415,16 @@ export class GameClient {
         this.unspentStatPoints = data.unspentStatPoints ?? this.unspentStatPoints;
         this.unspentSkillPoints = data.unspentSkillPoints ?? this.unspentSkillPoints;
         this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints);
+      }
+      if (data.skillProficiencies && data.characterId === this.playerId) {
+        this.skillProficiencies = data.skillProficiencies;
+        this.callbacks.onSkillProficienciesUpdate?.(data.skillProficiencies);
+      }
+      if (data.baseClass && data.characterId === this.playerId) {
+        this.currentBaseClass = data.baseClass;
+      }
+      if (data.jobId && data.characterId === this.playerId) {
+        this.currentJobId = data.jobId;
       }
       if (data.health !== undefined && data.maxHealth) {
         const eid = data.entityId || data.characterId;
@@ -792,12 +812,28 @@ export class GameClient {
     return this.unspentSkillPoints;
   }
 
+  getSkillProficiencies(): any {
+    return this.skillProficiencies;
+  }
+
+  getJobId(): string {
+    return this.currentJobId;
+  }
+
+  getBaseClass(): string {
+    return this.currentBaseClass;
+  }
+
   allocateStatPoint(stat: string): void {
     this.network.allocateStatPoint(stat);
   }
 
   allocateStatBatch(allocations: Record<string, number>): void {
     this.network.allocateStatBatch(allocations);
+  }
+
+  allocateSkillPoint(subCategoryName: string, count: number = 1): void {
+    this.network.allocateSkillPoint(subCategoryName, count);
   }
 
   getCurrentZoneId(): string | null {

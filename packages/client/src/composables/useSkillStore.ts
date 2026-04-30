@@ -5,11 +5,12 @@ import {
   SKILL_BAR_SIZE,
   createEmptySkillBar,
   CLASS_SKILL_DATA,
-  CLASS_SPECIFIC_SKILLS,
-  isPassiveSkill,
+  getClassSpecificSkillsForJob,
   getCategoryForSubCategory,
   SkillDefinition,
   SkillSubCategory,
+  SUB_CATEGORY_TO_CATEGORY,
+  meetsRequirements,
 } from '@dust-saga/shared';
 
 export interface SkillCooldownState {
@@ -37,6 +38,17 @@ export interface AvailableSkill {
   category: string;
   subCategory: string;
   subCategoryId: number;
+  unlocked: boolean;
+  reqPoints: number;
+  crossReqs?: Array<{ skillName: string; points: number }>;
+}
+
+export interface SubCategoryInfo {
+  id: number;
+  name: string;
+  currentPoints: number;
+  skills: AvailableSkill[];
+  category: string;
 }
 
 const STORAGE_KEY_PREFIX = 'dust-saga-skillbar';
@@ -51,6 +63,10 @@ interface SkillStoreState {
   cooldowns: Record<string, SkillCooldownState>;
   cast: CastState;
   availableSkills: AvailableSkill[];
+  skillProficiencies: Record<string, number>;
+  unspentSkillPoints: number;
+  jobId: string;
+  baseClass: string;
 }
 
 const state = reactive<SkillStoreState>({
@@ -64,6 +80,10 @@ const state = reactive<SkillStoreState>({
     progress: 0,
   },
   availableSkills: [],
+  skillProficiencies: {},
+  unspentSkillPoints: 0,
+  jobId: 'warrior',
+  baseClass: 'warrior',
 });
 
 const now = ref(Date.now());
@@ -121,6 +141,15 @@ export function useSkillStore() {
       state.bar[i] = saved[i];
     }
   }
+
+  function updateSkillProficiencies(proficiencies: Record<string, number>, jobId?: string, baseClass?: string, unspentSkillPoints?: number): void {
+    state.skillProficiencies = proficiencies || {};
+    if (jobId !== undefined) state.jobId = jobId;
+    if (baseClass !== undefined) state.baseClass = baseClass;
+    if (unspentSkillPoints !== undefined) state.unspentSkillPoints = unspentSkillPoints;
+    buildAvailableSkills();
+  }
+
   function setSkillInSlot(slotIndex: number, skillName: string, category: string, subCategory: string): void {
     if (slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return;
 
@@ -219,9 +248,20 @@ export function useSkillStore() {
     return state.bar[slotIndex];
   }
 
+  function checkSkillUnlocked(def: SkillDefinition, subCategoryName: string, proficiencies: Record<string, number>): boolean {
+    if (typeof def.reqPoints === 'number') {
+      return (proficiencies[subCategoryName] || 0) >= def.reqPoints;
+    }
+    if (Array.isArray(def.reqPoints)) {
+      return meetsRequirements(def.reqPoints, (skillName: string) => proficiencies[skillName] || 0);
+    }
+    return false;
+  }
+
   function buildAvailableSkills(): void {
     const skills: AvailableSkill[] = [];
     const seen = new Set<string>();
+    const proficiencies = state.skillProficiencies || {};
 
     for (const [, catData] of Object.entries(CLASS_SKILL_DATA)) {
       const categoryData = catData as { skills: SkillSubCategory[] };
@@ -229,8 +269,8 @@ export function useSkillStore() {
         for (const [name, def] of Object.entries(sub.skills)) {
           if (seen.has(name)) continue;
           const skillDef = def as SkillDefinition;
-          if (isPassiveSkill(skillDef)) continue;
           seen.add(name);
+          const unlocked = checkSkillUnlocked(skillDef, sub.name, proficiencies);
           skills.push({
             name,
             description: skillDef.description,
@@ -242,29 +282,45 @@ export function useSkillStore() {
             category: getCategoryForSubCategory(sub.id),
             subCategory: sub.name,
             subCategoryId: sub.id,
+            unlocked,
+            reqPoints: typeof skillDef.reqPoints === 'number' ? skillDef.reqPoints : -1,
+            crossReqs: Array.isArray(skillDef.reqPoints)
+              ? skillDef.reqPoints.map(r => ({ skillName: r.skillName, points: r.points }))
+              : undefined,
           });
         }
       }
     }
 
-    for (const [, jobSkills] of Object.entries(CLASS_SPECIFIC_SKILLS)) {
-      for (const [name, def] of Object.entries(jobSkills)) {
-        if (seen.has(name)) continue;
-        if (def.isPassive) continue;
-        seen.add(name);
-        skills.push({
-          name,
-          description: def.description,
-          mpCost: def.mpCost,
-          castTime: def.castTime,
-          cooldown: def.cooldown,
-          isPassive: false,
-          isAOE: false,
-          category: 'class',
-          subCategory: 'Class',
-          subCategoryId: 0,
-        });
+    const jobSkills = getClassSpecificSkillsForJob(state.jobId, state.baseClass as any);
+    for (const [name, def] of Object.entries(jobSkills)) {
+      if (seen.has(name)) continue;
+      if (def.isPassive) continue;
+      seen.add(name);
+      let unlocked = false;
+      if (!def.reqLevel || def.reqLevel <= 0) {
+        unlocked = true;
       }
+      if (def.reqPoints && typeof def.reqPoints === 'number') {
+        unlocked = false;
+      }
+      if (def.reqPoints && Array.isArray(def.reqPoints)) {
+        unlocked = meetsRequirements(def.reqPoints, (skillName: string) => proficiencies[skillName] || 0);
+      }
+      skills.push({
+        name,
+        description: def.description,
+        mpCost: def.mpCost,
+        castTime: def.castTime,
+        cooldown: def.cooldown,
+        isPassive: false,
+        isAOE: false,
+        category: 'class',
+        subCategory: 'Class',
+        subCategoryId: 0,
+        unlocked,
+        reqPoints: def.reqLevel || 0,
+      });
     }
 
     state.availableSkills = skills;
@@ -280,6 +336,45 @@ export function useSkillStore() {
     return grouped;
   }
 
+  function getSubCategories(): SubCategoryInfo[] {
+    const result: SubCategoryInfo[] = [];
+    const seen = new Set<string>();
+    const proficiencies = state.skillProficiencies || {};
+
+    for (const [, catData] of Object.entries(CLASS_SKILL_DATA)) {
+      const categoryData = catData as { skills: SkillSubCategory[] };
+      for (const sub of categoryData.skills) {
+        if (seen.has(sub.name)) continue;
+        seen.add(sub.name);
+        const cat = getCategoryForSubCategory(sub.id);
+        const subSkills = state.availableSkills.filter(s => s.subCategory === sub.name);
+        result.push({
+          id: sub.id,
+          name: sub.name,
+          currentPoints: proficiencies[sub.name] || 0,
+          skills: subSkills,
+          category: cat,
+        });
+      }
+    }
+
+    return result;
+  }
+
+  function getSubCategoriesByCategory(category: string): SubCategoryInfo[] {
+    return getSubCategories().filter(s => s.category === category);
+  }
+
+  function getCategoryPoints(categoryName: string): number {
+    let total = 0;
+    for (const [subName, cat] of Object.entries(SUB_CATEGORY_TO_CATEGORY)) {
+      if (cat === categoryName) {
+        total += state.skillProficiencies[subName] || 0;
+      }
+    }
+    return total;
+  }
+
   function clearAllCooldowns(): void {
     for (const key of Object.keys(state.cooldowns)) {
       delete state.cooldowns[key];
@@ -290,6 +385,7 @@ export function useSkillStore() {
     state,
     now,
     initForCharacter,
+    updateSkillProficiencies,
     setSkillInSlot,
     removeFromSlot,
     swapSlots,
@@ -303,6 +399,9 @@ export function useSkillStore() {
     getSkillInSlot,
     buildAvailableSkills,
     getSkillsByCategory,
+    getSubCategories,
+    getSubCategoriesByCategory,
+    getCategoryPoints,
     clearAllCooldowns,
     startTick,
     stopTick,

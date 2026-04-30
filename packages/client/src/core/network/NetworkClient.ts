@@ -278,6 +278,14 @@ export class NetworkClient {
     });
   }
 
+  allocateSkillPoint(subCategoryName: string, count: number = 1): void {
+    this.sendPacket({
+      type: PacketType.SKILL_ALLOCATE,
+      timestamp: Date.now(),
+      data: { subCategoryName, count }
+    });
+  }
+
   isSocketConnected(): boolean {
     return this.isConnected;
   }

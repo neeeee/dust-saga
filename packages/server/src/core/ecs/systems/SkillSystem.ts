@@ -5,7 +5,7 @@ import {
   SKILL_TARGET_RULES, SkillTargetType
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
-import { CLASS_SPECIFIC_SKILLS } from '@dust-saga/shared';
+import { CLASS_SPECIFIC_SKILLS, getClassSpecificSkillsForJob } from '@dust-saga/shared';
 
 export interface TargetStats {
   defense: number;
@@ -399,7 +399,9 @@ export class SkillSystem {
     const spi = session.statPoints.SPI;
     const int = session.statPoints.INT;
     const level = session.stats.level;
-    const prayer = session.skillProficiencies?.prayer || 0;
+    const proficiencies = session.skillProficiencies || {};
+    const grace = proficiencies['Grace'] || 0;
+    const prayer = proficiencies['Grace'] || 0;
     const name = skill.name.toLowerCase();
 
     if (name === 'first aid') {
@@ -544,24 +546,36 @@ export class SkillSystem {
 
   getAvailableSkills(session: PlayerSession): string[] {
     const available: string[] = [];
+    const proficiencies = session.skillProficiencies || {};
 
     for (const category of Object.values(CLASS_SKILL_DATA)) {
       for (const subSkill of category.skills) {
+        const subPoints = proficiencies[subSkill.name] || 0;
         for (const [name, def] of Object.entries(subSkill.skills)) {
+          if (isPassiveSkill(def)) continue;
           if (typeof def.reqPoints === 'number') {
-            available.push(name);
+            if (subPoints >= def.reqPoints) {
+              available.push(name);
+            }
+          } else if (Array.isArray(def.reqPoints)) {
+            if (meetsRequirements(def.reqPoints, (skillName: string) => proficiencies[skillName] || 0)) {
+              available.push(name);
+            }
           }
         }
       }
     }
 
-    const jobSkills = CLASS_SPECIFIC_SKILLS[0];
-    if (jobSkills) {
-      for (const [name, def] of Object.entries(jobSkills)) {
-        if (!def.reqLevel || def.reqLevel <= session.stats.level) {
-          available.push(name);
-        }
+    const jobSkills = getClassSpecificSkillsForJob(session.jobId, session.baseClass);
+    for (const [name, def] of Object.entries(jobSkills)) {
+      const skillDef = def as any;
+      if (skillDef.isPassive) continue;
+      if (skillDef.reqLevel && skillDef.reqLevel > session.stats.level) continue;
+      if (skillDef.reqPoints && typeof skillDef.reqPoints === 'number') continue;
+      if (skillDef.reqPoints && Array.isArray(skillDef.reqPoints)) {
+        if (!meetsRequirements(skillDef.reqPoints, (skillName: string) => proficiencies[skillName] || 0)) continue;
       }
+      available.push(name);
     }
 
     return available;
