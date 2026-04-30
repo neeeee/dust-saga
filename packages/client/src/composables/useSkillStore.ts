@@ -47,6 +47,7 @@ export interface SubCategoryInfo {
   id: number;
   name: string;
   currentPoints: number;
+  currentAdeptness: number;
   skills: AvailableSkill[];
   category: string;
 }
@@ -64,6 +65,7 @@ interface SkillStoreState {
   cast: CastState;
   availableSkills: AvailableSkill[];
   skillProficiencies: Record<string, number>;
+  skillAdeptness: Record<string, number>;
   unspentSkillPoints: number;
   jobId: string;
   baseClass: string;
@@ -81,6 +83,7 @@ const state = reactive<SkillStoreState>({
   },
   availableSkills: [],
   skillProficiencies: {},
+  skillAdeptness: {},
   unspentSkillPoints: 0,
   jobId: 'warrior',
   baseClass: 'warrior',
@@ -142,8 +145,9 @@ export function useSkillStore() {
     }
   }
 
-  function updateSkillProficiencies(proficiencies: Record<string, number>, jobId?: string, baseClass?: string, unspentSkillPoints?: number): void {
+  function updateSkillProficiencies(proficiencies: Record<string, number>, adeptness?: Record<string, number>, jobId?: string, baseClass?: string, unspentSkillPoints?: number): void {
     state.skillProficiencies = proficiencies || {};
+    if (adeptness) state.skillAdeptness = adeptness;
     if (jobId !== undefined) state.jobId = jobId;
     if (baseClass !== undefined) state.baseClass = baseClass;
     if (unspentSkillPoints !== undefined) state.unspentSkillPoints = unspentSkillPoints;
@@ -347,11 +351,13 @@ export function useSkillStore() {
         if (seen.has(sub.name)) continue;
         seen.add(sub.name);
         const cat = getCategoryForSubCategory(sub.id);
+        const adeptness = state.skillAdeptness || {};
         const subSkills = state.availableSkills.filter(s => s.subCategory === sub.name);
         result.push({
           id: sub.id,
           name: sub.name,
           currentPoints: proficiencies[sub.name] || 0,
+          currentAdeptness: adeptness[sub.name] || 0,
           skills: subSkills,
           category: cat,
         });

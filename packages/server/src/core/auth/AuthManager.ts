@@ -2,8 +2,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseManager } from '../database/DatabaseManager';
-import { createDefaultStatPoints } from '@dust-saga/shared';
-import { createDefaultSkillProficiencies } from '@dust-saga/shared';
+import { createDefaultStatPoints, createDefaultSkillProficiencies, createDefaultSkillAdeptness, getDesignJobId } from '@dust-saga/shared';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dust-saga-secret-key-change-in-production';
 const JWT_EXPIRY = '24h';
@@ -28,6 +27,7 @@ export interface MockCharacter {
   unspent_stat_points: number;
   unspent_skill_points: number;
   skill_proficiencies: string;
+  skill_adeptness: string;
   experience: number;
 }
 
@@ -159,7 +159,7 @@ export class AuthManager {
 
     try {
       const result = await this.db.postgres!.query(
-        'SELECT id, name, class, race, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies, experience FROM characters WHERE player_id = $1',
+        'SELECT id, name, class, race, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies, skill_adeptness, experience FROM characters WHERE player_id = $1',
         [playerId]
       );
       return result.rows;
@@ -182,6 +182,7 @@ export class AuthManager {
       }
       const defaultStats = createDefaultStatPoints();
       const defaultSkills = createDefaultSkillProficiencies();
+      const defaultAdeptness = createDefaultSkillAdeptness(getDesignJobId(jobId));
       const newChar: MockCharacter = {
         id: uuidv4(),
         name,
@@ -197,6 +198,7 @@ export class AuthManager {
         unspent_stat_points: 0,
         unspent_skill_points: 0,
         skill_proficiencies: JSON.stringify(defaultSkills),
+        skill_adeptness: JSON.stringify(defaultAdeptness),
         experience: 0
       };
       characters.push(newChar);
@@ -216,10 +218,11 @@ export class AuthManager {
 
       const defaultStats = createDefaultStatPoints();
       const defaultSkills = createDefaultSkillProficiencies();
+      const defaultAdeptness = createDefaultSkillAdeptness(getDesignJobId(jobId));
       const result = await this.db.postgres!.query(
-        `INSERT INTO characters (player_id, name, class, race, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies)
-         VALUES ($1, $2, $3, $4, $5, 1, 0, 0, 0, $6, $7, 0, 0, $8) RETURNING id`,
-        [playerId, name, jobId, race, jobId, 'starter_zone', JSON.stringify(defaultStats), JSON.stringify(defaultSkills)]
+        `INSERT INTO characters (player_id, name, class, race, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies, skill_adeptness)
+         VALUES ($1, $2, $3, $4, $5, 1, 0, 0, 0, $6, $7, 0, 0, $8, $9) RETURNING id`,
+        [playerId, name, jobId, race, jobId, 'starter_zone', JSON.stringify(defaultStats), JSON.stringify(defaultSkills), JSON.stringify(defaultAdeptness)]
       );
 
       return { success: true, characterId: result.rows[0].id };
@@ -260,6 +263,7 @@ export class AuthManager {
     unspentStatPoints: number;
     unspentSkillPoints: number;
     skillProficiencies: any;
+    skillAdeptness: any;
     jobId: string;
   }): Promise<void> {
     if (!this.db.isPostgresConnected()) {
@@ -276,6 +280,7 @@ export class AuthManager {
           ch.unspent_stat_points = data.unspentStatPoints;
           ch.unspent_skill_points = data.unspentSkillPoints;
           ch.skill_proficiencies = JSON.stringify(data.skillProficiencies);
+          ch.skill_adeptness = JSON.stringify(data.skillAdeptness);
           ch.experience = data.experience;
           break;
         }
@@ -288,14 +293,14 @@ export class AuthManager {
         `UPDATE characters SET
           level = $1, experience = $2, position_x = $3, position_y = $4, position_z = $5,
           zone_id = $6, stat_points = $7, unspent_stat_points = $8,
-          unspent_skill_points = $9, skill_proficiencies = $10, job_id = $11
-         WHERE id = $12`,
+          unspent_skill_points = $9, skill_proficiencies = $10, skill_adeptness = $11, job_id = $12
+         WHERE id = $13`,
         [
           data.level, data.experience,
           data.position.x, data.position.y, data.position.z,
           data.zoneId, JSON.stringify(data.statPoints),
           data.unspentStatPoints, data.unspentSkillPoints,
-          JSON.stringify(data.skillProficiencies), data.jobId,
+          JSON.stringify(data.skillProficiencies), JSON.stringify(data.skillAdeptness), data.jobId,
           characterId
         ]
       );

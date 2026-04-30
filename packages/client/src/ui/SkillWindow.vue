@@ -63,7 +63,10 @@
             <div class="sub-category-header">
               <div class="sub-cat-info">
                 <span class="sub-cat-name">{{ subCat.name }}</span>
-                <span class="sub-cat-pts">{{ subCat.currentPoints }} pts</span>
+                <span class="sub-cat-pts" v-if="subCat.currentAdeptness > 0">
+                  {{ subCat.currentAdeptness }}/{{ subCat.currentPoints }}
+                </span>
+                <span class="sub-cat-pts" v-else>{{ subCat.currentPoints }} pts</span>
               </div>
               <button
                 class="allocate-btn"
@@ -87,28 +90,28 @@
                 class="skill-entry-icon"
                 :style="{ backgroundColor: skill.unlocked ? getCategoryColor(subCat.category) : 'rgba(255,255,255,0.05)' }"
               >
-                {{ skill.unlocked ? getAbbrev(skill.name) : '?' }}
+                {{ getAbbrev(skill.name) }}
               </div>
               <div class="skill-entry-info">
-                <div class="skill-entry-name">
-                  {{ skill.unlocked ? skill.name : '???' }}
-                  <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">
-                    {{ subCat.currentPoints }}/{{ skill.reqPoints }}
-                  </span>
-                  <span class="req-tag cross" v-else-if="!skill.unlocked && skill.crossReqs">
-                    {{ formatCrossReqs(skill.crossReqs) }}
-                  </span>
-                  <span class="passive-tag" v-if="skill.isPassive">Passive</span>
-                </div>
-                <div class="skill-entry-desc" v-if="skill.unlocked">{{ skill.description }}</div>
+              <div class="skill-entry-name">
+                {{ skill.name }}
+                <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">
+                  {{ subCat.currentPoints }}/{{ skill.reqPoints }}
+                </span>
+                <span class="req-tag cross" v-else-if="!skill.unlocked && skill.crossReqs">
+                  {{ formatCrossReqs(skill.crossReqs) }}
+                </span>
+                <span class="passive-tag" v-if="skill.isPassive">Passive</span>
               </div>
-              <div class="skill-entry-stats" v-if="skill.unlocked">
-                <span v-if="skill.mpCost" class="stat mp">{{ skill.mpCost }} MP</span>
-                <span v-if="skill.castTime > 0" class="stat cast">{{ skill.castTime }}s</span>
-                <span v-if="skill.cooldown > 0" class="stat cd">{{ skill.cooldown }}s CD</span>
-                <span v-if="skill.isAOE" class="stat aoe">AOE</span>
-                <span v-if="skill.castTime === 0 && !skill.isPassive" class="stat instant">Instant</span>
-              </div>
+              <div class="skill-entry-desc">{{ skill.description }}</div>
+            </div>
+            <div class="skill-entry-stats">
+              <span v-if="skill.mpCost" class="stat mp">{{ skill.mpCost }} MP</span>
+              <span v-if="skill.castTime > 0" class="stat cast">{{ skill.castTime }}s</span>
+              <span v-if="skill.cooldown > 0" class="stat cd">{{ skill.cooldown }}s CD</span>
+              <span v-if="skill.isAOE" class="stat aoe">AOE</span>
+              <span v-if="skill.castTime === 0 && !skill.isPassive" class="stat instant">Instant</span>
+            </div>
             </div>
           </div>
           <div v-if="filteredSubCategories.length === 0" class="empty-msg">

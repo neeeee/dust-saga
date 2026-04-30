@@ -1,9 +1,12 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import {
   Packet, PacketType, PlayerSession, Validator,
-  JOB_DEFINITIONS, RACE_DATA, createDefaultStatPoints, createDefaultSkillProficiencies,
+  JOB_DEFINITIONS,   RACE_DATA, createDefaultStatPoints, createDefaultSkillProficiencies, createDefaultSkillAdeptness,
   getBaseClassForJob, calculateDerivedStats, getExperienceToNextLevel, getStatPointsGainedAtLevel,
+  getSkillPointsGainedAtLevel, MAX_LEVEL,
+  getDesignJobId,
   StatType, JobId, Race, processRacialOnDamage, applyRacialPotionHealing,
+  getAdvancementOptions, BaseClass,
   REGEN_CONFIG, SKILL_TARGET_RULES, SkillTargetType,
   PartyVisibility, LootRule, MAX_LOOT_POOL,
   GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
@@ -616,6 +619,7 @@ export class NetworkServer {
       char.unspent_stat_points || 0,
       char.unspent_skill_points || 0,
       char.skill_proficiencies ? (typeof char.skill_proficiencies === 'string' ? JSON.parse(char.skill_proficiencies) : char.skill_proficiencies) : createDefaultSkillProficiencies(),
+      char.skill_adeptness ? (typeof char.skill_adeptness === 'string' ? JSON.parse(char.skill_adeptness) : char.skill_adeptness) : createDefaultSkillAdeptness(getDesignJobId(char.job_id || char.class)),
       char.experience || 0
     );
 
@@ -651,7 +655,8 @@ export class NetworkServer {
         statPoints: session.statPoints,
         unspentStatPoints: session.unspentStatPoints,
         unspentSkillPoints: session.unspentSkillPoints,
-        skillProficiencies: session.skillProficiencies
+        skillProficiencies: session.skillProficiencies,
+          skillAdeptness: session.skillAdeptness
       }
     });
 
@@ -1610,13 +1615,139 @@ export class NetworkServer {
       this.sendToPlayer(session.characterId, {
         type: PacketType.STATS_UPDATE,
         timestamp: Date.now(),
-        data: { characterId: session.characterId, stats: session.stats, statPoints: session.statPoints, unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints }
+        data: { characterId: session.characterId, stats: session.stats, statPoints: session.statPoints, unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints, skillProficiencies: session.skillProficiencies,
+          skillAdeptness: session.skillAdeptness }
       });
       if (currentLevel < session.stats.level) {
         this.sendToPlayer(session.characterId, {
           type: PacketType.LEVEL_UP,
           timestamp: Date.now(),
           data: { level: session.stats.level, statPoints: session.statPoints, unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints }
+        });
+      }
+    } else if (cmd === '/setlevel') {
+      const targetLevel = parseInt(parts[1], 10);
+      if (isNaN(targetLevel) || targetLevel < 1 || targetLevel > MAX_LEVEL) {
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.CHAT_MESSAGE,
+          timestamp: Date.now(),
+          data: { sender: 'System', message: `Usage: /setlevel <1-${MAX_LEVEL}>`, channel: 'system' }
+        });
+        return;
+      }
+
+      let totalStatPoints = 0;
+      let totalSkillPoints = 0;
+      for (let lvl = 2; lvl <= targetLevel; lvl++) {
+        totalStatPoints += getStatPointsGainedAtLevel(lvl);
+        totalSkillPoints += getSkillPointsGainedAtLevel(lvl);
+      }
+
+      const spentStatPoints = Object.values(session.statPoints).reduce((sum, v) => sum + v, 0);
+
+      session.unspentStatPoints = totalStatPoints - spentStatPoints;
+      const currentSkillSpent = Object.values(session.skillProficiencies).reduce((sum: number, v: any) => sum + (typeof v === 'number' ? v : 0), 0);
+      session.unspentSkillPoints = totalSkillPoints - currentSkillSpent;
+      if (session.unspentStatPoints < 0) session.unspentStatPoints = 0;
+      if (session.unspentSkillPoints < 0) session.unspentSkillPoints = 0;
+
+      session.stats.level = targetLevel;
+      session.stats.experience = 0;
+      session.stats.experienceToNext = getExperienceToNextLevel(targetLevel);
+      this.playerSys.recalcStats(session);
+
+      this.sendToPlayer(session.characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'System', message: `Level set to ${targetLevel}. Total stat points: ${totalStatPoints}, total skill points: ${totalSkillPoints}.`, channel: 'system' }
+      });
+      this.sendToPlayer(session.characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId: session.characterId, stats: session.stats, statPoints: session.statPoints, unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints, skillProficiencies: session.skillProficiencies,
+          skillAdeptness: session.skillAdeptness }
+      });
+      this.sendToPlayer(session.characterId, {
+        type: PacketType.LEVEL_UP,
+        timestamp: Date.now(),
+        data: { level: session.stats.level, statPoints: session.statPoints, unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints }
+      });
+    } else if (cmd === '/resetstats') {
+      const spentStatPoints = Object.values(session.statPoints).reduce((sum, v) => sum + v, 0);
+      session.statPoints = createDefaultStatPoints();
+      session.unspentStatPoints += spentStatPoints;
+      this.playerSys.recalcStats(session);
+
+      this.sendToPlayer(session.characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'System', message: `Stat points reset. Refunded ${spentStatPoints} points.`, channel: 'system' }
+      });
+      this.sendToPlayer(session.characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId: session.characterId, stats: session.stats, statPoints: session.statPoints, unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints, skillProficiencies: session.skillProficiencies,
+          skillAdeptness: session.skillAdeptness }
+      });
+    } else if (cmd === '/advance') {
+      if (!parts[1]) {
+        const options = getAdvancementOptions(session.jobId as JobId);
+        if (options.length === 0) {
+          const job = JOB_DEFINITIONS[session.jobId as JobId];
+          const tier = job?.tier || '?';
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.CHAT_MESSAGE,
+            timestamp: Date.now(),
+            data: { sender: 'System', message: `No advancement options for ${session.jobId} (tier ${tier}). You are at the highest tier or tier ${tier} requires level ${tier === 2 ? 20 : 40} to advance.`, channel: 'system' }
+          });
+        } else {
+          const optionNames = options.map(o => JOB_DEFINITIONS[o]?.name || o).join(', ');
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.CHAT_MESSAGE,
+            timestamp: Date.now(),
+            data: { sender: 'System', message: `Available advancements from ${session.jobId}: ${optionNames}. Usage: /advance <jobName>`, channel: 'system' }
+          });
+        }
+        return;
+      }
+
+      const targetName = parts.slice(1).join(' ').toLowerCase();
+      const options = getAdvancementOptions(session.jobId as JobId);
+      const match = options.find(id => {
+        const def = JOB_DEFINITIONS[id];
+        return id.toLowerCase() === targetName || def?.name.toLowerCase() === targetName;
+      });
+
+      if (!match) {
+        const optionNames = options.map(o => JOB_DEFINITIONS[o]?.name || o).join(', ');
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.CHAT_MESSAGE,
+          timestamp: Date.now(),
+          data: { sender: 'System', message: `Invalid advancement target "${parts.slice(1).join(' ')}". Options: ${optionNames || 'none'}`, channel: 'system' }
+        });
+        return;
+      }
+
+      const targetDef = JOB_DEFINITIONS[match];
+      const oldName = JOB_DEFINITIONS[session.jobId as JobId]?.name || session.jobId;
+      if (this.playerSys.advanceJob(session, match)) {
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.CHAT_MESSAGE,
+          timestamp: Date.now(),
+          data: { sender: 'System', message: `Advanced from ${oldName} to ${targetDef?.name || match}! (tier ${targetDef?.tier})`, channel: 'system' }
+        });
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { characterId: session.characterId, stats: session.stats, statPoints: session.statPoints, unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints, skillProficiencies: session.skillProficiencies,
+            skillAdeptness: session.skillAdeptness, jobId: session.jobId, baseClass: session.baseClass }
+        });
+      } else {
+        const requiredLevel = targetDef?.tier === 2 ? 20 : targetDef?.tier === 3 ? 40 : 1;
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.CHAT_MESSAGE,
+          timestamp: Date.now(),
+          data: { sender: 'System', message: `Cannot advance to ${targetDef?.name || match}. Requires level ${requiredLevel} (you are ${session.stats.level}).`, channel: 'system' }
         });
       }
     } else if (cmd === '/killallenemies') {
@@ -1957,6 +2088,7 @@ export class NetworkServer {
           unspentStatPoints: session.unspentStatPoints,
           unspentSkillPoints: session.unspentSkillPoints,
           skillProficiencies: session.skillProficiencies,
+          skillAdeptness: session.skillAdeptness,
         }
       });
     }
@@ -2271,6 +2403,7 @@ export class NetworkServer {
           unspentStatPoints: session.unspentStatPoints,
           unspentSkillPoints: session.unspentSkillPoints,
           skillProficiencies: session.skillProficiencies,
+          skillAdeptness: session.skillAdeptness,
           jobId: session.jobId
         }).catch(err => console.error('Failed to save character on disconnect:', err));
 
@@ -2835,6 +2968,7 @@ export class NetworkServer {
         unspentStatPoints: session.unspentStatPoints,
         unspentSkillPoints: session.unspentSkillPoints,
         skillProficiencies: session.skillProficiencies,
+          skillAdeptness: session.skillAdeptness,
         jobId: session.jobId
       }));
     });

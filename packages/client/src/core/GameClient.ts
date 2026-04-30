@@ -17,7 +17,7 @@ import {
 export interface GameCallbacks {
   onStatsUpdate: (stats: PlayerStats) => void;
   onStatPointsUpdate: (statPoints: StatPoints | null, unspentStatPoints: number, unspentSkillPoints: number) => void;
-  onSkillProficienciesUpdate: (skillProficiencies: any) => void;
+  onSkillProficienciesUpdate: (skillProficiencies: any, skillAdeptness?: any) => void;
   onInventoryUpdate: (inventory: any, equipment: any) => void;
   onQuestUpdate: (quests: any) => void;
   onChatMessage: (sender: string, message: string, channel?: string) => void;
@@ -56,6 +56,7 @@ export class GameClient {
   private unspentStatPoints: number = 0;
   private unspentSkillPoints: number = 0;
   private skillProficiencies: any = null;
+  private skillAdeptness: any = null;
   private currentJobId: string = 'warrior';
   private currentBaseClass: string = 'warrior';
   private currentZoneId: string | null = null;
@@ -142,13 +143,8 @@ export class GameClient {
         const result = this.engine.updateAOETargetCircle(scene.pointerX, scene.pointerY);
         if (result) {
           this.aoeLastPosition = result.position;
-          const mesh = this.playerMesh;
-          const pp = mesh ? mesh.position : null;
-          // this.callbacks.onChatMessage?.(
-          //   'Debug',
-          //   `[AOE] cursor=(${result.position.x.toFixed(1)}, ${result.position.y.toFixed(1)}, ${result.position.z.toFixed(1)}) player=(${pp ? pp.x.toFixed(1) : '?'}, ${pp ? pp.y.toFixed(1) : '?'}, ${pp ? pp.z.toFixed(1) : '?'}) scene.xy=(${scene.pointerX.toFixed(0)}, ${scene.pointerY.toFixed(0)}) valid=${result.valid}`,
-          //   'system'
-          // );
+          // Debug: AOE cursor position
+          // const pp = this.playerMesh?.position;
         } else {
           // this.callbacks.onChatMessage?.(
           //   'Debug',
@@ -208,13 +204,8 @@ export class GameClient {
     this.aoeTargetingSkillName = skillName;
     this.aoeLastPosition = null;
     this.engine.showAOETargetCircle(radius);
-    const mesh = this.playerMesh;
-    const pp = mesh ? mesh.position : null;
-    // this.callbacks.onChatMessage?.(
-    //   'Debug',
-    //   `[AOE Start] skill=${skillName} radius=${radius} player=(${pp ? pp.x.toFixed(1) : '?'}, ${pp ? pp.y.toFixed(1) : '?'}, ${pp ? pp.z.toFixed(1) : '?'})`,
-    //   'system'
-    // );
+    // Debug: AOE start position
+    // const pp = this.playerMesh?.position;
   }
 
   cancelAOETargeting(): void {
@@ -248,7 +239,8 @@ export class GameClient {
       this.currentBaseClass = data.baseClass || 'warrior';
       if (data.skillProficiencies) {
         this.skillProficiencies = data.skillProficiencies;
-        this.callbacks.onSkillProficienciesUpdate?.(data.skillProficiencies);
+        this.skillAdeptness = data.skillAdeptness || null;
+        this.callbacks.onSkillProficienciesUpdate?.(data.skillProficiencies, data.skillAdeptness);
       }
       this.callbacks.onStatsUpdate?.(data.stats);
       this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints);
@@ -418,7 +410,8 @@ export class GameClient {
       }
       if (data.skillProficiencies && data.characterId === this.playerId) {
         this.skillProficiencies = data.skillProficiencies;
-        this.callbacks.onSkillProficienciesUpdate?.(data.skillProficiencies);
+        this.skillAdeptness = data.skillAdeptness || this.skillAdeptness;
+        this.callbacks.onSkillProficienciesUpdate?.(data.skillProficiencies, this.skillAdeptness);
       }
       if (data.baseClass && data.characterId === this.playerId) {
         this.currentBaseClass = data.baseClass;
@@ -814,6 +807,10 @@ export class GameClient {
 
   getSkillProficiencies(): any {
     return this.skillProficiencies;
+  }
+
+  getSkillAdeptness(): any {
+    return this.skillAdeptness;
   }
 
   getJobId(): string {

@@ -31,6 +31,7 @@ export interface PlayerSession {
   unspentStatPoints: number;
   unspentSkillPoints: number;
   skillProficiencies: SkillProficiencies;
+  skillAdeptness: SkillProficiencies;
   position: { x: number; y: number; z: number };
   rotation: { x: number; y: number; z: number; w: number };
   zoneId: string;

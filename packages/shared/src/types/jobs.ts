@@ -1,4 +1,5 @@
 import { StatPoints, StatType } from './races';
+import { getMinAdeptness, ALL_SUB_CATEGORIES } from '../constants/jobSkillValues';
 
 export enum BaseClass {
   WARRIOR = 'warrior',
@@ -10,28 +11,32 @@ export enum BaseClass {
 export enum JobId {
   WARRIOR = 'warrior',
   GLADIATOR = 'gladiator',
-  KNIGHT = 'knight',
   JUGGERNAUT = 'juggernaut',
   DRAGOON = 'dragoon',
+  KNIGHT = 'knight',
+  WARLORD = 'warlord',
   PALADIN = 'paladin',
   SCOUT = 'scout',
+  ARCHER = 'archer',
+  SNIPER = 'sniper',
   HUNTER = 'hunter',
-  THIEF = 'thief',
-  RANGER = 'ranger',
+  PROVOCATEUR = 'provocateur',
   ASSASSIN = 'assassin',
-  SHADOWBLADE = 'shadowblade',
+  SABOTEUR = 'saboteur',
   ACOLYTE = 'acolyte',
   PRIEST = 'priest',
+  CLERIC = 'cleric',
+  ENCHANTER = 'enchanter',
+  ASCETIC = 'ascetic',
   MONK = 'monk',
-  BISHOP = 'bishop',
-  CHAMPION = 'champion',
-  DRUID = 'druid',
+  EXORCIST = 'exorcist',
   MAGE = 'mage',
   WIZARD = 'wizard',
-  SORCERER = 'sorcerer',
   WARLOCK = 'warlock',
-  SAGE = 'sage',
-  NECROMANCER = 'necromancer'
+  CONJURER = 'conjurer',
+  SORCERER = 'sorcerer',
+  CORRUPTOR = 'corruptor',
+  SHADOWBLADE = 'shadowblade',
 }
 
 export interface JobDefinition {
@@ -102,8 +107,19 @@ export function recalculateCategoryTotals(proficiencies: SkillProficiencies): vo
 
 export function createDefaultSkillProficiencies(): SkillProficiencies {
   const proficiencies: SkillProficiencies = { melee: 0, technique: 0, prayer: 0, magic: 0, special: 0 };
-  for (const subName of ALL_SUB_CATEGORY_NAMES) {
+  for (const subName of ALL_SUB_CATEGORIES) {
     proficiencies[subName] = 0;
+  }
+  return proficiencies;
+}
+
+export function createDefaultSkillAdeptness(designJobId: number): SkillProficiencies {
+  const proficiencies: SkillProficiencies = { melee: 0, technique: 0, prayer: 0, magic: 0, special: 0 };
+  for (const subName of ALL_SUB_CATEGORIES) {
+    proficiencies[subName] = getMinAdeptness(designJobId, subName);
+  }
+  for (const cat of ['melee', 'technique', 'prayer', 'magic', 'special'] as SkillCategoryKey[]) {
+    proficiencies[cat] = getCategoryTotal(proficiencies, cat);
   }
   return proficiencies;
 }
@@ -155,8 +171,8 @@ export const JOB_DEFINITIONS: Record<JobId, JobDefinition> = {
     description: 'A mighty fighter with high health and physical power.',
     modelFile: 'Adventurer.glb',
     baseStatModifiers: { STR: 3, STA: 2 },
-    lpBase: 150, lpPerLevel: 15, lpPerSta: 8,
-    mpBase: 30, mpPerLevel: 3, mpPerSpi: 2
+    lpBase: 98, lpPerLevel: 5.847, lpPerSta: 15.5,
+    mpBase: 16, mpPerLevel: 44.55, mpPerSpi: 48.3
   },
   [JobId.GLADIATOR]: {
     id: JobId.GLADIATOR,
@@ -167,20 +183,8 @@ export const JOB_DEFINITIONS: Record<JobId, JobDefinition> = {
     description: 'An offensive warrior specializing in two-handed weapons and raw damage.',
     modelFile: 'Adventurer.glb',
     baseStatModifiers: { STR: 4, STA: 2, DEX: 1 },
-    lpBase: 200, lpPerLevel: 20, lpPerSta: 10,
-    mpBase: 35, mpPerLevel: 4, mpPerSpi: 2
-  },
-  [JobId.KNIGHT]: {
-    id: JobId.KNIGHT,
-    name: 'Knight',
-    baseClass: BaseClass.WARRIOR,
-    tier: 2,
-    parentJob: JobId.WARRIOR,
-    description: 'A defensive warrior specializing in shields and party protection.',
-    modelFile: 'King.glb',
-    baseStatModifiers: { STR: 2, STA: 4, SPI: 1 },
-    lpBase: 220, lpPerLevel: 22, lpPerSta: 12,
-    mpBase: 45, mpPerLevel: 5, mpPerSpi: 3
+    lpBase: 148, lpPerLevel: 3.188, lpPerSta: 8.465,
+    mpBase: 28, mpPerLevel: 36.7, mpPerSpi: 39.5
   },
   [JobId.JUGGERNAUT]: {
     id: JobId.JUGGERNAUT,
@@ -191,8 +195,8 @@ export const JOB_DEFINITIONS: Record<JobId, JobDefinition> = {
     description: 'An unstoppable force of destruction with devastating power.',
     modelFile: 'Adventurer.glb',
     baseStatModifiers: { STR: 6, STA: 3, DEX: 2 },
-    lpBase: 280, lpPerLevel: 28, lpPerSta: 14,
-    mpBase: 40, mpPerLevel: 5, mpPerSpi: 3
+    lpBase: 298, lpPerLevel: 1.9601, lpPerSta: 2.2836,
+    mpBase: 98, mpPerLevel: 32.2, mpPerSpi: 34.8
   },
   [JobId.DRAGOON]: {
     id: JobId.DRAGOON,
@@ -203,8 +207,32 @@ export const JOB_DEFINITIONS: Record<JobId, JobDefinition> = {
     description: 'A lance-wielding warrior with superior mounted combat abilities.',
     modelFile: 'Adventurer.glb',
     baseStatModifiers: { STR: 5, STA: 3, AGI: 2 },
-    lpBase: 260, lpPerLevel: 26, lpPerSta: 13,
-    mpBase: 45, mpPerLevel: 5, mpPerSpi: 3
+    lpBase: 149, lpPerLevel: 2.0033, lpPerSta: 3.572,
+    mpBase: 98, mpPerLevel: 30.9, mpPerSpi: 33.3
+  },
+  [JobId.KNIGHT]: {
+    id: JobId.KNIGHT,
+    name: 'Knight',
+    baseClass: BaseClass.WARRIOR,
+    tier: 2,
+    parentJob: JobId.WARRIOR,
+    description: 'A defensive warrior specializing in shields and party protection.',
+    modelFile: 'King.glb',
+    baseStatModifiers: { STR: 2, STA: 4, SPI: 1 },
+    lpBase: 149, lpPerLevel: 2.975, lpPerSta: 7.881,
+    mpBase: 118, mpPerLevel: 29.15, mpPerSpi: 31.4
+  },
+  [JobId.WARLORD]: {
+    id: JobId.WARLORD,
+    name: 'Warlord',
+    baseClass: BaseClass.WARRIOR,
+    tier: 3,
+    parentJob: JobId.KNIGHT,
+    description: 'A commanding presence on the battlefield with supreme leadership abilities.',
+    modelFile: 'King.glb',
+    baseStatModifiers: { STR: 3, STA: 5, SPI: 3 },
+    lpBase: 498, lpPerLevel: 1.1493, lpPerSta: 2.0618,
+    mpBase: 179, mpPerLevel: 25.8, mpPerSpi: 20.589
   },
   [JobId.PALADIN]: {
     id: JobId.PALADIN,
@@ -215,8 +243,8 @@ export const JOB_DEFINITIONS: Record<JobId, JobDefinition> = {
     description: 'A holy knight combining strong defense with healing abilities.',
     modelFile: 'King.glb',
     baseStatModifiers: { STR: 3, STA: 5, SPI: 3 },
-    lpBase: 300, lpPerLevel: 30, lpPerSta: 15,
-    mpBase: 80, mpPerLevel: 8, mpPerSpi: 5
+    lpBase: 398, lpPerLevel: 1.4285, lpPerSta: 2.2322,
+    mpBase: 178, mpPerLevel: 24.7, mpPerSpi: 19.94
   },
   [JobId.SCOUT]: {
     id: JobId.SCOUT,
@@ -227,68 +255,80 @@ export const JOB_DEFINITIONS: Record<JobId, JobDefinition> = {
     description: 'A swift hunter with ranged attacks and survival skills.',
     modelFile: 'Farmer.glb',
     baseStatModifiers: { AGI: 3, DEX: 2 },
-    lpBase: 100, lpPerLevel: 8, lpPerSta: 5,
-    mpBase: 50, mpPerLevel: 5, mpPerSpi: 3
+    lpBase: 84, lpPerLevel: 7.23, lpPerSta: 19.2,
+    mpBase: 44, mpPerLevel: 37.2, mpPerSpi: 40
+  },
+  [JobId.ARCHER]: {
+    id: JobId.ARCHER,
+    name: 'Archer',
+    baseClass: BaseClass.SCOUT,
+    tier: 2,
+    parentJob: JobId.SCOUT,
+    description: 'A ranged specialist with mastery of bows and crossbows.',
+    modelFile: 'Farmer.glb',
+    baseStatModifiers: { AGI: 4, DEX: 3, STR: 1 },
+    lpBase: 109, lpPerLevel: 4.4, lpPerSta: 11.67,
+    mpBase: 48, mpPerLevel: 31.2, mpPerSpi: 33.3
+  },
+  [JobId.SNIPER]: {
+    id: JobId.SNIPER,
+    name: 'Sniper',
+    baseClass: BaseClass.SCOUT,
+    tier: 3,
+    parentJob: JobId.ARCHER,
+    description: 'An elite marksman with devastating precision at extreme range.',
+    modelFile: 'Farmer.glb',
+    baseStatModifiers: { AGI: 5, DEX: 4, STR: 2 },
+    lpBase: 198, lpPerLevel: 3.333, lpPerSta: 3.803,
+    mpBase: 69, mpPerLevel: 21.95, mpPerSpi: 20.146
   },
   [JobId.HUNTER]: {
     id: JobId.HUNTER,
     name: 'Hunter',
     baseClass: BaseClass.SCOUT,
-    tier: 2,
-    parentJob: JobId.SCOUT,
-    description: 'A ranged specialist with mastery of bows and traps.',
+    tier: 3,
+    parentJob: JobId.ARCHER,
+    description: 'A skilled tracker with traps and survival expertise.',
     modelFile: 'Farmer.glb',
-    baseStatModifiers: { AGI: 4, DEX: 3, STR: 1 },
-    lpBase: 130, lpPerLevel: 10, lpPerSta: 6,
-    mpBase: 60, mpPerLevel: 6, mpPerSpi: 4
+    baseStatModifiers: { AGI: 5, DEX: 3, STR: 2 },
+    lpBase: 151, lpPerLevel: 3.111, lpPerSta: 4.464,
+    mpBase: 56, mpPerLevel: 22.6, mpPerSpi: 19.7
   },
-  [JobId.THIEF]: {
-    id: JobId.THIEF,
-    name: 'Thief',
+  [JobId.PROVOCATEUR]: {
+    id: JobId.PROVOCATEUR,
+    name: 'Provocateur',
     baseClass: BaseClass.SCOUT,
     tier: 2,
     parentJob: JobId.SCOUT,
-    description: 'A stealthy rogue specializing in critical strikes and evasion.',
+    description: 'A cunning agent specializing in stealth and subterfuge.',
     modelFile: 'Punk.glb',
     baseStatModifiers: { AGI: 5, DEX: 2 },
-    lpBase: 110, lpPerLevel: 9, lpPerSta: 5,
-    mpBase: 45, mpPerLevel: 4, mpPerSpi: 3
-  },
-  [JobId.RANGER]: {
-    id: JobId.RANGER,
-    name: 'Ranger',
-    baseClass: BaseClass.SCOUT,
-    tier: 3,
-    parentJob: JobId.HUNTER,
-    description: 'An elite marksman with nature magic and superior archery.',
-    modelFile: 'Farmer.glb',
-    baseStatModifiers: { AGI: 5, DEX: 4, STR: 2 },
-    lpBase: 160, lpPerLevel: 13, lpPerSta: 7,
-    mpBase: 80, mpPerLevel: 8, mpPerSpi: 5
+    lpBase: 109, lpPerLevel: 4.007, lpPerSta: 10.63,
+    mpBase: 48, mpPerLevel: 33.1, mpPerSpi: 35.97
   },
   [JobId.ASSASSIN]: {
     id: JobId.ASSASSIN,
     name: 'Assassin',
     baseClass: BaseClass.SCOUT,
     tier: 3,
-    parentJob: JobId.THIEF,
+    parentJob: JobId.PROVOCATEUR,
     description: 'A deadly shadow operative with lethal critical hits.',
     modelFile: 'Punk.glb',
     baseStatModifiers: { AGI: 7, DEX: 3, STR: 2 },
-    lpBase: 140, lpPerLevel: 11, lpPerSta: 6,
-    mpBase: 60, mpPerLevel: 6, mpPerSpi: 4
+    lpBase: 149, lpPerLevel: 2.123, lpPerSta: 3.922,
+    mpBase: 53, mpPerLevel: 24.44, mpPerSpi: 20.58
   },
-  [JobId.SHADOWBLADE]: {
-    id: JobId.SHADOWBLADE,
-    name: 'Shadowblade',
+  [JobId.SABOTEUR]: {
+    id: JobId.SABOTEUR,
+    name: 'Saboteur',
     baseClass: BaseClass.SCOUT,
     tier: 3,
-    parentJob: JobId.THIEF,
-    description: 'A hybrid of shadow magic and blade arts.',
+    parentJob: JobId.PROVOCATEUR,
+    description: 'A master of traps and disruption tactics.',
     modelFile: 'Punk.glb',
     baseStatModifiers: { AGI: 5, DEX: 3, INT: 3 },
-    lpBase: 135, lpPerLevel: 11, lpPerSta: 6,
-    mpBase: 90, mpPerLevel: 9, mpPerSpi: 5
+    lpBase: 205, lpPerLevel: 2.53, lpPerSta: 3.773,
+    mpBase: 59, mpPerLevel: 22.6, mpPerSpi: 17.92
   },
   [JobId.ACOLYTE]: {
     id: JobId.ACOLYTE,
@@ -299,8 +339,8 @@ export const JOB_DEFINITIONS: Record<JobId, JobDefinition> = {
     description: 'A devout healer with holy magic and support abilities.',
     modelFile: 'Beach Character.glb',
     baseStatModifiers: { SPI: 3, INT: 2 },
-    lpBase: 90, lpPerLevel: 7, lpPerSta: 4,
-    mpBase: 100, mpPerLevel: 10, mpPerSpi: 6
+    lpBase: 73, lpPerLevel: 8.16, lpPerSta: 21.51,
+    mpBase: 58, mpPerLevel: 18.06, mpPerSpi: 19.48
   },
   [JobId.PRIEST]: {
     id: JobId.PRIEST,
@@ -311,56 +351,68 @@ export const JOB_DEFINITIONS: Record<JobId, JobDefinition> = {
     description: 'A holy healer with powerful restoration and blessing magic.',
     modelFile: 'Beach Character.glb',
     baseStatModifiers: { SPI: 5, INT: 3 },
-    lpBase: 110, lpPerLevel: 9, lpPerSta: 5,
-    mpBase: 140, mpPerLevel: 14, mpPerSpi: 8
+    lpBase: 88, lpPerLevel: 4.475, lpPerSta: 11.874,
+    mpBase: 198, mpPerLevel: 14, mpPerSpi: 15.08
   },
-  [JobId.MONK]: {
-    id: JobId.MONK,
-    name: 'Monk',
-    baseClass: BaseClass.ACOLYTE,
-    tier: 2,
-    parentJob: JobId.ACOLYTE,
-    description: 'A martial artist combining physical power with spiritual energy.',
-    modelFile: 'Beach Character.glb',
-    baseStatModifiers: { SPI: 3, STR: 3, AGI: 2 },
-    lpBase: 130, lpPerLevel: 10, lpPerSta: 7,
-    mpBase: 80, mpPerLevel: 8, mpPerSpi: 5
-  },
-  [JobId.BISHOP]: {
-    id: JobId.BISHOP,
-    name: 'Bishop',
+  [JobId.CLERIC]: {
+    id: JobId.CLERIC,
+    name: 'Cleric',
     baseClass: BaseClass.ACOLYTE,
     tier: 3,
     parentJob: JobId.PRIEST,
     description: 'A supreme healer with divine resurrection and protection magic.',
     modelFile: 'Beach Character.glb',
     baseStatModifiers: { SPI: 7, INT: 5 },
-    lpBase: 140, lpPerLevel: 11, lpPerSta: 6,
-    mpBase: 200, mpPerLevel: 20, mpPerSpi: 12
+    lpBase: 199, lpPerLevel: 2.75, lpPerSta: 3.745,
+    mpBase: 235, mpPerLevel: 8.875, mpPerSpi: 9.897
   },
-  [JobId.CHAMPION]: {
-    id: JobId.CHAMPION,
-    name: 'Champion',
-    baseClass: BaseClass.ACOLYTE,
-    tier: 3,
-    parentJob: JobId.MONK,
-    description: 'An ascetic warrior with devastating chi-enhanced strikes.',
-    modelFile: 'Beach Character.glb',
-    baseStatModifiers: { SPI: 4, STR: 5, AGI: 3 },
-    lpBase: 180, lpPerLevel: 14, lpPerSta: 9,
-    mpBase: 100, mpPerLevel: 10, mpPerSpi: 6
-  },
-  [JobId.DRUID]: {
-    id: JobId.DRUID,
-    name: 'Druid',
+  [JobId.ENCHANTER]: {
+    id: JobId.ENCHANTER,
+    name: 'Enchanter',
     baseClass: BaseClass.ACOLYTE,
     tier: 3,
     parentJob: JobId.PRIEST,
-    description: 'A nature mystic with healing and elemental nature magic.',
+    description: 'A mystic who strengthens allies with powerful support enchantments.',
     modelFile: 'Beach Character.glb',
     baseStatModifiers: { SPI: 5, INT: 4, DEX: 2 },
-    lpBase: 130, lpPerLevel: 10, lpPerSta: 6,
-    mpBase: 180, mpPerLevel: 18, mpPerSpi: 10
+    lpBase: 197, lpPerLevel: 3.33, lpPerSta: 3.745,
+    mpBase: 253, mpPerLevel: 8.24, mpPerSpi: 8.861
+  },
+  [JobId.ASCETIC]: {
+    id: JobId.ASCETIC,
+    name: 'Ascetic',
+    baseClass: BaseClass.ACOLYTE,
+    tier: 2,
+    parentJob: JobId.ACOLYTE,
+    description: 'A martial artist combining physical power with spiritual energy.',
+    modelFile: 'Beach Character.glb',
+    baseStatModifiers: { SPI: 3, STR: 3, AGI: 2 },
+    lpBase: 89, lpPerLevel: 3.883, lpPerSta: 10.298,
+    mpBase: 163, mpPerLevel: 16.72, mpPerSpi: 18
+  },
+  [JobId.MONK]: {
+    id: JobId.MONK,
+    name: 'Monk',
+    baseClass: BaseClass.ACOLYTE,
+    tier: 3,
+    parentJob: JobId.ASCETIC,
+    description: 'An ascetic warrior with devastating chi-enhanced strikes.',
+    modelFile: 'Beach Character.glb',
+    baseStatModifiers: { SPI: 4, STR: 5, AGI: 3 },
+    lpBase: 299, lpPerLevel: 1.961, lpPerSta: 2.681,
+    mpBase: 189, mpPerLevel: 12.9, mpPerSpi: 14
+  },
+  [JobId.EXORCIST]: {
+    id: JobId.EXORCIST,
+    name: 'Exorcist',
+    baseClass: BaseClass.ACOLYTE,
+    tier: 3,
+    parentJob: JobId.ASCETIC,
+    description: 'A spiritual warrior who purifies evil with sacred combat arts.',
+    modelFile: 'Beach Character.glb',
+    baseStatModifiers: { SPI: 5, INT: 4, STR: 3 },
+    lpBase: 203, lpPerLevel: 2.578, lpPerSta: 3.83,
+    mpBase: 197, mpPerLevel: 8.5, mpPerSpi: 9.16
   },
   [JobId.MAGE]: {
     id: JobId.MAGE,
@@ -371,8 +423,8 @@ export const JOB_DEFINITIONS: Record<JobId, JobDefinition> = {
     description: 'A powerful spellcaster with devastating magical abilities.',
     modelFile: 'Witch.glb',
     baseStatModifiers: { INT: 3, SPI: 2 },
-    lpBase: 80, lpPerLevel: 6, lpPerSta: 3,
-    mpBase: 120, mpPerLevel: 12, mpPerSpi: 7
+    lpBase: 59, lpPerLevel: 8.44, lpPerSta: 22.48,
+    mpBase: 89, mpPerLevel: 17.6, mpPerSpi: 18.9
   },
   [JobId.WIZARD]: {
     id: JobId.WIZARD,
@@ -383,20 +435,8 @@ export const JOB_DEFINITIONS: Record<JobId, JobDefinition> = {
     description: 'A master of elemental magic with devastating area spells.',
     modelFile: 'Witch.glb',
     baseStatModifiers: { INT: 5, SPI: 3 },
-    lpBase: 95, lpPerLevel: 7, lpPerSta: 4,
-    mpBase: 170, mpPerLevel: 17, mpPerSpi: 10
-  },
-  [JobId.SORCERER]: {
-    id: JobId.SORCERER,
-    name: 'Sorcerer',
-    baseClass: BaseClass.MAGE,
-    tier: 2,
-    parentJob: JobId.MAGE,
-    description: 'A dark caster wielding forbidden arcane powers.',
-    modelFile: 'Witch.glb',
-    baseStatModifiers: { INT: 4, SPI: 2, AGI: 2 },
-    lpBase: 90, lpPerLevel: 7, lpPerSta: 4,
-    mpBase: 160, mpPerLevel: 16, mpPerSpi: 9
+    lpBase: 73, lpPerLevel: 5.753, lpPerSta: 15.28,
+    mpBase: 253, mpPerLevel: 10.57, mpPerSpi: 11.41
   },
   [JobId.WARLOCK]: {
     id: JobId.WARLOCK,
@@ -407,31 +447,55 @@ export const JOB_DEFINITIONS: Record<JobId, JobDefinition> = {
     description: 'An arcane supreme with mastery over all elements.',
     modelFile: 'Witch.glb',
     baseStatModifiers: { INT: 7, SPI: 5 },
-    lpBase: 110, lpPerLevel: 9, lpPerSta: 5,
-    mpBase: 240, mpPerLevel: 24, mpPerSpi: 14
+    lpBase: 148, lpPerLevel: 4.006, lpPerSta: 5.405,
+    mpBase: 254, mpPerLevel: 5.915, mpPerSpi: 6.366
   },
-  [JobId.SAGE]: {
-    id: JobId.SAGE,
-    name: 'Sage',
+  [JobId.CONJURER]: {
+    id: JobId.CONJURER,
+    name: 'Conjurer',
     baseClass: BaseClass.MAGE,
     tier: 3,
     parentJob: JobId.WIZARD,
-    description: 'A wise scholar combining magic with support enchantments.',
+    description: 'A wise scholar combining magic with support summoning.',
     modelFile: 'Witch.glb',
     baseStatModifiers: { INT: 6, SPI: 6, DEX: 2 },
-    lpBase: 105, mpBase: 220, mpPerLevel: 22, mpPerSpi: 12,
-    lpPerLevel: 8, lpPerSta: 5
+    lpBase: 142, lpPerLevel: 3.756, lpPerSta: 4.95,
+    mpBase: 254, mpPerLevel: 7.45, mpPerSpi: 8.016
   },
-  [JobId.NECROMANCER]: {
-    id: JobId.NECROMANCER,
-    name: 'Necromancer',
+  [JobId.SORCERER]: {
+    id: JobId.SORCERER,
+    name: 'Sorcerer',
+    baseClass: BaseClass.MAGE,
+    tier: 2,
+    parentJob: JobId.MAGE,
+    description: 'A dark caster wielding forbidden arcane powers.',
+    modelFile: 'Witch.glb',
+    baseStatModifiers: { INT: 4, SPI: 2, AGI: 2 },
+    lpBase: 73, lpPerLevel: 4.86, lpPerSta: 12.88,
+    mpBase: 119, mpPerLevel: 12.63, mpPerSpi: 13.63
+  },
+  [JobId.CORRUPTOR]: {
+    id: JobId.CORRUPTOR,
+    name: 'Corruptor',
     baseClass: BaseClass.MAGE,
     tier: 3,
     parentJob: JobId.SORCERER,
-    description: 'A dark summoner raising the dead to fight.',
+    description: 'A dark summoner who corrupts and weakens enemies.',
     modelFile: 'Witch.glb',
     baseStatModifiers: { INT: 6, SPI: 4, AGI: 2 },
-    lpBase: 100, lpPerLevel: 8, lpPerSta: 4,
-    mpBase: 200, mpPerLevel: 20, mpPerSpi: 11
-  }
+    lpBase: 166, lpPerLevel: 3.53, lpPerSta: 4.84,
+    mpBase: 203, mpPerLevel: 9.4, mpPerSpi: 12.3
+  },
+  [JobId.SHADOWBLADE]: {
+    id: JobId.SHADOWBLADE,
+    name: 'Shadowblade',
+    baseClass: BaseClass.MAGE,
+    tier: 3,
+    parentJob: JobId.SORCERER,
+    description: 'A hybrid of shadow magic and blade arts.',
+    modelFile: 'Punk.glb',
+    baseStatModifiers: { INT: 5, AGI: 3, DEX: 3 },
+    lpBase: 151, lpPerLevel: 3.339, lpPerSta: 5.26,
+    mpBase: 195, mpPerLevel: 11.23, mpPerSpi: 10.14
+  },
 };

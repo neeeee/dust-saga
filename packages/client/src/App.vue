@@ -448,9 +448,10 @@ onMounted(async () => {
       playerUnspentStatPoints.value = unspent;
       playerUnspentSkillPoints.value = unspentSkill;
     },
-    onSkillProficienciesUpdate: (proficiencies) => {
+    onSkillProficienciesUpdate: (proficiencies, adeptness) => {
       skillStore.updateSkillProficiencies(
         proficiencies,
+        adeptness,
         gameClient?.getJobId() || 'warrior',
         gameClient?.getBaseClass() || 'warrior',
         gameClient?.getUnspentSkillPoints() || 0,

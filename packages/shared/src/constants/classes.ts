@@ -1,8 +1,7 @@
 import { JobId, BaseClass, JOB_DEFINITIONS, JobDefinition } from '../types/jobs';
 import { Race, StatType, StatPoints, createDefaultStatPoints } from '../types/races';
-import { RACE_DATA, MAX_LEVEL, MAX_STAT_VALUE } from '../constants/races';
+import { RACE_DATA, MAX_LEVEL, MAX_STAT_VALUE, getLevelUpBonuses, getJobBaseStatModifier } from '../constants/races';
 
-export { CharacterClass as LegacyCharacterClass } from '../types/classes';
 export { JobId, BaseClass, JOB_DEFINITIONS } from '../types/jobs';
 
 export function getExperienceToNextLevel(level: number): number {
@@ -10,11 +9,17 @@ export function getExperienceToNextLevel(level: number): number {
 }
 
 export function calculateMaxLP(job: JobDefinition, level: number, sta: number): number {
-  return Math.floor(job.lpBase + job.lpPerLevel * (level - 1) + job.lpPerSta * sta);
+  const levelLPComponent = Math.ceil(level * (100 / job.lpPerLevel));
+  const staMultiplier = Math.ceil(100 / job.lpPerSta);
+  const staLPComponent = Math.ceil(sta * staMultiplier);
+  return job.lpBase + levelLPComponent + staLPComponent;
 }
 
 export function calculateMaxMP(job: JobDefinition, level: number, spi: number): number {
-  return Math.floor(job.mpBase + job.mpPerLevel * (level - 1) + job.mpPerSpi * spi);
+  const levelMPComponent = Math.ceil(level * (100 / job.mpPerLevel));
+  const spiMultiplier = Math.ceil(100 / job.mpPerSpi);
+  const spiMPComponent = Math.ceil(spi * spiMultiplier);
+  return job.mpBase + levelMPComponent + spiMPComponent;
 }
 
 export function calculateDerivedStats(
@@ -29,19 +34,32 @@ export function calculateDerivedStats(
   defense: number;
   speed: number;
   magicAttack: number;
+  baseStats: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number };
 } {
   const job = JOB_DEFINITIONS[jobId];
   const raceData = RACE_DATA[race];
   if (!job || !raceData) {
-    return { maxHealth: 100, maxMana: 50, attack: 10, defense: 5, speed: 4, magicAttack: 8 };
+    return { maxHealth: 100, maxMana: 50, attack: 10, defense: 5, speed: 4, magicAttack: 8, baseStats: { STA: 5, STR: 5, AGI: 5, DEX: 5, SPI: 5, INT: 5 } };
   }
 
-  const totalSTA = raceData.baseStats.STA + allocatedStats.STA + (job.baseStatModifiers.STA || 0);
-  const totalSTR = raceData.baseStats.STR + allocatedStats.STR + (job.baseStatModifiers.STR || 0);
-  const totalAGI = raceData.baseStats.AGI + allocatedStats.AGI + (job.baseStatModifiers.AGI || 0);
-  const totalDEX = raceData.baseStats.DEX + allocatedStats.DEX + (job.baseStatModifiers.DEX || 0);
-  const totalSPI = raceData.baseStats.SPI + allocatedStats.SPI + (job.baseStatModifiers.SPI || 0);
-  const totalINT = raceData.baseStats.INT + allocatedStats.INT + (job.baseStatModifiers.INT || 0);
+  const baseClassId = job.baseClass === BaseClass.WARRIOR ? 0 : job.baseClass === BaseClass.SCOUT ? 1 : job.baseClass === BaseClass.ACOLYTE ? 2 : 3;
+  const jobMod = getJobBaseStatModifier(baseClassId);
+
+  const baseStats = {
+    STA: raceData.baseStats.STA + (jobMod.sta || 0),
+    STR: raceData.baseStats.STR + (jobMod.str || 0),
+    AGI: raceData.baseStats.AGI + (jobMod.agi || 0),
+    DEX: raceData.baseStats.DEX + (jobMod.dex || 0),
+    SPI: raceData.baseStats.SPI + (jobMod.spi || 0),
+    INT: raceData.baseStats.INT + (jobMod.int || 0),
+  };
+
+  const totalSTA = baseStats.STA + allocatedStats.STA;
+  const totalSTR = baseStats.STR + allocatedStats.STR;
+  const totalAGI = baseStats.AGI + allocatedStats.AGI;
+  const totalDEX = baseStats.DEX + allocatedStats.DEX;
+  const totalSPI = baseStats.SPI + allocatedStats.SPI;
+  const totalINT = baseStats.INT + allocatedStats.INT;
 
   const maxHealth = calculateMaxLP(job, level, totalSTA);
   const maxMana = calculateMaxMP(job, level, totalSPI);
@@ -50,12 +68,17 @@ export function calculateDerivedStats(
   const speed = Math.floor(30 + totalAGI * 0.5);
   const magicAttack = Math.floor(5 + totalINT * 1.5 + totalSPI * 0.3);
 
-  return { maxHealth, maxMana, attack, defense, speed, magicAttack };
+  return { maxHealth, maxMana, attack, defense, speed, magicAttack, baseStats };
 }
 
 export function getStatPointsGainedAtLevel(level: number): number {
   if (level <= 1) return 0;
-  return 3 + Math.floor(level / 5);
+  return getLevelUpBonuses(level)[0];
+}
+
+export function getSkillPointsGainedAtLevel(level: number): number {
+  if (level <= 1) return 0;
+  return getLevelUpBonuses(level)[1];
 }
 
 export { MAX_LEVEL, MAX_STAT_VALUE, getExperienceToNextLevel as getExperienceToNext };

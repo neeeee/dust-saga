@@ -62,7 +62,7 @@
 import { reactive, computed, watch } from 'vue';
 import {
   PlayerStats, StatPoints, StatType, RACE_DATA, Race,
-  JOB_DEFINITIONS, JobId, calculateDerivedStats
+  JOB_DEFINITIONS, JobId, BaseClass, calculateDerivedStats, getJobBaseStatModifier
 } from '@dust-saga/shared';
 
 const props = defineProps<{
@@ -104,7 +104,9 @@ watch(() => props.visible, (v) => {
 function getBase(key: string): number {
   const raceData = RACE_DATA[props.race as Race];
   const job = JOB_DEFINITIONS[props.jobId as JobId];
-  return (raceData?.baseStats[key as StatType] || 0) + (job?.baseStatModifiers[key as StatType] || 0);
+  const baseClassId = job?.baseClass === BaseClass.WARRIOR ? 0 : job?.baseClass === BaseClass.SCOUT ? 1 : job?.baseClass === BaseClass.ACOLYTE ? 2 : 3;
+  const jobMod = getJobBaseStatModifier(baseClassId);
+  return (raceData?.baseStats[key as StatType] || 0) + (jobMod[key] || 0);
 }
 
 function getAllocated(key: string): number {

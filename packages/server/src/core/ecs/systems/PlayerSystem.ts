@@ -4,6 +4,7 @@ import {
   calculateDerivedStats,
   getExperienceToNextLevel,
   getStatPointsGainedAtLevel,
+  getSkillPointsGainedAtLevel,
   getBaseClassForJob,
   JOB_DEFINITIONS,
   ITEM_DATABASE,
@@ -12,6 +13,11 @@ import {
   MAX_LEVEL,
   getValidSubCategoryNames,
   recalculateCategoryTotals,
+  getStatPointCost,
+  getDesignJobId,
+  getMinAdeptness,
+  createDefaultSkillProficiencies,
+  createDefaultSkillAdeptness,
 } from '@dust-saga/shared';
 
 export class PlayerSystem extends System {
@@ -38,11 +44,17 @@ export class PlayerSystem extends System {
     unspentStatPoints: number,
     unspentSkillPoints: number,
     skillProficiencies: any,
+    skillAdeptness: any,
     experience: number = 0
   ): PlayerSession {
     const baseClass = getBaseClassForJob(jobId);
     const stats = calculateDerivedStats(race as any, jobId, level, statPoints);
     const xpToNext = getExperienceToNextLevel(level);
+
+    const designJobId = getDesignJobId(jobId);
+    const adeptness = skillAdeptness
+      ? (typeof skillAdeptness === 'string' ? JSON.parse(skillAdeptness) : skillAdeptness)
+      : createDefaultSkillAdeptness(designJobId);
 
     return {
       playerId,
@@ -70,6 +82,7 @@ export class PlayerSystem extends System {
       unspentStatPoints,
       unspentSkillPoints,
       skillProficiencies,
+      skillAdeptness: adeptness,
       position: { x: 0, y: 0, z: 0 },
       rotation: { x: 0, y: 0, z: 0, w: 1 },
       zoneId: 'starter_zone',
@@ -103,7 +116,7 @@ export class PlayerSystem extends System {
 
       const gainedStatPoints = getStatPointsGainedAtLevel(session.stats.level);
       session.unspentStatPoints += gainedStatPoints;
-      session.unspentSkillPoints += 1;
+      session.unspentSkillPoints += getSkillPointsGainedAtLevel(session.stats.level);
 
       this.recalcStats(session);
 
@@ -116,7 +129,7 @@ export class PlayerSystem extends System {
 
   allocateStatPoint(session: PlayerSession, stat: StatType): boolean {
     const currentValue = session.statPoints[stat];
-    const cost = Math.ceil((currentValue + 1) / 10);
+    const [cost] = getStatPointCost(currentValue);
 
     if (session.unspentStatPoints < cost) return false;
     if (currentValue >= 99) return false;
@@ -136,6 +149,11 @@ export class PlayerSystem extends System {
 
     session.skillProficiencies[subCategoryName] = (session.skillProficiencies[subCategoryName] || 0) + count;
     session.unspentSkillPoints -= count;
+
+    if (session.skillAdeptness[subCategoryName] > session.skillProficiencies[subCategoryName]) {
+      session.skillAdeptness[subCategoryName] = session.skillProficiencies[subCategoryName];
+    }
+
     recalculateCategoryTotals(session.skillProficiencies);
     return true;
   }

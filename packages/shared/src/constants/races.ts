@@ -120,3 +120,14 @@ export function getStatPointCost(currentValue: number): [number, number] {
 
 export const MAX_LEVEL = 60;
 export const MAX_STAT_VALUE = 99;
+
+export const JOB_BASE_STAT_MODIFIERS: Record<number, Record<string, number>> = {
+  0: { STA: 2, STR: 3, AGI: -1, DEX: 1, SPI: -1, INT: 0 },
+  1: { STA: 0, STR: 2, AGI: 1, DEX: 2, SPI: -1, INT: 0 },
+  2: { STA: 0, STR: 2, AGI: -1, DEX: 0, SPI: 1, INT: 2 },
+  3: { STA: -1, STR: 1, AGI: -1, DEX: 1, SPI: 1, INT: 3 },
+};
+
+export function getJobBaseStatModifier(baseClass: number): Record<string, number> {
+  return JOB_BASE_STAT_MODIFIERS[baseClass] || JOB_BASE_STAT_MODIFIERS[0];
+}
