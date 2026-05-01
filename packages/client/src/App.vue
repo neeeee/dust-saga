@@ -455,6 +455,7 @@ onMounted(async () => {
         gameClient?.getJobId() || 'warrior',
         gameClient?.getBaseClass() || 'warrior',
         gameClient?.getUnspentSkillPoints() || 0,
+        playerStats.value?.level || 1,
       );
     },
     onInventoryUpdate: (inv, equip) => {

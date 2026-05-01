@@ -4,8 +4,73 @@ import { RACE_DATA, MAX_LEVEL, MAX_STAT_VALUE, getLevelUpBonuses, getJobBaseStat
 
 export { JobId, BaseClass, JOB_DEFINITIONS } from '../types/jobs';
 
+const XP_TO_NEXT_LEVEL: Record<number, number> = {
+  1: 18,
+  2: 50,
+  3: 126,
+  4: 270,
+  5: 506,
+  6: 858,
+  7: 1350,
+  8: 2124,
+  9: 3000,
+  10: 4092,
+  11: 5620,
+  12: 6344,
+  13: 10660,
+  14: 12032,
+  15: 15190,
+  16: 18426,
+  17: 22640,
+  18: 27434,
+  19: 32936,
+  20: 45386,
+  21: 59892,
+  22: 76144,
+  23: 94000,
+  24: 114968,
+  25: 137920,
+  26: 163232,
+  27: 190724,
+  28: 220800,
+  29: 253586,
+  30: 288860,
+  31: 458758,
+  32: 571142,
+  33: 697333,
+  34: 829384,
+  35: 977040,
+  36: 1145500,
+  37: 1327304,
+  38: 1531818,
+  39: 2000000,
+  40: 4790225,
+  41: 5365051,
+  42: 6008858,
+  43: 6729921,
+  44: 7537511,
+  45: 13306266,
+  46: 15967519,
+  47: 19161023,
+  48: 22993228,
+  49: 27591874,
+  50: 55183748,
+  51: 66220498,
+  52: 79464597,
+  53: 95357517,
+  54: 114429020,
+  55: 137314824,
+  56: 164777789,
+  57: 197733347,
+  58: 237280016,
+  59: 284736019,
+};
+
 export function getExperienceToNextLevel(level: number): number {
-  return Math.floor(100 * Math.pow(1.5, level - 1));
+  if (level < 1) return 0;
+  if (level >= 60) return Infinity;
+  if (level in XP_TO_NEXT_LEVEL) return XP_TO_NEXT_LEVEL[level];
+  return Math.floor(XP_TO_NEXT_LEVEL[54] * Math.pow(1.2, level - 54));
 }
 
 export function calculateMaxLP(job: JobDefinition, level: number, sta: number): number {

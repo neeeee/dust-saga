@@ -28,9 +28,10 @@
           >-</button>
           <button
             class="stat-plus-btn"
-            :disabled="effectiveUnspent <= 0 || getTotal(stat.key) >= 99"
+            :disabled="effectiveUnspent < getNextCost(stat.key) || getTotal(stat.key) >= 99"
             @click="addPending(stat.key)"
           >+</button>
+          <span class="cost-tag" v-if="getNextCost(stat.key) > 1">-{{ getNextCost(stat.key) }}</span>
         </div>
       </div>
 
@@ -62,7 +63,8 @@
 import { reactive, computed, watch } from 'vue';
 import {
   PlayerStats, StatPoints, StatType, RACE_DATA, Race,
-  JOB_DEFINITIONS, JobId, BaseClass, calculateDerivedStats, getJobBaseStatModifier
+  JOB_DEFINITIONS, JobId, BaseClass, calculateDerivedStats, getJobBaseStatModifier,
+  getStatPointCost
 } from '@dust-saga/shared';
 
 const props = defineProps<{
@@ -121,16 +123,40 @@ function getBarWidth(key: string): number {
   return Math.min(100, (getTotal(key) / 99) * 100);
 }
 
-const totalPending = computed(() => {
-  return Object.values(pendingPoints).reduce((s, v) => s + v, 0);
+function getNextCost(key: string): number {
+  const currentTotal = getTotal(key);
+  if (currentTotal >= 99) return Infinity;
+  const [cost] = getStatPointCost(currentTotal);
+  return cost;
+}
+
+function getPendingCost(key: string): number {
+  const allocated = props.statPoints?.[key as StatType] || 0;
+  const base = getBase(key);
+  let total = 0;
+  for (let i = 0; i < (pendingPoints[key] || 0); i++) {
+    const [cost] = getStatPointCost(base + allocated + i);
+    total += cost;
+  }
+  return total;
+}
+
+const totalPendingCost = computed(() => {
+  let total = 0;
+  for (const key of Object.keys(pendingPoints)) {
+    total += getPendingCost(key);
+  }
+  return total;
 });
 
-const effectiveUnspent = computed(() => props.unspentStatPoints - totalPending.value);
+const effectiveUnspent = computed(() => props.unspentStatPoints - totalPendingCost.value);
 
-const hasPending = computed(() => totalPending.value > 0);
+const hasPending = computed(() => totalPendingCost.value > 0);
 
 function addPending(key: string): void {
-  if (effectiveUnspent.value <= 0 || getTotal(key) >= 99) return;
+  if (getTotal(key) >= 99) return;
+  const cost = getNextCost(key);
+  if (effectiveUnspent.value < cost) return;
   pendingPoints[key] = (pendingPoints[key] || 0) + 1;
 }
 
@@ -343,6 +369,14 @@ const racialPassive = computed(() => {
 .stat-plus-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.cost-tag {
+  font-size: 0.65rem;
+  color: #ffb74d;
+  font-weight: 600;
+  min-width: 24px;
+  text-align: center;
 }
 
 .derived-stats h3 {

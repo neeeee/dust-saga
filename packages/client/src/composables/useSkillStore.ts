@@ -69,6 +69,7 @@ interface SkillStoreState {
   unspentSkillPoints: number;
   jobId: string;
   baseClass: string;
+  level: number;
 }
 
 const state = reactive<SkillStoreState>({
@@ -87,6 +88,7 @@ const state = reactive<SkillStoreState>({
   unspentSkillPoints: 0,
   jobId: 'warrior',
   baseClass: 'warrior',
+  level: 1,
 });
 
 const now = ref(Date.now());
@@ -145,12 +147,13 @@ export function useSkillStore() {
     }
   }
 
-  function updateSkillProficiencies(proficiencies: Record<string, number>, adeptness?: Record<string, number>, jobId?: string, baseClass?: string, unspentSkillPoints?: number): void {
+  function updateSkillProficiencies(proficiencies: Record<string, number>, adeptness?: Record<string, number>, jobId?: string, baseClass?: string, unspentSkillPoints?: number, level?: number): void {
     state.skillProficiencies = proficiencies || {};
     if (adeptness) state.skillAdeptness = adeptness;
     if (jobId !== undefined) state.jobId = jobId;
     if (baseClass !== undefined) state.baseClass = baseClass;
     if (unspentSkillPoints !== undefined) state.unspentSkillPoints = unspentSkillPoints;
+    if (level !== undefined) state.level = level;
     buildAvailableSkills();
   }
 
@@ -302,7 +305,7 @@ export function useSkillStore() {
       if (def.isPassive) continue;
       seen.add(name);
       let unlocked = false;
-      if (!def.reqLevel || def.reqLevel <= 0) {
+      if (!def.reqLevel || def.reqLevel <= state.level) {
         unlocked = true;
       }
       if (def.reqPoints && typeof def.reqPoints === 'number') {
