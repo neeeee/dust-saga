@@ -32,6 +32,12 @@ export interface ItemStats {
   mana?: number;
   speed?: number;
   criticalChance?: number;
+  STA?: number;
+  STR?: number;
+  AGI?: number;
+  DEX?: number;
+  SPI?: number;
+  INT?: number;
 }
 
 export interface ItemDefinition {

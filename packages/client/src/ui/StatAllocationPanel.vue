@@ -17,10 +17,15 @@
             <div class="stat-bar-fill" :style="{ width: getBarWidth(stat.key) + '%' }"></div>
           </div>
           <div class="stat-values">
-            <span class="stat-value">{{ getTotal(stat.key) }}</span>
+            <span class="stat-value">{{ getEffectiveTotal(stat.key) }}</span>
             <span class="stat-change" v-if="pendingPoints[stat.key] > 0">(+{{ pendingPoints[stat.key] }})</span>
           </div>
-          <div class="stat-base">({{ getBase(stat.key) }} + {{ getAllocated(stat.key) }})</div>
+          <div class="stat-base">
+            ({{ getBase(stat.key) }} + {{ getAllocated(stat.key) }}
+            <span v-if="getGearBonus(stat.key)" class="bonus-gear"> +{{ getGearBonus(stat.key) }}</span>
+            <span v-if="getBuffBonus(stat.key)" class="bonus-buff"> +{{ getBuffBonus(stat.key) }}</span>
+            )
+          </div>
           <button
             class="stat-minus-btn"
             :disabled="pendingPoints[stat.key] <= 0"
@@ -74,6 +79,8 @@ const props = defineProps<{
   unspentStatPoints: number;
   race: string;
   jobId: string;
+  statBreakdown: any;
+  statusEffects: any[];
 }>();
 
 const emit = defineEmits<{
@@ -119,8 +126,33 @@ function getTotal(key: string): number {
   return getBase(key) + getAllocated(key);
 }
 
+function getGearBonus(key: string): number {
+  return props.statBreakdown?.gear?.[key] || 0;
+}
+
+function getBuffBonus(key: string): number {
+  if (props.statBreakdown?.buffs?.[key]) return props.statBreakdown.buffs[key];
+  if (!props.statusEffects?.length) return 0;
+  let total = 0;
+  for (const effect of props.statusEffects) {
+    const fs = effect.buffData?.flatStats;
+    if (!fs) continue;
+    if (key === 'STA' && fs.sta) total += fs.sta;
+    if (key === 'STR' && fs.str) total += fs.str;
+    if (key === 'AGI' && fs.agi) total += fs.agi;
+    if (key === 'DEX' && fs.dex) total += fs.dex;
+    if (key === 'SPI' && fs.spi) total += fs.spi;
+    if (key === 'INT' && fs.int) total += fs.int;
+  }
+  return total;
+}
+
+function getEffectiveTotal(key: string): number {
+  return getTotal(key) + getGearBonus(key) + getBuffBonus(key);
+}
+
 function getBarWidth(key: string): number {
-  return Math.min(100, (getTotal(key) / 99) * 100);
+  return Math.min(100, (getEffectiveTotal(key) / 99) * 100);
 }
 
 function getNextCost(key: string): number {
@@ -337,6 +369,12 @@ const racialPassive = computed(() => {
   width: 75px;
   font-size: 0.7rem;
   color: #666;
+}
+.bonus-gear {
+  color: #66bb6a;
+}
+.bonus-buff {
+  color: #ffa726;
 }
 
 .stat-minus-btn {

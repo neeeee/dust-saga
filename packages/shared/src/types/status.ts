@@ -211,6 +211,32 @@ export function getEffectiveStats(
   return { attack, defense, magicAttack, maxHealth, maxMana, speed, physicalDamageReduction, dodgeBonus, accuracyBonus, castTimeReduction, attackSpeedMultiplier };
 }
 
+export interface StatBonusBreakdown {
+  gear: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number };
+  buffs: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number };
+}
+
+export function computeStatBreakdown(
+  statPoints: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number },
+  statusEffects: StatusEffect[],
+  gearBonuses: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number }
+): StatBonusBreakdown {
+  const buffs = { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+
+  for (const effect of statusEffects) {
+    const bd = effect.buffData;
+    if (!bd?.flatStats) continue;
+    if (bd.flatStats.sta) buffs.STA += bd.flatStats.sta;
+    if (bd.flatStats.str) buffs.STR += bd.flatStats.str;
+    if (bd.flatStats.agi) buffs.AGI += bd.flatStats.agi;
+    if (bd.flatStats.spi) buffs.SPI += bd.flatStats.spi;
+    if (bd.flatStats.int) buffs.INT += bd.flatStats.int;
+    if (bd.flatStats.dex) buffs.DEX += bd.flatStats.dex;
+  }
+
+  return { gear: { ...gearBonuses }, buffs };
+}
+
 export function resolveLapisMediowBuff(
   spiValues: SpiValueTier[],
   casterSpi: number,

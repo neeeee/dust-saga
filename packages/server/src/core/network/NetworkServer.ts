@@ -657,7 +657,8 @@ export class NetworkServer {
         unspentStatPoints: session.unspentStatPoints,
         unspentSkillPoints: session.unspentSkillPoints,
         skillProficiencies: session.skillProficiencies,
-          skillAdeptness: session.skillAdeptness
+          skillAdeptness: session.skillAdeptness,
+          statBreakdown: session.statBreakdown
       }
     });
 
@@ -2184,6 +2185,7 @@ export class NetworkServer {
           unspentSkillPoints: session.unspentSkillPoints,
           skillProficiencies: session.skillProficiencies,
           skillAdeptness: session.skillAdeptness,
+          statBreakdown: session.statBreakdown,
         }
       });
     }

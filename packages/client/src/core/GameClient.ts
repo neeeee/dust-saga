@@ -16,7 +16,7 @@ import {
 
 export interface GameCallbacks {
   onStatsUpdate: (stats: PlayerStats) => void;
-  onStatPointsUpdate: (statPoints: StatPoints | null, unspentStatPoints: number, unspentSkillPoints: number) => void;
+  onStatPointsUpdate: (statPoints: StatPoints | null, unspentStatPoints: number, unspentSkillPoints: number, statBreakdown?: any) => void;
   onSkillProficienciesUpdate: (skillProficiencies: any, skillAdeptness?: any) => void;
   onInventoryUpdate: (inventory: any, equipment: any) => void;
   onQuestUpdate: (quests: any) => void;
@@ -57,6 +57,7 @@ export class GameClient {
   private unspentSkillPoints: number = 0;
   private skillProficiencies: any = null;
   private skillAdeptness: any = null;
+  private statBreakdown: any = null;
   private currentJobId: string = 'warrior';
   private currentBaseClass: string = 'warrior';
   private currentZoneId: string | null = null;
@@ -242,8 +243,9 @@ export class GameClient {
         this.skillAdeptness = data.skillAdeptness || null;
         this.callbacks.onSkillProficienciesUpdate?.(data.skillProficiencies, data.skillAdeptness);
       }
+      if (data.statBreakdown) this.statBreakdown = data.statBreakdown;
       this.callbacks.onStatsUpdate?.(data.stats);
-      this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints);
+      this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints, this.statBreakdown);
       this.callbacks.onInventoryUpdate?.(data.inventory, data.equipment);
       this.callbacks.onQuestUpdate?.(data.quests);
     });
@@ -406,7 +408,7 @@ export class GameClient {
         this.statPoints = data.statPoints;
         this.unspentStatPoints = data.unspentStatPoints ?? this.unspentStatPoints;
         this.unspentSkillPoints = data.unspentSkillPoints ?? this.unspentSkillPoints;
-        this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints);
+        this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints, this.statBreakdown);
       }
       if (data.skillProficiencies && data.characterId === this.playerId) {
         this.skillProficiencies = data.skillProficiencies;
@@ -478,7 +480,7 @@ export class GameClient {
         this.statPoints = data.statPoints;
         this.unspentStatPoints = data.unspentStatPoints ?? this.unspentStatPoints;
         this.unspentSkillPoints = data.unspentSkillPoints ?? this.unspentSkillPoints;
-        this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints);
+        this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints, this.statBreakdown);
       }
       this.callbacks.onLevelUp?.(data.level);
     });

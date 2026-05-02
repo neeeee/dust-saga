@@ -1,5 +1,6 @@
 import { StatPoints, StatType, createDefaultStatPoints } from './races';
 import { JobId, SkillProficiencies, createDefaultSkillProficiencies, BaseClass } from './jobs';
+import { BuffData, StatBonusBreakdown } from './status';
 import { SkillCooldownEntry, ActiveCast } from './skills';
 import { StatusEffect } from './status';
 
@@ -43,6 +44,7 @@ export interface PlayerSession {
   skillCooldowns: SkillCooldownEntry[];
   activeCast: ActiveCast | null;
   statusEffects: StatusEffect[];
+  statBreakdown: StatBonusBreakdown | null;
   inventory: Array<{
     itemId: string;
     quantity: number;

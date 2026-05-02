@@ -19,10 +19,33 @@ import {
   createDefaultSkillProficiencies,
   createDefaultSkillAdeptness,
   getEffectiveStats,
+  computeStatBreakdown,
 } from '@dust-saga/shared';
 
 export class PlayerSystem extends System {
   private levelUpCallbacks: Array<(playerId: string, newLevel: number) => void> = [];
+
+  private getGearBonuses(session: PlayerSession) {
+    const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+    for (const slot of Object.values(session.equipment)) {
+      if (!slot) continue;
+      const def = ITEM_DATABASE[slot.itemId];
+      if (!def) continue;
+      const s = def.stats;
+      if (s.attack) bonuses.attack += s.attack;
+      if (s.defense) bonuses.defense += s.defense;
+      if (s.health) bonuses.health += s.health;
+      if (s.mana) bonuses.mana += s.mana;
+      if (s.speed) bonuses.speed += s.speed;
+      if (s.STA) bonuses.STA += s.STA;
+      if (s.STR) bonuses.STR += s.STR;
+      if (s.AGI) bonuses.AGI += s.AGI;
+      if (s.DEX) bonuses.DEX += s.DEX;
+      if (s.SPI) bonuses.SPI += s.SPI;
+      if (s.INT) bonuses.INT += s.INT;
+    }
+    return bonuses;
+  }
 
   constructor(entityManager: EntityManager) {
     super(entityManager);
@@ -95,6 +118,7 @@ export class PlayerSystem extends System {
       skillCooldowns: [],
       activeCast: null,
       statusEffects: [],
+      statBreakdown: null,
       inventory: [],
       equipment: {
         weapon: null,
@@ -177,26 +201,37 @@ export class PlayerSystem extends System {
   }
 
   recalcStats(session: PlayerSession): void {
+    const gear = this.getGearBonuses(session);
+
+    const effectiveStatPoints = {
+      STA: session.statPoints.STA + gear.STA,
+      STR: session.statPoints.STR + gear.STR,
+      AGI: session.statPoints.AGI + gear.AGI,
+      DEX: session.statPoints.DEX + gear.DEX,
+      SPI: session.statPoints.SPI + gear.SPI,
+      INT: session.statPoints.INT + gear.INT,
+    };
+
     const derived = calculateDerivedStats(
       session.race as any,
       session.jobId,
       session.stats.level,
-      session.statPoints
+      effectiveStatPoints
     );
     session.baseStats = derived.baseStats;
     const healthRatio = session.stats.maxHealth > 0 ? session.stats.health / session.stats.maxHealth : 1;
     const manaRatio = session.stats.maxMana > 0 ? session.stats.mana / session.stats.maxMana : 1;
 
-    session.stats.maxHealth = derived.maxHealth;
-    session.stats.maxMana = derived.maxMana;
-    session.stats.attack = derived.attack;
-    session.stats.defense = derived.defense;
-    session.stats.speed = derived.speed;
+    session.stats.maxHealth = derived.maxHealth + gear.health;
+    session.stats.maxMana = derived.maxMana + gear.mana;
+    session.stats.attack = derived.attack + gear.attack;
+    session.stats.defense = derived.defense + gear.defense;
+    session.stats.speed = derived.speed + gear.speed;
     session.stats.magicAttack = derived.magicAttack;
 
     const effective = getEffectiveStats(
       session.stats,
-      session.statPoints,
+      effectiveStatPoints,
       session.statusEffects || []
     );
     session.stats.attack = effective.attack;
@@ -208,6 +243,8 @@ export class PlayerSystem extends System {
 
     session.stats.health = Math.floor(effective.maxHealth * healthRatio);
     session.stats.mana = Math.floor(effective.maxMana * manaRatio);
+
+    session.statBreakdown = computeStatBreakdown(session.statPoints, session.statusEffects || [], gear);
   }
 
   healPlayer(session: PlayerSession): void {
@@ -271,11 +308,7 @@ export class PlayerSystem extends System {
     session.equipment[slot] = { itemId, quantity: 1, slot: 0 };
     session.inventory = session.inventory.filter(s => s.itemId !== itemId);
 
-    if (itemDef.stats.attack) session.stats.attack += itemDef.stats.attack;
-    if (itemDef.stats.defense) session.stats.defense += itemDef.stats.defense;
-    if (itemDef.stats.health) session.stats.maxHealth += itemDef.stats.health;
-    if (itemDef.stats.mana) session.stats.maxMana += itemDef.stats.mana;
-
+    this.recalcStats(session);
     return true;
   }
 
@@ -283,17 +316,9 @@ export class PlayerSystem extends System {
     const equipped = session.equipment[slot];
     if (!equipped) return false;
 
-    const itemDef = ITEM_DATABASE[equipped.itemId];
-
-    if (itemDef) {
-      if (itemDef.stats.attack) session.stats.attack -= itemDef.stats.attack;
-      if (itemDef.stats.defense) session.stats.defense -= itemDef.stats.defense;
-      if (itemDef.stats.health) session.stats.maxHealth -= itemDef.stats.health;
-      if (itemDef.stats.mana) session.stats.maxMana -= itemDef.stats.mana;
-    }
-
     this.addItemToInventory(session, equipped.itemId, 1);
     session.equipment[slot] = null;
+    this.recalcStats(session);
     return true;
   }
 

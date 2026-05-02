@@ -115,6 +115,8 @@
         :unspent-stat-points="playerUnspentStatPoints"
         :race="playerRace"
         :job-id="playerJobId"
+        :stat-breakdown="playerStatBreakdown"
+        :status-effects="playerStatusEffects"
         @close="showStatPanel = false"
         @allocate="handleAllocateStat"
         @allocate-batch="handleAllocateBatch"
@@ -232,6 +234,7 @@ const showStatPanel = ref(false);
 const playerStatPoints = ref<StatPoints | null>(null);
 const playerUnspentStatPoints = ref(0);
 const playerUnspentSkillPoints = ref(0);
+const playerStatBreakdown = ref<any>(null);
 const playerRace = ref('');
 const playerJobId = ref('');
 const showSkillWindow = ref(false);
@@ -443,10 +446,11 @@ onMounted(async () => {
     onStatsUpdate: (stats) => {
       playerStats.value = stats;
     },
-    onStatPointsUpdate: (sp, unspent, unspentSkill) => {
+    onStatPointsUpdate: (sp, unspent, unspentSkill, breakdown) => {
       playerStatPoints.value = sp;
       playerUnspentStatPoints.value = unspent;
       playerUnspentSkillPoints.value = unspentSkill;
+      if (breakdown) playerStatBreakdown.value = breakdown;
     },
     onSkillProficienciesUpdate: (proficiencies, adeptness) => {
       skillStore.updateSkillProficiencies(

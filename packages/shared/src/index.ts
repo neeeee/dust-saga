@@ -8,6 +8,7 @@ export * from './types/races';
 export * from './types/jobs';
 export * from './types/skills';
 export * from './types/status';
+export type { StatBonusBreakdown } from './types/status';
 export * from './constants/game';
 export * from './constants/classes';
 export * from './constants/items';
