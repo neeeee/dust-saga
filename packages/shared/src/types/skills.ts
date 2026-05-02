@@ -1,3 +1,5 @@
+import type { BuffEffectTable } from './status';
+
 export enum SkillCategoryId {
   MELEE = 0,
   TECHNIQUE = 6,
@@ -56,7 +58,7 @@ export interface SkillDefinition {
   aoeTargetMode?: AOETargetMode;
   aoeRadius?: number;
   range?: number;
-  buffEffectTable?: Record<string, any>;
+  buffEffectTable?: BuffEffectTable;
 }
 
 export interface SkillSubCategory {
@@ -85,7 +87,7 @@ export interface ClassSpecificSkill {
   aoeTargetMode?: AOETargetMode;
   aoeRadius?: number;
   range?: number;
-  buffEffectTable?: Record<string, any>;
+  buffEffectTable?: BuffEffectTable;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;

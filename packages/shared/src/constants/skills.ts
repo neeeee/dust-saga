@@ -1196,7 +1196,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 1,
             cooldown: 1.5,
             duration: 120,
-            description: "Physical damage reduction on all party members in range",
+            buffEffectTable: {
+              physicalDamageReduction: 'formula:(10 + blessing / 5) / 100',
+            },
+            description: "Physical damage reduction on all party members in range. Reduction based on caster's Blessing proficiency",
             isAOE: true,
           },
           "Aqua Elimus": {

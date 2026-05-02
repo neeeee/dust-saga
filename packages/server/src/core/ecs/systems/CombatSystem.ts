@@ -1,5 +1,5 @@
 import { EntityManager, System } from '../EntityManager';
-import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage } from '@dust-saga/shared';
+import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats } from '@dust-saga/shared';
 
 export class CombatSystem extends System {
   private damageCallbacks: Array<(info: DamageInfo) => void> = [];
@@ -48,7 +48,12 @@ export class CombatSystem extends System {
       if (player) {
         targetHealth = player.stats.health;
         targetMaxHealth = player.stats.maxHealth;
-        targetDefense = player.stats.defense;
+        const playerEffective = getEffectiveStats(
+          player.stats,
+          player.statPoints,
+          player.statusEffects || []
+        );
+        targetDefense = playerEffective.defense;
         targetPosition = player.position;
       } else {
         return null;
@@ -60,12 +65,22 @@ export class CombatSystem extends System {
     const dist = Math.sqrt(dx * dx + dz * dz);
     if (dist > COMBAT_CONFIG.ATTACK_RANGE) return null;
 
-    const attackPower = attacker.stats.attack;
+    const effective = getEffectiveStats(
+      attacker.stats,
+      attacker.statPoints,
+      attacker.statusEffects || []
+    );
+    const attackPower = effective.attack;
+
     const isCritical = Math.random() < applyRacialCritChance(attacker.race, COMBAT_CONFIG.CRITICAL_CHANCE);
     let damage = Math.max(
       COMBAT_CONFIG.MIN_DAMAGE,
       attackPower - targetDefense * COMBAT_CONFIG.DAMAGE_REDUCTION_PER_DEFENSE * 10
     );
+
+    if (effective.physicalDamageReduction > 0 && isEnemy && enemyRef) {
+      damage = Math.floor(damage * (1 - Math.min(0.9, effective.physicalDamageReduction)));
+    }
 
     if (isCritical) {
       damage = Math.floor(damage * COMBAT_CONFIG.CRITICAL_MULTIPLIER);
@@ -113,10 +128,19 @@ export class CombatSystem extends System {
 
     const attackPower = def?.attack || 5;
     const isCritical = Math.random() < 0.05;
+    const targetEffective = getEffectiveStats(
+      target.stats,
+      target.statPoints,
+      target.statusEffects || []
+    );
     let damage = Math.max(
       COMBAT_CONFIG.MIN_DAMAGE,
-      attackPower - target.stats.defense * COMBAT_CONFIG.DAMAGE_REDUCTION_PER_DEFENSE * 10
+      attackPower - targetEffective.defense * COMBAT_CONFIG.DAMAGE_REDUCTION_PER_DEFENSE * 10
     );
+
+    if (targetEffective.physicalDamageReduction > 0) {
+      damage = Math.floor(damage * (1 - Math.min(0.9, targetEffective.physicalDamageReduction)));
+    }
 
     if (isCritical) {
       damage = Math.floor(damage * COMBAT_CONFIG.CRITICAL_MULTIPLIER);

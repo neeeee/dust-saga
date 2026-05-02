@@ -10,7 +10,8 @@ import {
   REGEN_CONFIG, SKILL_TARGET_RULES, SkillTargetType,
   PartyVisibility, LootRule, MAX_LOOT_POOL,
   GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
-  StatusEffectType
+  StatusEffectType,
+  getEffectiveStats,
 } from '@dust-saga/shared';
 import { AuthManager } from '../auth/AuthManager';
 import { CombatSystem } from '../ecs/systems/CombatSystem';
@@ -810,18 +811,22 @@ export class NetworkServer {
       }
       const player = this.state.players.get(id);
       if (player) {
+        const eff = getEffectiveStats(
+          player.stats,
+          player.statPoints,
+          player.statusEffects || []
+        );
         return {
-          defense: player.stats.defense,
-          magicDefense: Math.floor(player.stats.defense * 0.3),
+          defense: eff.defense,
+          magicDefense: Math.floor(eff.defense * 0.3),
           health: player.stats.health,
           level: player.stats.level,
-          dodge: player.statPoints.AGI
+          dodge: player.statPoints.AGI + eff.dodgeBonus
         };
       }
       return null;
-    };
-
-    const result = this.skillSys.executeSkill(session, skillName, targetId || null, getTargetStats);
+    };    const result = this.skillSys.executeSkill(session, skillName, targetId || null, getTargetStats);
+    this.playerSys.recalcStats(session);
 
     this.sendToPlayer(characterId, {
       type: PacketType.COOLDOWN_UPDATE,
@@ -861,11 +866,17 @@ export class NetworkServer {
       if (shouldApplyToTarget) {
         const targetSession = this.state.players.get(targetId);
         if (targetSession) {
-          this.skillSys.applyBuffToTarget(targetSession, session.characterId, skill);
+          this.skillSys.applyBuffToTarget(targetSession, session.characterId, skill, session);
+          this.playerSys.recalcStats(targetSession);
           this.sendToPlayer(targetId, {
             type: PacketType.STATUS_EFFECT_UPDATE,
             timestamp: Date.now(),
             data: { effects: targetSession.statusEffects }
+          });
+          this.sendToPlayer(targetId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: targetId, stats: targetSession.stats }
           });
           this.broadcastEntityEffects(targetSession);
         }
@@ -899,11 +910,17 @@ export class NetworkServer {
           if (memberSession.zoneId !== session.zoneId) continue;
 
           if (skill.duration > 0) {
-            this.skillSys.applyBuffToTarget(memberSession, session.characterId, skill);
+            this.skillSys.applyBuffToTarget(memberSession, session.characterId, skill, session);
+            this.playerSys.recalcStats(memberSession);
             this.sendToPlayer(memberId, {
               type: PacketType.STATUS_EFFECT_UPDATE,
               timestamp: Date.now(),
               data: { effects: memberSession.statusEffects }
+            });
+            this.sendToPlayer(memberId, {
+              type: PacketType.STATS_UPDATE,
+              timestamp: Date.now(),
+              data: { characterId: memberId, stats: memberSession.stats }
             });
             this.broadcastEntityEffects(memberSession);
           }
@@ -1163,18 +1180,21 @@ export class NetworkServer {
       }
       const player = this.state.players.get(id);
       if (player) {
+        const eff = getEffectiveStats(
+          player.stats,
+          player.statPoints,
+          player.statusEffects || []
+        );
         return {
-          defense: player.stats.defense,
-          magicDefense: Math.floor(player.stats.defense * 0.3),
+          defense: eff.defense,
+          magicDefense: Math.floor(eff.defense * 0.3),
           health: player.stats.health,
           level: player.stats.level,
-          dodge: player.statPoints.AGI
+          dodge: player.statPoints.AGI + eff.dodgeBonus
         };
       }
       return null;
-    };
-
-    const skill = this.skillSys.findSkillDefinition(skillName);
+    };    const skill = this.skillSys.findSkillDefinition(skillName);
     const aoeRadius = skill?.aoeRadius || DEFAULT_AOE_RADIUS;
 
     const firstTarget = this.findClosestEntityToPosition(
@@ -1183,6 +1203,7 @@ export class NetworkServer {
     const firstTargetId = firstTarget?.id || null;
 
     const result = this.skillSys.executeSkill(session, skillName, firstTargetId, getTargetStats);
+    this.playerSys.recalcStats(session);
 
     this.sendToPlayer(characterId, {
       type: PacketType.COOLDOWN_UPDATE,
@@ -1415,24 +1436,28 @@ export class NetworkServer {
       }
       const player = this.state.players.get(id);
       if (player) {
+        const eff = getEffectiveStats(
+          player.stats,
+          player.statPoints,
+          player.statusEffects || []
+        );
         return {
-          defense: player.stats.defense,
-          magicDefense: Math.floor(player.stats.defense * 0.3),
+          defense: eff.defense,
+          magicDefense: Math.floor(eff.defense * 0.3),
           health: player.stats.health,
           level: player.stats.level,
-          dodge: player.statPoints.AGI
+          dodge: player.statPoints.AGI + eff.dodgeBonus
         };
       }
       return null;
-    };
-
-    const skill = this.skillSys.findSkillDefinition(skillName);
+    };    const skill = this.skillSys.findSkillDefinition(skillName);
     const aoeRadius = skill?.aoeRadius || DEFAULT_AOE_RADIUS;
 
     const firstTarget = this.findClosestEntityToPosition(session, aoePosition, aoeRadius);
     const firstTargetId = firstTarget?.id || null;
 
     const result = this.skillSys.executeSkill(session, skillName, firstTargetId, getTargetStats);
+    this.playerSys.recalcStats(session);
 
     this.sendToPlayer(characterId, {
       type: PacketType.COOLDOWN_UPDATE,
@@ -2551,6 +2576,7 @@ export class NetworkServer {
         };
 
         const result = this.skillSys.executeSkill(session, castResult.skillName, castResult.targetId, getTargetStats);
+        this.playerSys.recalcStats(session);
 
         this.sendToPlayer(session.characterId, {
           type: PacketType.COOLDOWN_UPDATE,
@@ -2717,11 +2743,17 @@ export class NetworkServer {
             if (shouldApply) {
               const tSession = this.state.players.get(castResult.targetId);
               if (tSession) {
-                this.skillSys.applyBuffToTarget(tSession, session.characterId, castSkill);
+                this.skillSys.applyBuffToTarget(tSession, session.characterId, castSkill, session);
+                this.playerSys.recalcStats(tSession);
                 this.sendToPlayer(castResult.targetId, {
                   type: PacketType.STATUS_EFFECT_UPDATE,
                   timestamp: Date.now(),
                   data: { effects: tSession.statusEffects }
+                });
+                this.sendToPlayer(castResult.targetId, {
+                  type: PacketType.STATS_UPDATE,
+                  timestamp: Date.now(),
+                  data: { characterId: castResult.targetId, stats: tSession.stats }
                 });
                 this.broadcastEntityEffects(tSession);
               }
@@ -2737,11 +2769,17 @@ export class NetworkServer {
               if (memberSession.zoneId !== session.zoneId) continue;
 
               if (castSkill.duration > 0) {
-                this.skillSys.applyBuffToTarget(memberSession, session.characterId, castSkill);
+                this.skillSys.applyBuffToTarget(memberSession, session.characterId, castSkill, session);
+                this.playerSys.recalcStats(memberSession);
                 this.sendToPlayer(memberId, {
                   type: PacketType.STATUS_EFFECT_UPDATE,
                   timestamp: Date.now(),
                   data: { effects: memberSession.statusEffects }
+                });
+                this.sendToPlayer(memberId, {
+                  type: PacketType.STATS_UPDATE,
+                  timestamp: Date.now(),
+                  data: { characterId: memberId, stats: memberSession.stats }
                 });
                 this.broadcastEntityEffects(memberSession);
               }
@@ -2811,6 +2849,7 @@ export class NetworkServer {
           }
         }
         if (tick.expired.length > 0) {
+          this.playerSys.recalcStats(session);
           this.sendToPlayer(session.characterId, {
             type: PacketType.STATS_UPDATE,
             timestamp: Date.now(),

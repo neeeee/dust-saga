@@ -18,6 +18,7 @@ import {
   getMinAdeptness,
   createDefaultSkillProficiencies,
   createDefaultSkillAdeptness,
+  getEffectiveStats,
 } from '@dust-saga/shared';
 
 export class PlayerSystem extends System {
@@ -191,8 +192,20 @@ export class PlayerSystem extends System {
     session.stats.speed = derived.speed;
     session.stats.magicAttack = derived.magicAttack;
 
-    session.stats.health = Math.floor(derived.maxHealth * healthRatio);
-    session.stats.mana = Math.floor(derived.maxMana * manaRatio);
+    const effective = getEffectiveStats(
+      session.stats,
+      session.statPoints,
+      session.statusEffects || []
+    );
+    session.stats.attack = effective.attack;
+    session.stats.defense = effective.defense;
+    session.stats.magicAttack = effective.magicAttack;
+    session.stats.maxHealth = effective.maxHealth;
+    session.stats.maxMana = effective.maxMana;
+    session.stats.speed = effective.speed;
+
+    session.stats.health = Math.floor(effective.maxHealth * healthRatio);
+    session.stats.mana = Math.floor(effective.maxMana * manaRatio);
   }
 
   healPlayer(session: PlayerSession): void {

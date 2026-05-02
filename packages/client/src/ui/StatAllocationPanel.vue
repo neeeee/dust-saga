@@ -166,6 +166,16 @@ function removePending(key: string): void {
 }
 
 const currentDerived = computed(() => {
+  if (props.stats) {
+    return {
+      maxHealth: props.stats.maxHealth,
+      maxMana: props.stats.maxMana,
+      attack: props.stats.attack,
+      defense: props.stats.defense,
+      speed: props.stats.speed,
+      magicAttack: props.stats.magicAttack,
+    };
+  }
   return calculateDerivedStats(props.race as Race, props.jobId as JobId, props.stats?.level || 1, props.statPoints || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 });
 });
 

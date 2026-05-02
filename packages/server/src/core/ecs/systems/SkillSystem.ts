@@ -2,7 +2,9 @@ import {
   PlayerSession, SkillDefinition, SkillCooldownEntry, ActiveCast,
   isPassiveSkill, meetsRequirements, getRequiredProficiency,
   COMBAT_CONFIG, StatusEffect, StatusEffectType, STATUS_EFFECT_DEFS,
-  SKILL_TARGET_RULES, SkillTargetType
+  SKILL_TARGET_RULES, SkillTargetType,
+  BuffData, resolveLapisMediowBuff, resolveGreenSongBuff,
+  getEffectiveStats,
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
 import { CLASS_SPECIFIC_SKILLS, getClassSpecificSkillsForJob } from '@dust-saga/shared';
@@ -175,11 +177,12 @@ export class SkillSystem {
 
     const castSpd = 100 + Math.floor(session.statPoints.DEX / 10) * 5;
 
-    let castTimeMultiplier = 100;
-    const castSpeedBuff = session.statusEffects?.find(e => e.type === StatusEffectType.BUFF_CAST_SPEED);
-    if (castSpeedBuff) {
-      castTimeMultiplier = Math.floor(castTimeMultiplier * (100 - castSpeedBuff.potency * 100) / 100);
-    }
+    const effective = getEffectiveStats(
+      session.stats,
+      session.statPoints,
+      session.statusEffects || []
+    );
+    const castTimeMultiplier = Math.max(0, 100 - effective.castTimeReduction * 100);
 
     const effectiveCastTime = Math.max(0, Math.floor(baseCastTime * (100 / castSpd) * (castTimeMultiplier / 100)));
 
@@ -309,7 +312,12 @@ export class SkillSystem {
       return { success: true, damage: 0, missed: true, damageType };
     }
 
-    let attackStat = isMagical ? session.stats.magicAttack : session.stats.attack;
+    const effective = getEffectiveStats(
+      session.stats,
+      session.statPoints,
+      session.statusEffects || []
+    );
+    let attackStat = isMagical ? effective.magicAttack : effective.attack;
     const attackBuff = session.statusEffects?.find(e => e.type === StatusEffectType.BUFF_ATTACK);
     if (attackBuff && !isMagical) {
       attackStat = Math.floor(attackStat * attackBuff.potency);
@@ -324,6 +332,10 @@ export class SkillSystem {
       (attackStat * 1.5 + primaryStat * 1.0 + secondaryStat * 0.3) * skillPower
       - defenseStat * 0.6
     );
+
+    if (!isMagical && effective.physicalDamageReduction > 0) {
+      damage = Math.floor(damage * (1 - Math.min(0.9, effective.physicalDamageReduction)));
+    }
 
     const critChance = COMBAT_CONFIG.CRITICAL_CHANCE + session.statPoints.DEX * 0.002;
     const isCritical = Math.random() < critChance;
@@ -448,45 +460,141 @@ export class SkillSystem {
   }
 
   private applyBuff(session: PlayerSession, skill: SkillDefinition): void {
-    this.applyBuffToTarget(session, session.characterId, skill);
+    this.applyBuffToTarget(session, session.characterId, skill, session);
   }
 
-  applyBuffToTarget(target: PlayerSession, sourceId: string, skill: SkillDefinition): void {
+  applyBuffToTarget(
+    target: PlayerSession,
+    sourceId: string,
+    skill: SkillDefinition,
+    casterSession?: PlayerSession | null
+  ): void {
     const now = Date.now();
-    const desc = skill.description.toLowerCase();
-    let effectType = StatusEffectType.BUFF_GENERIC;
-    let potency = 0;
     const duration = (skill.duration || 300) * 1000;
-    const bt = skill.buffEffectTable || (skill as any).buffEffectTable;
+    const bt = skill.buffEffectTable;
 
-    if (bt?.attackPowerMultiplier) {
-      effectType = StatusEffectType.BUFF_ATTACK;
-      potency = bt.attackPowerMultiplier;
-    } else if (desc.includes('defense') || desc.includes('defensive')) {
-      effectType = StatusEffectType.BUFF_DEFENSE;
-    } else if (desc.includes('cast time') || desc.includes('cast speed')) {
-      effectType = StatusEffectType.BUFF_CAST_SPEED;
-      potency = bt?.castTime ? Math.abs(bt.castTime) / 100 : 0.5;
-    } else if (desc.includes('increase lp') || desc.includes('max hp') || desc.includes('base lp')) {
-      effectType = StatusEffectType.BUFF_MAX_HP;
-    } else if (desc.includes('mp regen') || desc.includes('mana regen')) {
-      effectType = StatusEffectType.BUFF_MP_REGEN;
+    const effects: StatusEffect[] = [];
+    const pushEffect = (type: StatusEffectType, potency: number, buffData?: BuffData) => {
+      target.statusEffects = target.statusEffects.filter(e => !(e.skillName === skill.name && e.type === type));
+      effects.push({
+        id: `buff_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${type}`,
+        type,
+        sourceId,
+        targetId: target.characterId,
+        potency,
+        appliedAt: now,
+        duration,
+        tickInterval: 0,
+        lastTickAt: now,
+        stacks: 1,
+        skillName: skill.name,
+        buffData,
+      });
+    };
+
+    if (!bt) {
+      if (effects.length === 0) {
+        const desc = skill.description.toLowerCase();
+        let effectType = StatusEffectType.BUFF_GENERIC;
+        if (desc.includes('defense')) effectType = StatusEffectType.BUFF_DEFENSE;
+        pushEffect(effectType, 0);
+      }
+      target.statusEffects.push(...effects);
+      return;
     }
 
-    target.statusEffects = target.statusEffects.filter(e => e.skillName !== skill.name);
-    target.statusEffects.push({
-      id: `buff_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      type: effectType,
-      sourceId,
-      targetId: target.characterId,
-      potency,
-      appliedAt: now,
-      duration,
-      tickInterval: 0,
-      lastTickAt: now,
-      stacks: 1,
-      skillName: skill.name,
-    });
+    if (bt.attackPowerMultiplier) {
+      pushEffect(StatusEffectType.BUFF_ATTACK, bt.attackPowerMultiplier);
+    }
+
+    if (bt.def) {
+      pushEffect(StatusEffectType.BUFF_DEFENSE, 0, { flatDefense: bt.def });
+    }
+
+    if (bt.str || bt.agi || bt.int || bt.spi || bt.dex || bt.sta) {
+      pushEffect(StatusEffectType.BUFF_STAT, 0, {
+        flatStats: {
+          str: bt.str || 0,
+          agi: bt.agi || 0,
+          int: bt.int || 0,
+          spi: bt.spi || 0,
+          dex: bt.dex || 0,
+          sta: bt.sta || 0,
+        },
+      });
+    }
+
+    if (bt.castTime) {
+      const reduction = Math.abs(bt.castTime) / 100;
+      pushEffect(StatusEffectType.BUFF_CAST_SPEED, reduction);
+    }
+
+    if (bt.maxHp) {
+      pushEffect(StatusEffectType.BUFF_MAX_HP, 0, { maxHpFlat: bt.maxHp });
+    }
+
+    if (bt.mpRegen) {
+      pushEffect(StatusEffectType.BUFF_MP_REGEN, bt.mpRegen);
+    }
+
+    if (bt.physicalDamageReduction) {
+      let reductionPercent = 0;
+      if (bt.physicalDamageReduction.startsWith('formula:')) {
+        const formula = bt.physicalDamageReduction.replace('formula:', '');
+        const blessing = casterSession
+          ? (casterSession.skillProficiencies?.['Blessing'] || 0)
+          : (target.skillProficiencies?.['Blessing'] || 0);
+        const expr = formula
+          .replace(/blessing/g, String(blessing));
+        try {
+          reductionPercent = eval(expr);
+        } catch {
+          reductionPercent = 0.1;
+        }
+      } else {
+        const parsed = parseFloat(bt.physicalDamageReduction);
+        if (!isNaN(parsed)) reductionPercent = parsed;
+      }
+      pushEffect(StatusEffectType.BUFF_PHYSICAL_REDUC, reductionPercent);
+    }
+
+    if (bt.dodgeChance) {
+      pushEffect(StatusEffectType.BUFF_DODGE, bt.dodgeChance);
+    }
+
+    if (bt.accuracy) {
+      pushEffect(StatusEffectType.BUFF_ACCURACY, bt.accuracy);
+    }
+
+    if (bt.attackSpeed) {
+      pushEffect(StatusEffectType.BUFF_ATTACK_SPEED, bt.attackSpeed / 100);
+    }
+
+    if (bt.spiValues) {
+      const casterSpi = casterSession ? casterSession.statPoints.SPI : target.statPoints.SPI;
+      const casterBlessing = casterSession
+        ? (casterSession.skillProficiencies?.['Blessing'] || 0)
+        : (target.skillProficiencies?.['Blessing'] || 0);
+      const skillName = skill.name.toLowerCase();
+
+      if (skillName === 'lapis mediow') {
+        const result = resolveLapisMediowBuff(bt.spiValues, casterSpi, casterBlessing);
+        if (result) {
+          pushEffect(StatusEffectType.BUFF_DEFENSE, 0, { flatDefense: result.def });
+        }
+      } else if (skillName === 'green song') {
+        const result = resolveGreenSongBuff(bt.spiValues, casterSpi, casterBlessing);
+        if (result) {
+          pushEffect(StatusEffectType.BUFF_DODGE, result.dodgeChance);
+        }
+      }
+    }
+
+    if (effects.length === 0) {
+      return;
+    }
+
+    target.statusEffects.push(...effects);
   }
 
   updateCooldowns(session: PlayerSession): void {
