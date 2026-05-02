@@ -111,12 +111,12 @@ export function calculateDerivedStats(
   const jobMod = getJobBaseStatModifier(baseClassId);
 
   const baseStats = {
-    STA: raceData.baseStats.STA + (jobMod.sta || 0),
-    STR: raceData.baseStats.STR + (jobMod.str || 0),
-    AGI: raceData.baseStats.AGI + (jobMod.agi || 0),
-    DEX: raceData.baseStats.DEX + (jobMod.dex || 0),
-    SPI: raceData.baseStats.SPI + (jobMod.spi || 0),
-    INT: raceData.baseStats.INT + (jobMod.int || 0),
+    STA: raceData.baseStats.STA + (jobMod.STA || 0),
+    STR: raceData.baseStats.STR + (jobMod.STR || 0),
+    AGI: raceData.baseStats.AGI + (jobMod.AGI || 0),
+    DEX: raceData.baseStats.DEX + (jobMod.DEX || 0),
+    SPI: raceData.baseStats.SPI + (jobMod.SPI || 0),
+    INT: raceData.baseStats.INT + (jobMod.INT || 0),
   };
 
   const totalSTA = baseStats.STA + allocatedStats.STA;

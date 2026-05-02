@@ -1,5 +1,6 @@
 import { StatPoints, StatType } from './races';
 import { getMinAdeptness, ALL_SUB_CATEGORIES } from '../constants/jobSkillValues';
+import { PROFICIENCY_CONFIG } from '../constants/game';
 
 export enum BaseClass {
   WARRIOR = 'warrior',
@@ -126,6 +127,51 @@ export function createDefaultSkillAdeptness(designJobId: number): SkillProficien
 
 export function getValidSubCategoryNames(): string[] {
   return [...ALL_SUB_CATEGORY_NAMES];
+}
+
+export interface ProficiencyGainResult {
+  gained: boolean;
+  subCategory: string;
+  amount: number;
+  newAdeptness: number;
+  cap: number;
+}
+
+export function calculateProficiencyGain(
+  currentAdeptness: number,
+  maxProficiency: number,
+  hasCastTime: boolean
+): ProficiencyGainResult | null {
+  if (maxProficiency <= 0 || currentAdeptness >= maxProficiency) {
+    return null;
+  }
+
+  const ratio = currentAdeptness / maxProficiency;
+  let gain: number;
+
+  if (ratio < PROFICIENCY_CONFIG.TIER_1_RATIO) {
+    gain = PROFICIENCY_CONFIG.TIER_1_GAIN_MIN
+      + Math.random() * (PROFICIENCY_CONFIG.TIER_1_GAIN_MAX - PROFICIENCY_CONFIG.TIER_1_GAIN_MIN);
+  } else if (ratio < PROFICIENCY_CONFIG.TIER_2_RATIO) {
+    gain = PROFICIENCY_CONFIG.TIER_2_GAIN;
+  } else {
+    gain = PROFICIENCY_CONFIG.TIER_3_GAIN;
+  }
+
+  if (!hasCastTime) {
+    gain *= PROFICIENCY_CONFIG.INSTANT_CAST_MULTIPLIER;
+  }
+
+  gain = Math.round(gain * 100) / 100;
+  const newAdeptness = Math.min(currentAdeptness + gain, maxProficiency);
+
+  return {
+    gained: true,
+    subCategory: '',
+    amount: Math.round((newAdeptness - currentAdeptness) * 100) / 100,
+    newAdeptness,
+    cap: maxProficiency,
+  };
 }
 
 export interface CharacterInfo {

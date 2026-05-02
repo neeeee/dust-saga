@@ -5,9 +5,19 @@ import {
   SKILL_TARGET_RULES, SkillTargetType,
   BuffData, resolveLapisMediowBuff, resolveGreenSongBuff,
   getEffectiveStats,
+  recalculateCategoryTotals, calculateProficiencyGain, ProficiencyGainResult,
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
 import { CLASS_SPECIFIC_SKILLS, getClassSpecificSkillsForJob } from '@dust-saga/shared';
+
+const SKILL_TO_SUBCATEGORY: Record<string, string> = {};
+for (const category of Object.values(CLASS_SKILL_DATA)) {
+  for (const subSkill of category.skills) {
+    for (const skillName of Object.keys(subSkill.skills)) {
+      SKILL_TO_SUBCATEGORY[skillName] = subSkill.name;
+    }
+  }
+}
 
 export interface TargetStats {
   defense: number;
@@ -42,6 +52,30 @@ interface SkillClassification {
 export class SkillSystem {
   private gcd: number = 1000;
   private globalCooldowns: Map<string, number> = new Map();
+  lastBuffDebug: string | undefined;
+  lastProficiencyGain: ProficiencyGainResult | undefined;
+
+  gainProficiency(session: PlayerSession, skillName: string): ProficiencyGainResult | null {
+    const subCategory = SKILL_TO_SUBCATEGORY[skillName];
+    if (!subCategory) return null;
+
+    const skill = this.findSkillDefinition(skillName);
+    if (!skill) return null;
+
+    const cap = session.skillProficiencies[subCategory] || 0;
+    const current = session.skillAdeptness[subCategory] || 0;
+    const hasCastTime = (skill.castTime || 0) > 0.1;
+
+    const result = calculateProficiencyGain(current, cap, hasCastTime);
+    if (!result) return null;
+
+    session.skillAdeptness[subCategory] = result.newAdeptness;
+    recalculateCategoryTotals(session.skillAdeptness);
+
+    result.subCategory = subCategory;
+    this.lastProficiencyGain = result;
+    return result;
+  }
 
   private classifySkill(skill: SkillDefinition): SkillClassification {
     const desc = skill.description.toLowerCase();
@@ -223,6 +257,8 @@ export class SkillSystem {
 
     this.globalCooldowns.set(session.characterId, now + this.gcd);
     session.activeCast = null;
+
+    this.gainProficiency(session, skillName);
 
     if (skill.duration > 0 && !isPassiveSkill(skill)) {
       const targetType = SKILL_TARGET_RULES[skillName];
@@ -542,8 +578,8 @@ export class SkillSystem {
       if (bt.physicalDamageReduction.startsWith('formula:')) {
         const formula = bt.physicalDamageReduction.replace('formula:', '');
         const blessing = casterSession
-          ? (casterSession.skillProficiencies?.['Blessing'] || 0)
-          : (target.skillProficiencies?.['Blessing'] || 0);
+          ? (casterSession.skillAdeptness?.['Blessing'] || 0)
+          : (target.skillAdeptness?.['Blessing'] || 0);
         const expr = formula
           .replace(/blessing/g, String(blessing));
         try {
@@ -571,19 +607,21 @@ export class SkillSystem {
     }
 
     if (bt.spiValues) {
-      const casterSpi = casterSession ? casterSession.statPoints.SPI : target.statPoints.SPI;
+      const totalSpi = (casterSession?.baseStats?.SPI || 0) + (casterSession?.statPoints?.SPI || target.statPoints.SPI || 0);
+      const totalTargetSpi = target.baseStats?.SPI + target.statPoints.SPI;
       const casterBlessing = casterSession
-        ? (casterSession.skillProficiencies?.['Blessing'] || 0)
-        : (target.skillProficiencies?.['Blessing'] || 0);
+        ? (casterSession.skillAdeptness?.['Blessing'] || 0)
+        : (target.skillAdeptness?.['Blessing'] || 0);
       const skillName = skill.name.toLowerCase();
 
       if (skillName === 'lapis mediow') {
-        const result = resolveLapisMediowBuff(bt.spiValues, casterSpi, casterBlessing);
+        const result = resolveLapisMediowBuff(bt.spiValues, totalSpi, casterBlessing);
         if (result) {
           pushEffect(StatusEffectType.BUFF_DEFENSE, 0, { flatDefense: result.def });
+          this.lastBuffDebug = `[Lapis Mediow] SPI=${totalSpi} (${casterSession?.baseStats?.SPI || 0} base + ${casterSession?.statPoints?.SPI || 0} alloc) Blessing=${casterBlessing}/${casterSession?.skillProficiencies?.['Blessing'] || 0} baseDef=${target.stats.defense} +${result.def} def`;
         }
       } else if (skillName === 'green song') {
-        const result = resolveGreenSongBuff(bt.spiValues, casterSpi, casterBlessing);
+        const result = resolveGreenSongBuff(bt.spiValues, totalSpi, casterBlessing);
         if (result) {
           pushEffect(StatusEffectType.BUFF_DODGE, result.dodgeChance);
         }

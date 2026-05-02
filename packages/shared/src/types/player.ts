@@ -28,6 +28,7 @@ export interface PlayerSession {
   baseClass: BaseClass;
   stats: PlayerStats;
   statPoints: StatPoints;
+  baseStats: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number };
   unspentStatPoints: number;
   unspentSkillPoints: number;
   skillProficiencies: SkillProficiencies;

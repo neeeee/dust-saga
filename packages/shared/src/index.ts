@@ -22,7 +22,9 @@ export {
   getCategoryTotal,
   recalculateCategoryTotals,
   getValidSubCategoryNames,
+  calculateProficiencyGain,
 } from './types/jobs';
+export type { ProficiencyGainResult } from './types/jobs';
 export { CLASS_SPECIFIC_SKILLS, JOB_TO_CLASS_SKILLS_INDEX, getClassSpecificSkillsForJob } from './constants/classSkills';
 export { JOB_SKILL_VALUES, getJobSkillValues, getMinAdeptness, getMaxPotential, getDesignJobId, DESIGN_JOB_IDS } from './constants/jobSkillValues';
 export * from './types/skillBar';

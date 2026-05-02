@@ -828,6 +828,30 @@ export class NetworkServer {
     };    const result = this.skillSys.executeSkill(session, skillName, targetId || null, getTargetStats);
     this.playerSys.recalcStats(session);
 
+    if (this.skillSys.lastProficiencyGain) {
+      const pg = this.skillSys.lastProficiencyGain;
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+      });
+      this.sendToPlayer(characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
+      });
+      this.skillSys.lastProficiencyGain = undefined;
+    }
+
+    if (this.skillSys.lastBuffDebug) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'Debug', message: this.skillSys.lastBuffDebug, channel: 'system' }
+      });
+      this.skillSys.lastBuffDebug = undefined;
+    }
+
     this.sendToPlayer(characterId, {
       type: PacketType.COOLDOWN_UPDATE,
       timestamp: Date.now(),
@@ -868,6 +892,14 @@ export class NetworkServer {
         if (targetSession) {
           this.skillSys.applyBuffToTarget(targetSession, session.characterId, skill, session);
           this.playerSys.recalcStats(targetSession);
+          if (this.skillSys.lastBuffDebug) {
+            this.sendToPlayer(characterId, {
+              type: PacketType.CHAT_MESSAGE,
+              timestamp: Date.now(),
+              data: { sender: 'Debug', message: this.skillSys.lastBuffDebug, channel: 'system' }
+            });
+            this.skillSys.lastBuffDebug = undefined;
+          }
           this.sendToPlayer(targetId, {
             type: PacketType.STATUS_EFFECT_UPDATE,
             timestamp: Date.now(),
@@ -912,6 +944,14 @@ export class NetworkServer {
           if (skill.duration > 0) {
             this.skillSys.applyBuffToTarget(memberSession, session.characterId, skill, session);
             this.playerSys.recalcStats(memberSession);
+            if (this.skillSys.lastBuffDebug) {
+              this.sendToPlayer(characterId, {
+                type: PacketType.CHAT_MESSAGE,
+                timestamp: Date.now(),
+                data: { sender: 'Debug', message: this.skillSys.lastBuffDebug, channel: 'system' }
+              });
+              this.skillSys.lastBuffDebug = undefined;
+            }
             this.sendToPlayer(memberId, {
               type: PacketType.STATUS_EFFECT_UPDATE,
               timestamp: Date.now(),
@@ -1205,6 +1245,21 @@ export class NetworkServer {
     const result = this.skillSys.executeSkill(session, skillName, firstTargetId, getTargetStats);
     this.playerSys.recalcStats(session);
 
+    if (this.skillSys.lastProficiencyGain) {
+      const pg = this.skillSys.lastProficiencyGain;
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+      });
+      this.sendToPlayer(characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
+      });
+      this.skillSys.lastProficiencyGain = undefined;
+    }
+
     this.sendToPlayer(characterId, {
       type: PacketType.COOLDOWN_UPDATE,
       timestamp: Date.now(),
@@ -1458,6 +1513,21 @@ export class NetworkServer {
 
     const result = this.skillSys.executeSkill(session, skillName, firstTargetId, getTargetStats);
     this.playerSys.recalcStats(session);
+
+    if (this.skillSys.lastProficiencyGain) {
+      const pg = this.skillSys.lastProficiencyGain;
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+      });
+      this.sendToPlayer(characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
+      });
+      this.skillSys.lastProficiencyGain = undefined;
+    }
 
     this.sendToPlayer(characterId, {
       type: PacketType.COOLDOWN_UPDATE,
@@ -2578,6 +2648,30 @@ export class NetworkServer {
         const result = this.skillSys.executeSkill(session, castResult.skillName, castResult.targetId, getTargetStats);
         this.playerSys.recalcStats(session);
 
+        if (this.skillSys.lastProficiencyGain) {
+          const pg = this.skillSys.lastProficiencyGain;
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: session.characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+          });
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.CHAT_MESSAGE,
+            timestamp: Date.now(),
+            data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
+          });
+          this.skillSys.lastProficiencyGain = undefined;
+        }
+
+        if (this.skillSys.lastBuffDebug) {
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.CHAT_MESSAGE,
+            timestamp: Date.now(),
+            data: { sender: 'Debug', message: this.skillSys.lastBuffDebug, channel: 'system' }
+          });
+          this.skillSys.lastBuffDebug = undefined;
+        }
+
         this.sendToPlayer(session.characterId, {
           type: PacketType.COOLDOWN_UPDATE,
           timestamp: Date.now(),
@@ -2745,6 +2839,14 @@ export class NetworkServer {
               if (tSession) {
                 this.skillSys.applyBuffToTarget(tSession, session.characterId, castSkill, session);
                 this.playerSys.recalcStats(tSession);
+                if (this.skillSys.lastBuffDebug) {
+                  this.sendToPlayer(session.characterId, {
+                    type: PacketType.CHAT_MESSAGE,
+                    timestamp: Date.now(),
+                    data: { sender: 'Debug', message: this.skillSys.lastBuffDebug, channel: 'system' }
+                  });
+                  this.skillSys.lastBuffDebug = undefined;
+                }
                 this.sendToPlayer(castResult.targetId, {
                   type: PacketType.STATUS_EFFECT_UPDATE,
                   timestamp: Date.now(),
@@ -2771,6 +2873,14 @@ export class NetworkServer {
               if (castSkill.duration > 0) {
                 this.skillSys.applyBuffToTarget(memberSession, session.characterId, castSkill, session);
                 this.playerSys.recalcStats(memberSession);
+                if (this.skillSys.lastBuffDebug) {
+                  this.sendToPlayer(session.characterId, {
+                    type: PacketType.CHAT_MESSAGE,
+                    timestamp: Date.now(),
+                    data: { sender: 'Debug', message: this.skillSys.lastBuffDebug, channel: 'system' }
+                  });
+                  this.skillSys.lastBuffDebug = undefined;
+                }
                 this.sendToPlayer(memberId, {
                   type: PacketType.STATUS_EFFECT_UPDATE,
                   timestamp: Date.now(),

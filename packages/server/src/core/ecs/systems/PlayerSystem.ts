@@ -80,6 +80,7 @@ export class PlayerSystem extends System {
         experienceToNext: xpToNext
       },
       statPoints,
+      baseStats: stats.baseStats,
       unspentStatPoints,
       unspentSkillPoints,
       skillProficiencies,
@@ -182,6 +183,7 @@ export class PlayerSystem extends System {
       session.stats.level,
       session.statPoints
     );
+    session.baseStats = derived.baseStats;
     const healthRatio = session.stats.maxHealth > 0 ? session.stats.health / session.stats.maxHealth : 1;
     const manaRatio = session.stats.maxMana > 0 ? session.stats.mana / session.stats.maxMana : 1;
 
