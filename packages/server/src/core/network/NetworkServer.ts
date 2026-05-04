@@ -456,6 +456,10 @@ export class NetworkServer {
           this.handlePartyCreateRequest(socket, packet.data);
           break;
 
+        case PacketType.PARTY_INVITE_REQUEST:
+          this.handlePartyInviteRequest(socket, packet.data);
+          break;
+
         case PacketType.PARTY_JOIN_REQUEST:
           this.handlePartyJoinRequest(socket, packet.data);
           break;
@@ -886,7 +890,6 @@ export class NetworkServer {
       const targetType = SKILL_TARGET_RULES[skillName];
       const shouldApplyToTarget = !targetType
         || targetType === SkillTargetType.SELF_OR_TARGET
-        || targetType === SkillTargetType.PARTY
         || targetType === SkillTargetType.OTHER_ONLY;
       if (shouldApplyToTarget) {
         const targetSession = this.state.players.get(targetId);
@@ -1651,19 +1654,10 @@ export class NetworkServer {
   }
 
   private broadcastEntityEffects(session: PlayerSession): void {
-    const visibleEffects = session.statusEffects.filter(e =>
-      e.type !== StatusEffectType.BUFF_DEFENSE &&
-      e.type !== StatusEffectType.BUFF_CAST_SPEED &&
-      e.type !== StatusEffectType.BUFF_MAX_HP &&
-      e.type !== StatusEffectType.BUFF_MP_REGEN &&
-      e.type !== StatusEffectType.BUFF_ATTACK &&
-      e.type !== StatusEffectType.BUFF_GENERIC &&
-      e.type !== StatusEffectType.HASTE
-    );
     this.broadcastInZone(session.zoneId, {
       type: PacketType.ENTITY_STATUS_EFFECTS,
       timestamp: Date.now(),
-      data: { entityId: session.characterId, effects: visibleEffects }
+      data: { entityId: session.characterId, effects: session.statusEffects }
     }, session.characterId);
   }
 
@@ -1768,6 +1762,7 @@ export class NetworkServer {
         timestamp: Date.now(),
         data: { level: session.stats.level, statPoints: session.statPoints, unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints }
       });
+      this.refreshPartyForMember(session.characterId);
     } else if (cmd === '/resetstats') {
       const spentStatPoints = Object.values(session.statPoints).reduce((sum, v) => sum + v, 0);
       session.statPoints = createDefaultStatPoints();
@@ -1785,6 +1780,7 @@ export class NetworkServer {
         data: { characterId: session.characterId, stats: session.stats, statPoints: session.statPoints, unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints, skillProficiencies: session.skillProficiencies,
           skillAdeptness: session.skillAdeptness }
       });
+      this.refreshPartyForMember(session.characterId);
     } else if (cmd === '/advance') {
       if (!parts[1]) {
         const options = getAdvancementOptions(session.jobId as JobId);
@@ -1838,6 +1834,7 @@ export class NetworkServer {
           data: { characterId: session.characterId, stats: session.stats, statPoints: session.statPoints, unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints, skillProficiencies: session.skillProficiencies,
             skillAdeptness: session.skillAdeptness, jobId: session.jobId, baseClass: session.baseClass }
         });
+        this.refreshPartyForMember(session.characterId);
       } else {
         const requiredLevel = targetDef?.tier === 2 ? 20 : targetDef?.tier === 3 ? 40 : 1;
         this.sendToPlayer(session.characterId, {
@@ -2277,6 +2274,65 @@ export class NetworkServer {
         settings: party.settings,
         memberCount: party.members.length
       }
+    });
+  }
+
+  private handlePartyInviteRequest(socket: Socket, data: any): void {
+    const characterId = this.findCharacterBySocket(socket.id);
+    if (!characterId) return;
+
+    const session = this.state.players.get(characterId);
+    if (!session) return;
+
+    const targetId = data.targetId;
+    if (!targetId || targetId === characterId) return;
+
+    const targetSession = this.state.players.get(targetId);
+    if (!targetSession) return;
+
+    const party = this.partySys.getPartyForMember(characterId);
+    if (!party || party.leaderId !== characterId) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: 'Only the party leader can invite members.', type: 'error' }
+      });
+      return;
+    }
+
+    if (this.partySys.getPartyForMemberOf(targetId)) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: 'Target is already in a party.', type: 'error' }
+      });
+      return;
+    }
+
+    if (party.members.length >= this.partySys.getMaxPartySize()) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: 'Party is full.', type: 'error' }
+      });
+      return;
+    }
+
+    this.sendToPlayer(targetId, {
+      type: PacketType.PARTY_INVITE,
+      timestamp: Date.now(),
+      data: {
+        partyId: party.partyId,
+        leaderName: session.characterName,
+        settings: party.settings,
+        memberCount: party.members.length
+      }
+    });
+
+    this.sendToPlayer(characterId, {
+      type: PacketType.NOTIFICATION,
+      timestamp: Date.now(),
+      data: { message: `Invitation sent to ${targetSession.characterName}.`, type: 'success' }
     });
   }
 

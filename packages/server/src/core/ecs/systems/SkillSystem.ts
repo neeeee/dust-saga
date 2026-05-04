@@ -264,8 +264,10 @@ export class SkillSystem {
       const targetType = SKILL_TARGET_RULES[skillName];
       if (!targetType || targetType === SkillTargetType.SELF) {
         this.applyBuff(session, skill);
+      } else if (targetType === SkillTargetType.PARTY) {
+        this.applyBuff(session, skill);
       } else if (
-        (targetType === SkillTargetType.SELF_OR_TARGET || targetType === SkillTargetType.PARTY)
+        targetType === SkillTargetType.SELF_OR_TARGET
         && (!targetId || targetId === session.characterId)
       ) {
         this.applyBuff(session, skill);
@@ -285,7 +287,7 @@ export class SkillSystem {
       return { success: true, healing: healAmount };
     }
 
-    if (classification.increasesMaxHp) {
+    if (classification.increasesMaxHp && (!targetId || targetId === session.characterId)) {
       const hpIncrease = this.calculateMaxHpBuff(session, skill);
       const healthRatio = session.stats.maxHealth > 0 ? session.stats.health / session.stats.maxHealth : 1;
       session.stats.maxHealth += hpIncrease;

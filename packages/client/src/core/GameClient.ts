@@ -865,6 +865,10 @@ export class GameClient {
     this.network.sendPacket({ type: PacketType.PARTY_CREATE_REQUEST, timestamp: Date.now(), data: { targetId, visibility, lootRule } });
   }
 
+  sendPartyInviteRequest(targetId: string): void {
+    this.network.sendPacket({ type: PacketType.PARTY_INVITE_REQUEST, timestamp: Date.now(), data: { targetId } });
+  }
+
   sendPartyJoin(partyId: string): void {
     this.network.sendPacket({ type: PacketType.PARTY_JOIN_REQUEST, timestamp: Date.now(), data: { partyId, accept: true } });
   }

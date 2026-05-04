@@ -389,7 +389,12 @@ function handleSkillBarKey(slotIndex: number) {
 
 function handlePartyAction(targetIdStr: string) {
   if (partyData.value) {
-    showNotification('You are already in a party. Leave first.', 'error');
+    if (partyData.value.leaderId !== gameClient?.getPlayerId()) {
+      showNotification('Only the party leader can invite members.', 'error');
+      return;
+    }
+    if (!gameClient) return;
+    gameClient.sendPartyInviteRequest(targetIdStr);
     return;
   }
   partyCreateTargetId.value = targetIdStr;
@@ -542,6 +547,7 @@ onMounted(async () => {
     },
     onStatusEffects: (effects) => {
       playerStatusEffects.value = effects;
+      entityStatusEffects.value = { ...entityStatusEffects.value, [gameClient?.getPlayerId() || '']: effects };
     },
     onEntityStatusEffects: (entityId, effects) => {
       entityStatusEffects.value = { ...entityStatusEffects.value, [entityId]: effects };

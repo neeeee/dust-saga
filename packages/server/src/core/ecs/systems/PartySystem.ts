@@ -289,6 +289,10 @@ export class PartySystem {
     this.lootPool.delete(partyId);
   }
 
+  getMaxPartySize(): number {
+    return MAX_PARTY_SIZE;
+  }
+
   handleDisconnect(characterId: string): { party: PartyData; removedId: string; newLeader?: string } | null {
     return this.leaveParty(characterId);
   }

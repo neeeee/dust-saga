@@ -887,6 +887,14 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 120,
       description: "Increase MP regen for party",
     },
+    "Divine Aid": {
+      reqLevel: 28,
+      mpCost: 89,
+      castTime: 4,
+      cooldown: 1.54,
+      duration: 480,
+      description: "Increase LP for party, 15% of base LP + 250",
+    },
     "Revive": {
       reqLevel: 35,
       mpCost: 65,
