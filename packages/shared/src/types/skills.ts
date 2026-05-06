@@ -1,4 +1,5 @@
 import type { BuffEffectTable } from './status';
+import type { DebuffEffectTable } from '../constants/debuffs';
 
 export enum SkillCategoryId {
   MELEE = 0,
@@ -58,7 +59,13 @@ export interface SkillDefinition {
   aoeTargetMode?: AOETargetMode;
   aoeRadius?: number;
   range?: number;
+  isBuff?: boolean;
+  isDebuff?: boolean;
+  hasDebuff?: boolean;
+  selfBuffOnly?: boolean;
   buffEffectTable?: BuffEffectTable;
+  debuffEffectTable?: DebuffEffectTable;
+  debuffDuration?: number;
 }
 
 export interface SkillSubCategory {
@@ -87,7 +94,13 @@ export interface ClassSpecificSkill {
   aoeTargetMode?: AOETargetMode;
   aoeRadius?: number;
   range?: number;
+  isBuff?: boolean;
+  isDebuff?: boolean;
+  hasDebuff?: boolean;
+  selfBuffOnly?: boolean;
   buffEffectTable?: BuffEffectTable;
+  debuffEffectTable?: DebuffEffectTable;
+  debuffDuration?: number;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;
@@ -179,6 +192,14 @@ export const SKILL_TARGET_RULES: Record<string, SkillTargetType> = {
 
   'Saltio': SkillTargetType.OTHER_ONLY,
   'Devotion': SkillTargetType.OTHER_ONLY,
+  'Poison': SkillTargetType.OTHER_ONLY,
+  'Mind Venom': SkillTargetType.OTHER_ONLY,
+  'Weakness': SkillTargetType.OTHER_ONLY,
+  'Weaken': SkillTargetType.OTHER_ONLY,
+  'Undermine': SkillTargetType.OTHER_ONLY,
+  'Impedimentia': SkillTargetType.OTHER_ONLY,
+  'Tangled Fingers': SkillTargetType.OTHER_ONLY,
+  'Befuddle': SkillTargetType.OTHER_ONLY,
 };
 
 export function isPassiveSkill(skill: SkillDefinition): boolean {

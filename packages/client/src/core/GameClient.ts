@@ -315,6 +315,8 @@ export class GameClient {
     this.network.onPacket(PacketType.ENTITY_SPAWN, async (packet: any) => {
       const { id, type, position, data } = packet.data;
 
+      this.callbacks.onEntityStatusEffects?.(id, []);
+
       if (this.zoneLoading) {
         this.pendingSpawns.push({ id, type, position, data });
         return;

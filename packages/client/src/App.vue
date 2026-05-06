@@ -542,6 +542,9 @@ onMounted(async () => {
         not_found: 'Skill not found',
         dead: 'You are dead',
         cc: 'Cannot cast while crowd controlled',
+        no_target: 'Select a target first',
+        no_self_target: 'Cannot target yourself',
+        self_only: 'This skill can only target yourself',
       };
       showNotification(messages[error] || `Cannot use skill: ${error}`, 'error');
     },

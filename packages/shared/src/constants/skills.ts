@@ -109,6 +109,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 20,
             duration: 120,
+            isBuff: true,
             description: "Increased accuracy of next attack",
           },
           "Brutal Strike": {
@@ -326,6 +327,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 120,
             duration: 60,
             description: "Increased critical hit rate (axe)",
+            isBuff: true,
           },
           "Split": {
             name: "Split",
@@ -507,6 +509,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 30,
             duration: 120,
             description: "Increase critical hit resistance, lowers dodge",
+            isBuff: true,
           },
           "Auto-guard": {
             name: "Auto-guard",
@@ -516,6 +519,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 30,
             duration: 120,
             description: "Chance to reduce damage taken (shield)",
+            isBuff: true,
           },
           "Shield Charge": {
             name: "Shield Charge",
@@ -534,6 +538,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 5,
             duration: 0,
             description: "Move while blocking",
+            isBuff: true,
           },
           "Guardian": {
             name: "Guardian",
@@ -543,6 +548,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 10,
             duration: 300,
             description: "Take all damage for a party member",
+            isBuff: true,
           },
           "Eternal Dirge": {
             name: "Eternal Dirge",
@@ -572,6 +578,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 30,
             duration: 0,
             description: "Ranged attack with a chance to burn (bow, crossbow)",
+            // added hasDebuff property for skills with chance to debuff enemy
+            // in this case, burn
+            // burn cuts target atk in half
+            hasDebuff: true,
           },
           "Cobra Arrow": {
             name: "Cobra Arrow",
@@ -581,6 +591,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 30,
             duration: 0,
             description: "Ranged attack with a chance to poison (bow, crossbow)",
+            // added hasDebuff property for skills with chance to debuff enemy
+            // in this case, poison
+            hasDebuff: true,
           },
           "Arrow Rain": {
             name: "Arrow Rain",
@@ -624,6 +637,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 10,
             duration: 0,
             description: "Silence target (bow)",
+            hasDebuff: true, // silence: can't cast spells. melee skills still work
           },
           "Arrow Storm": {
             name: "Arrow Storm",
@@ -686,6 +700,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 10,
             duration: 120,
             description: "Coat weapon with poison",
+            // added isBuff property. toxify, bless weapon, gloom, all buff weapons.
+            isBuff: true,
+            selfBuffOnly: true,
           },
           "Serum": {
             name: "Serum",
@@ -713,6 +730,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 0,
             duration: 150,
             description: "Strike to reduce target's casting speed",
+            isDebuff: true,
+            debuffEffectTable: {
+              castSpeedDown: 0.15,
+            },
           },
           "Toxic Aura (Passive)": {
             name: "Toxic Aura (Passive)",
@@ -957,6 +978,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 30,
             duration: 30,
             description: "Reduce target's accuracy",
+            isDebuff: true,
+            debuffEffectTable: {
+              accuracyDown: 0.15,
+            },
           },
           "Reinforce (Passive)": {
             name: "Reinforce (Passive)",
@@ -1188,6 +1213,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 10,
             duration: 10,
             description: "Reduce target's movement speed",
+            isDebuff: true,
+            debuffEffectTable: {
+              speedDown: 0.15,
+            },
           },
           "Group Barrier": {
             name: "Group Barrier",
@@ -1730,6 +1759,13 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 5,
             duration: 60,
             description: "Poison the target, dealing damage over time",
+            isDebuff: true,
+            debuffDuration: 60,
+            debuffEffectTable: {
+              dot: 'poison',
+              dotPotency: 5,
+              dotTickInterval: 2000,
+            },
           },
           "Gloom": {
             name: "Gloom",
@@ -1739,6 +1775,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 10,
             duration: 120,
             description: "Embue weapon with dark aura, damaging yourself with recoil",
+            isBuff: true,
+            selfBuffOnly: true,
           },
           "Blood Drain": {
             name: "Blood Drain",
@@ -1757,6 +1795,14 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 10,
             duration: 0,
             description: "Poison the target's mind, dealing damage over time",
+            isDebuff: true,
+            debuffDuration: 30,
+            debuffEffectTable: {
+              dot: 'severe_poison',
+              dotPotency: 8,
+              dotTickInterval: 3000,
+              dotMpDrain: 5,
+            },
           },
           "Dispel": {
             name: "Dispel",
@@ -1775,6 +1821,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 3.5,
             duration: 20,
             description: "Reduce dark damage taken, greatly reducing charm resistance",
+            isBuff: true,
           },
           "Undermine": {
             name: "Undermine",
@@ -1784,6 +1831,12 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 10,
             duration: 0,
             description: "Increase damage of the next attack on target",
+            isDebuff: true,
+            debuffDuration: 8,
+            debuffEffectTable: {
+              damageTakenUp: 0.25,
+              consumable: true,
+            },
           },
           "Pestilence": {
             name: "Pestilence",
@@ -1794,6 +1847,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 0,
             description: "Deal poison damage to all enemies in range",
             isAOE: true,
+            hasDebuff: true, // hits 3 times in the area. poisons on any of the 3 attack ticks
+            debuffDuration: 10,
           },
           "Equalize (Passive)": {
             name: "Equalize (Passive)",
@@ -1814,6 +1869,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 6,
             description: "Summon darkness from the abyss to damage all enemies in range",
             isAOE: true,
+            hasDebuff: true, // weaken: set all hit target elemental resistances to 0.
+            // 50 lightning res -> 0.
+            debuffDuration: 6, // seconds
           },
           "Ramkyado": {
             name: "Ramkyado",
@@ -1860,6 +1918,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 5,
             duration: 120,
             description: "Reduce target's attack",
+            isDebuff: true,
+            debuffEffectTable: {
+              attackDown: 0.15,
+            },
           },
           "Sandstorm": {
             name: "Sandstorm",
@@ -1887,6 +1949,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 5,
             duration: 120,
             description: "Reduce target's defense",
+            isDebuff: true,
+            debuffEffectTable: {
+              defenseDown: 0.15,
+            },
           },
           "Impede": {
             name: "Impede",

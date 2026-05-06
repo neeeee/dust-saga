@@ -6,6 +6,7 @@ import {
   BuffData, resolveLapisMediowBuff, resolveGreenSongBuff,
   getEffectiveStats,
   recalculateCategoryTotals, calculateProficiencyGain, ProficiencyGainResult,
+  DebuffEffectTable,
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
 import { CLASS_SPECIFIC_SKILLS, getClassSpecificSkillsForJob } from '@dust-saga/shared';
@@ -25,6 +26,8 @@ export interface TargetStats {
   health: number;
   level: number;
   dodge: number;
+  damageTakenMultiplier?: number;
+  physicalDamageReduction?: number;
 }
 
 export interface SkillUseResult {
@@ -107,7 +110,7 @@ export class SkillSystem {
       'ramkyado', 'dagger throw', 'backstab', 'pierce armor',
     ];
 
-    const dealsDamage = !heals && !restoresMp && skill.mpCost > 0
+    const dealsDamage = !heals && !restoresMp && skill.mpCost > 0 && !skill.buffEffectTable && !skill.debuffEffectTable
       && (damageWords.some(w => desc.includes(w) || name.includes(w))
         || skill.damageType === 'magical'
         || skill.damageType === 'physical');
@@ -186,7 +189,10 @@ export class SkillSystem {
           return { canUse: false, error: 'self_only' };
         }
       } else if (targetType === SkillTargetType.OTHER_ONLY) {
-        if (!targetId || targetId === session.characterId) {
+        if (!targetId) {
+          return { canUse: false, error: 'no_target' };
+        }
+        if (targetId === session.characterId) {
           return { canUse: false, error: 'no_self_target' };
         }
       }
@@ -260,7 +266,7 @@ export class SkillSystem {
 
     this.gainProficiency(session, skillName);
 
-    if (skill.duration > 0 && !isPassiveSkill(skill)) {
+    if (skill.duration > 0 && !isPassiveSkill(skill) && !skill.debuffEffectTable) {
       const targetType = SKILL_TARGET_RULES[skillName];
       if (!targetType || targetType === SkillTargetType.SELF) {
         this.applyBuff(session, skill);
@@ -272,6 +278,14 @@ export class SkillSystem {
       ) {
         this.applyBuff(session, skill);
       }
+    }
+
+    if (skill.debuffEffectTable) {
+      const debuffEffects = this.buildDebuffEffects(session, skill);
+      return {
+        success: true,
+        statusEffects: debuffEffects.length > 0 ? debuffEffects : undefined,
+      };
     }
 
     const classification = this.classifySkill(skill);
@@ -371,8 +385,8 @@ export class SkillSystem {
       - defenseStat * 0.6
     );
 
-    if (!isMagical && effective.physicalDamageReduction > 0) {
-      damage = Math.floor(damage * (1 - Math.min(0.9, effective.physicalDamageReduction)));
+    if (!isMagical && target.physicalDamageReduction && target.physicalDamageReduction > 0) {
+      damage = Math.floor(damage * (1 - Math.min(0.9, target.physicalDamageReduction)));
     }
 
     const critChance = COMBAT_CONFIG.CRITICAL_CHANCE + session.statPoints.DEX * 0.002;
@@ -391,6 +405,10 @@ export class SkillSystem {
     damage = Math.floor(damage * (0.9 + Math.random() * 0.2));
     damage = Math.max(COMBAT_CONFIG.MIN_DAMAGE, damage);
 
+    if (target.damageTakenMultiplier && target.damageTakenMultiplier > 1) {
+      damage = Math.floor(damage * target.damageTakenMultiplier);
+    }
+
     const statusEffects = this.buildStatusEffects(session, skill, damage);
 
     return {
@@ -406,7 +424,7 @@ export class SkillSystem {
     const desc = skill.description.toLowerCase();
     const effects: StatusEffect[] = [];
 
-    const addEffect = (type: StatusEffectType, potency: number) => {
+    const addEffect = (type: StatusEffectType, potency: number, extra?: Partial<StatusEffect>) => {
       const def = STATUS_EFFECT_DEFS[type];
       if (def) {
         effects.push({
@@ -419,7 +437,8 @@ export class SkillSystem {
           duration: def.duration,
           tickInterval: def.tickInterval,
           lastTickAt: Date.now(),
-          stacks: 1
+          stacks: 1,
+          ...extra,
         });
       }
     };
@@ -433,6 +452,85 @@ export class SkillSystem {
     if (desc.includes('root') || desc.includes('tangled') || (desc.includes('bind') && !desc.includes('bind criminal'))) addEffect(StatusEffectType.ROOT, 0);
     if (desc.includes('silence')) addEffect(StatusEffectType.SILENCE, 0);
     if (desc.includes('slow') && !desc.includes('freeze') && !desc.includes('frozen')) addEffect(StatusEffectType.SLOW, 0.3);
+
+    return effects;
+  }
+
+  buildDebuffEffects(casterSession: PlayerSession, skill: SkillDefinition): StatusEffect[] {
+    const dt = skill.debuffEffectTable!;
+    const effects: StatusEffect[] = [];
+    const now = Date.now();
+    const duration = (skill.debuffDuration || skill.duration || 30) * 1000;
+
+    const addEffect = (type: StatusEffectType, potency: number, extra?: Partial<StatusEffect>) => {
+      const def = STATUS_EFFECT_DEFS[type];
+      if (def) {
+        effects.push({
+          id: `debuff_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${type}`,
+          type,
+          sourceId: casterSession.characterId,
+          targetId: '',
+          potency,
+          appliedAt: now,
+          duration,
+          tickInterval: def.tickInterval,
+          lastTickAt: now,
+          stacks: 1,
+          skillName: skill.name,
+          ...extra,
+        });
+      }
+    };
+
+    if (dt.dot) {
+      const tickInterval = dt.dotTickInterval || 2000;
+      let statusType: StatusEffectType;
+
+      switch (dt.dot) {
+        case 'poison':
+          statusType = StatusEffectType.POISON;
+          break;
+        case 'severe_poison':
+          statusType = StatusEffectType.SEVERE_POISON;
+          break;
+        case 'bleed':
+          statusType = StatusEffectType.BLEED;
+          break;
+        case 'mp_drain':
+          statusType = StatusEffectType.MP_DRAIN;
+          break;
+        default:
+          return effects;
+      }
+
+      addEffect(statusType, dt.dotPotency || 5, {
+        tickInterval,
+        dotMpDrain: dt.dotMpDrain,
+        dotHPPercent: dt.dotHPPercent,
+      });
+      return effects;
+    }
+
+    if (dt.attackDown) {
+      addEffect(StatusEffectType.DEBUFF_DAMAGE_DOWN, dt.attackDown);
+    }
+    if (dt.defenseDown) {
+      addEffect(StatusEffectType.DEBUFF_DEFENSE_DOWN, dt.defenseDown);
+    }
+    if (dt.speedDown) {
+      addEffect(StatusEffectType.DEBUFF_SPEED_DOWN, dt.speedDown);
+    }
+    if (dt.accuracyDown) {
+      addEffect(StatusEffectType.DEBUFF_ACCURACY_DOWN, dt.accuracyDown);
+    }
+    if (dt.castSpeedDown) {
+      addEffect(StatusEffectType.DEBUFF_CAST_SPEED_DOWN, dt.castSpeedDown);
+    }
+    if (dt.damageTakenUp) {
+      addEffect(StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP, dt.damageTakenUp, {
+        consumable: dt.consumable || false,
+      });
+    }
 
     return effects;
   }
@@ -684,7 +782,13 @@ export class SkillSystem {
           isAOE: s.isAOE,
           aoeTargetMode: s.aoeTargetMode,
           aoeRadius: s.aoeRadius,
+          isBuff: s.isBuff,
+          isDebuff: s.isDebuff,
+          hasDebuff: s.hasDebuff,
+          selfBuffOnly: s.selfBuffOnly,
           buffEffectTable: s.buffEffectTable,
+          debuffEffectTable: s.debuffEffectTable,
+          debuffDuration: s.debuffDuration,
         };
       }
     }
@@ -729,12 +833,13 @@ export class SkillSystem {
     return available;
   }
 
-  tickStatusEffects(session: PlayerSession, now: number): { damage: number; healed: number; expired: StatusEffect[] } {
+  tickStatusEffects(session: PlayerSession, now: number): { damage: number; mpDamage: number; healed: number; expired: StatusEffect[] } {
     let damage = 0;
+    let mpDamage = 0;
     let healed = 0;
     const expired: StatusEffect[] = [];
 
-    if (!session.statusEffects) return { damage: 0, healed: 0, expired: [] };
+    if (!session.statusEffects) return { damage: 0, mpDamage: 0, healed: 0, expired: [] };
 
     for (const effect of session.statusEffects) {
       if (now - effect.appliedAt >= effect.duration) {
@@ -744,7 +849,26 @@ export class SkillSystem {
 
       if (effect.tickInterval > 0 && now - effect.lastTickAt >= effect.tickInterval) {
         effect.lastTickAt = now;
-        if (effect.type === StatusEffectType.POISON || effect.type === StatusEffectType.BURN || effect.type === StatusEffectType.BLEED) {
+        if (effect.type === StatusEffectType.POISON || effect.type === StatusEffectType.BURN) {
+          damage += effect.potency;
+        }
+        if (effect.type === StatusEffectType.BLEED) {
+          if (effect.dotHPPercent && effect.dotHPPercent > 0) {
+            damage += Math.floor(session.stats.maxHealth * effect.dotHPPercent);
+          } else {
+            damage += effect.potency;
+          }
+        }
+        if (effect.type === StatusEffectType.SEVERE_POISON) {
+          damage += effect.potency;
+          if (effect.dotMpDrain) {
+            mpDamage += effect.dotMpDrain;
+          }
+        }
+        if (effect.type === StatusEffectType.MP_DRAIN) {
+          if (effect.dotMpDrain) {
+            mpDamage += effect.dotMpDrain;
+          }
           damage += effect.potency;
         }
       }
@@ -754,6 +878,6 @@ export class SkillSystem {
       e => !expired.includes(e)
     );
 
-    return { damage, healed, expired };
+    return { damage, mpDamage, healed, expired };
   }
 }

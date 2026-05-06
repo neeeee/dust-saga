@@ -22,6 +22,14 @@ export enum StatusEffectType {
   BUFF_ACCURACY = 'buff_accuracy',
   BUFF_ATTACK_SPEED = 'buff_attack_speed',
   BUFF_GENERIC = 'buff_generic',
+  SEVERE_POISON = 'severe_poison',
+  MP_DRAIN = 'mp_drain',
+  DEBUFF_DAMAGE_DOWN = 'debuff_damage_down',
+  DEBUFF_DEFENSE_DOWN = 'debuff_defense_down',
+  DEBUFF_SPEED_DOWN = 'debuff_speed_down',
+  DEBUFF_ACCURACY_DOWN = 'debuff_accuracy_down',
+  DEBUFF_CAST_SPEED_DOWN = 'debuff_cast_speed_down',
+  DEBUFF_DAMAGE_TAKEN_UP = 'debuff_damage_taken_up',
 }
 
 export interface SpiValueTier {
@@ -75,6 +83,9 @@ export interface StatusEffect {
   stacks: number;
   skillName?: string;
   buffData?: BuffData;
+  dotMpDrain?: number;
+  dotHPPercent?: number;
+  consumable?: boolean;
 }
 
 export interface StatusEffectDefinition {
@@ -110,6 +121,14 @@ export const STATUS_EFFECT_DEFS: Partial<Record<StatusEffectType, StatusEffectDe
   [StatusEffectType.BUFF_ACCURACY]: { type: StatusEffectType.BUFF_ACCURACY, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_ATTACK_SPEED]: { type: StatusEffectType.BUFF_ATTACK_SPEED, duration: 480000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_GENERIC]: { type: StatusEffectType.BUFF_GENERIC, duration: 300000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.SEVERE_POISON]: { type: StatusEffectType.SEVERE_POISON, duration: 30000, tickInterval: 3000, potency: 0, isDoT: true, isCC: false },
+  [StatusEffectType.MP_DRAIN]: { type: StatusEffectType.MP_DRAIN, duration: 30000, tickInterval: 3000, potency: 0, isDoT: true, isCC: false },
+  [StatusEffectType.DEBUFF_DAMAGE_DOWN]: { type: StatusEffectType.DEBUFF_DAMAGE_DOWN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.DEBUFF_DEFENSE_DOWN]: { type: StatusEffectType.DEBUFF_DEFENSE_DOWN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.DEBUFF_SPEED_DOWN]: { type: StatusEffectType.DEBUFF_SPEED_DOWN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.DEBUFF_ACCURACY_DOWN]: { type: StatusEffectType.DEBUFF_ACCURACY_DOWN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.DEBUFF_CAST_SPEED_DOWN]: { type: StatusEffectType.DEBUFF_CAST_SPEED_DOWN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP]: { type: StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
 };
 
 export function isCCImmune(activeEffects: StatusEffect[]): boolean {
@@ -128,7 +147,7 @@ export function getEffectiveStats(
   baseStats: { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number },
   statPoints: { STR: number; AGI: number; INT: number; SPI: number; DEX: number; STA: number },
   statusEffects: StatusEffect[]
-): { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number; physicalDamageReduction: number; dodgeBonus: number; accuracyBonus: number; castTimeReduction: number; attackSpeedMultiplier: number } {
+): { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number; physicalDamageReduction: number; dodgeBonus: number; accuracyBonus: number; castTimeReduction: number; attackSpeedMultiplier: number; damageTakenMultiplier: number; castSpeedPenalty: number } {
   let attack = baseStats.attack;
   let defense = baseStats.defense;
   let magicAttack = baseStats.magicAttack;
@@ -140,6 +159,8 @@ export function getEffectiveStats(
   let accuracyBonus = 0;
   let castTimeReduction = 0;
   let attackSpeedMultiplier = 1.0;
+  let damageTakenMultiplier = 1.0;
+  let castSpeedPenalty = 0;
 
   const bonusSTR = statPoints.STR;
   const bonusAGI = statPoints.AGI;
@@ -208,7 +229,34 @@ export function getEffectiveStats(
     }
   }
 
-  return { attack, defense, magicAttack, maxHealth, maxMana, speed, physicalDamageReduction, dodgeBonus, accuracyBonus, castTimeReduction, attackSpeedMultiplier };
+  for (const effect of statusEffects) {
+    if (effect.type === StatusEffectType.DEBUFF_DAMAGE_DOWN) {
+      const reduction = effect.potency || 0;
+      attack = Math.floor(attack * (1 - reduction));
+    }
+    if (effect.type === StatusEffectType.DEBUFF_DEFENSE_DOWN) {
+      const reduction = effect.potency || 0;
+      defense = Math.floor(defense * (1 - reduction));
+    }
+    if (effect.type === StatusEffectType.DEBUFF_SPEED_DOWN) {
+      const reduction = effect.potency || 0;
+      speed = Math.floor(speed * (1 - reduction));
+    }
+    if (effect.type === StatusEffectType.DEBUFF_ACCURACY_DOWN) {
+      const reduction = effect.potency || 0;
+      accuracyBonus -= Math.floor(100 * reduction);
+    }
+    if (effect.type === StatusEffectType.DEBUFF_CAST_SPEED_DOWN) {
+      const penalty = effect.potency || 0;
+      castSpeedPenalty += penalty;
+    }
+    if (effect.type === StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP) {
+      const increase = effect.potency || 0;
+      damageTakenMultiplier *= (1 + increase);
+    }
+  }
+
+  return { attack, defense, magicAttack, maxHealth, maxMana, speed, physicalDamageReduction, dodgeBonus, accuracyBonus, castTimeReduction, attackSpeedMultiplier, damageTakenMultiplier, castSpeedPenalty };
 }
 
 export interface StatBonusBreakdown {

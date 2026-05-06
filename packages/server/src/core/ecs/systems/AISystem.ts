@@ -215,6 +215,7 @@ export class AISystem extends System {
       const def2 = getEnemyDefinition(enemy.enemyType);
       if (def2) {
         enemy.health = def2.health;
+        enemy.statusEffects = [];
       }
       return;
     }
@@ -235,6 +236,7 @@ export class AISystem extends System {
       enemy.targetId = null;
       enemy.position = { ...enemy.spawnPosition };
       enemy.currentPatrolIndex = 0;
+      enemy.statusEffects = [];
       this.respawnCallbacks.forEach(cb => cb(enemy.id));
     }
   }

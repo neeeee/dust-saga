@@ -87,6 +87,7 @@ export interface EnemyInstance {
   deathTime: number;
   patrolPoints: Array<{ x: number; y: number; z: number }>;
   currentPatrolIndex: number;
+  statusEffects: StatusEffect[];
 }
 
 export interface DamageInfo {

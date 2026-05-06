@@ -103,6 +103,11 @@ const BUFF_TYPES = new Set([
   StatusEffectType.BUFF_MP_REGEN,
   StatusEffectType.BUFF_ATTACK,
   StatusEffectType.BUFF_GENERIC,
+  StatusEffectType.BUFF_STAT,
+  StatusEffectType.BUFF_PHYSICAL_REDUC,
+  StatusEffectType.BUFF_DODGE,
+  StatusEffectType.BUFF_ACCURACY,
+  StatusEffectType.BUFF_ATTACK_SPEED,
 ]);
 
 const DEBUFF_ICONS: Record<string, string> = {
@@ -117,6 +122,14 @@ const DEBUFF_ICONS: Record<string, string> = {
   [StatusEffectType.BLEED]: 'Bl',
   [StatusEffectType.ROOT]: 'Rt',
   [StatusEffectType.SLOW]: 'Sw',
+  [StatusEffectType.SEVERE_POISON]: 'SP',
+  [StatusEffectType.MP_DRAIN]: 'MD',
+  [StatusEffectType.DEBUFF_DAMAGE_DOWN]: 'AD',
+  [StatusEffectType.DEBUFF_DEFENSE_DOWN]: 'DD',
+  [StatusEffectType.DEBUFF_SPEED_DOWN]: 'SD',
+  [StatusEffectType.DEBUFF_ACCURACY_DOWN]: 'AC',
+  [StatusEffectType.DEBUFF_CAST_SPEED_DOWN]: 'CS',
+  [StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP]: 'DT',
 };
 
 function getEffectLabel(e: any): string {

@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { EnemyInstance } from '@dust-saga/shared';
+import { EnemyInstance, StatusEffect } from '@dust-saga/shared';
 import { getEnemyDefinition, getZoneDefinition, ZONE_DATABASE, ZoneType } from '@dust-saga/shared';
 
 export class SpawnManager {
@@ -57,7 +57,8 @@ export class SpawnManager {
           lastAttackTime: 0,
           deathTime: 0,
           patrolPoints,
-          currentPatrolIndex: 0
+          currentPatrolIndex: 0,
+          statusEffects: []
         };
 
         enemies.set(enemy.id, enemy);
