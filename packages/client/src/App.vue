@@ -158,6 +158,12 @@
         @reject="showPartyInvite = false"
       />
 
+      <DeathPopup
+        :visible="isDead"
+        :revived-by="revivedBy"
+        @respawn="handleRespawn"
+      />
+
       <div class="controls-hint">
         Click to lock | WASD move | Shift sprint | F attack | I inventory | J quests | K skills | 1-0 skill bar | E interact
       </div>
@@ -185,6 +191,7 @@ import SkillWindow from './ui/SkillWindow.vue';
 import PartyPanel from './ui/PartyPanel.vue';
 import PartyCreateDialog from './ui/PartyCreateDialog.vue';
 import PartyInviteDialog from './ui/PartyInviteDialog.vue';
+import DeathPopup from './ui/DeathPopup.vue';
 import { useSkillStore } from './composables/useSkillStore';
 
 type GameState = 'auth' | 'character-select' | 'loading' | 'playing';
@@ -210,6 +217,8 @@ const showDialog = ref(false);
 const inventory = ref<any[]>([]);
 const equipment = ref<any>({});
 const quests = ref<any[]>([]);
+const isDead = ref(false);
+const revivedBy = ref<string | undefined>(undefined);
 
 const targetId = ref<string | null>(null);
 const targetName = ref('');
@@ -355,6 +364,9 @@ function handleDialogOption(option: any) {
   } else if (option.action === 'heal') {
     gameClient.interactNPC(currentDialogNPCId);
     showDialog.value = false;
+  } else if (option.action === 'join_nation') {
+    gameClient.interactNPC(currentDialogNPCId, 'join_nation');
+    showDialog.value = false;
   } else if (option.nextDialogId) {
     gameClient.interactNPC(currentDialogNPCId, option.nextDialogId);
   }
@@ -434,6 +446,13 @@ function handlePartyLootRoll(lootId: string) {
   gameClient.sendPartyLootRoll(lootId);
 }
 
+function handleRespawn() {
+  if (!gameClient) return;
+  gameClient.value.sendRespawnRequest();
+  isDead.value = false;
+  revivedBy.value = undefined;
+}
+
 function handleAcceptQuest(questId: string) {
   if (!gameClient) return;
   gameClient.acceptQuest(questId);
@@ -482,7 +501,13 @@ onMounted(async () => {
       showNotification(message, type);
     },
     onDeath: (data) => {
-      showNotification('You have died! Respawning...', 'error');
+      if (data.isDead) {
+        isDead.value = true;
+        revivedBy.value = undefined;
+      } else {
+        isDead.value = false;
+        revivedBy.value = data.revivedBy;
+      }
     },
     onExperienceGain: (data) => {
       showNotification(`+${data.experience} XP`, 'info');

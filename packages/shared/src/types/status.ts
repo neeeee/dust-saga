@@ -63,6 +63,7 @@ export interface BuffData {
   attackMultiplier?: number;
   castTimeReductionPercent?: number;
   maxHpFlat?: number;
+  maxHpPercent?: number;
   mpRegenFlat?: number;
   physicalDamageReductionPercent?: number;
   dodgeFlat?: number;
@@ -184,6 +185,9 @@ export function getEffectiveStats(
     if (effect.type === StatusEffectType.BUFF_MAX_HP) {
       if (effect.buffData?.maxHpFlat) {
         maxHealth += effect.buffData.maxHpFlat;
+      }
+      if (effect.buffData?.maxHpPercent) {
+        maxHealth += Math.floor(baseStats.maxHealth * effect.buffData.maxHpPercent);
       }
     }
     if (effect.type === StatusEffectType.BUFF_CAST_SPEED) {

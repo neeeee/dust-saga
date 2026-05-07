@@ -29,6 +29,8 @@ export interface MockCharacter {
   skill_proficiencies: string;
   skill_adeptness: string;
   experience: number;
+  nation?: string | null;
+  last_safe_zone_id?: string;
 }
 
 export class AuthManager {
@@ -265,6 +267,8 @@ export class AuthManager {
     skillProficiencies: any;
     skillAdeptness: any;
     jobId: string;
+    nation?: string | null;
+    lastSafeZoneId?: string;
   }): Promise<void> {
     if (!this.db.isPostgresConnected()) {
       for (const [, chars] of this.mockCharacters) {
@@ -282,6 +286,8 @@ export class AuthManager {
           ch.skill_proficiencies = JSON.stringify(data.skillProficiencies);
           ch.skill_adeptness = JSON.stringify(data.skillAdeptness);
           ch.experience = data.experience;
+          if (data.nation !== undefined) ch.nation = data.nation;
+          if (data.lastSafeZoneId !== undefined) ch.last_safe_zone_id = data.lastSafeZoneId;
           break;
         }
       }
@@ -293,7 +299,8 @@ export class AuthManager {
         `UPDATE characters SET
           level = $1, experience = $2, position_x = $3, position_y = $4, position_z = $5,
           zone_id = $6, stat_points = $7, unspent_stat_points = $8,
-          unspent_skill_points = $9, skill_proficiencies = $10, skill_adeptness = $11, job_id = $12
+          unspent_skill_points = $9, skill_proficiencies = $10, skill_adeptness = $11, job_id = $12,
+          nation = $14, last_safe_zone_id = $15
          WHERE id = $13`,
         [
           data.level, data.experience,
@@ -301,7 +308,9 @@ export class AuthManager {
           data.zoneId, JSON.stringify(data.statPoints),
           data.unspentStatPoints, data.unspentSkillPoints,
           JSON.stringify(data.skillProficiencies), JSON.stringify(data.skillAdeptness), data.jobId,
-          characterId
+          characterId,
+          data.nation || null,
+          data.lastSafeZoneId || null,
         ]
       );
     } catch (error) {

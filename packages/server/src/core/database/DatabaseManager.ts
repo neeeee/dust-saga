@@ -122,6 +122,8 @@ export class DatabaseManager {
         skill_proficiencies JSONB DEFAULT '{"melee":0,"technique":0,"prayer":0,"magic":0,"special":0}',
         skill_adeptness JSONB DEFAULT '{}',
         experience BIGINT DEFAULT 0,
+        nation VARCHAR(20),
+        last_safe_zone_id VARCHAR(50) DEFAULT 'starter_zone',
         created_at TIMESTAMP DEFAULT NOW(),
         UNIQUE(player_id, name)
       );
@@ -170,6 +172,8 @@ export class DatabaseManager {
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS skill_proficiencies JSONB DEFAULT '{"melee":0,"technique":0,"prayer":0,"magic":0,"special":0}'`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS skill_adeptness JSONB DEFAULT '{}'`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS experience BIGINT DEFAULT 0`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS nation VARCHAR(20)`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS last_safe_zone_id VARCHAR(50) DEFAULT 'starter_zone'`,
     ];
 
     for (const sql of migrations) {

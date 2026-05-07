@@ -488,12 +488,18 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.DEATH, (packet: any) => {
-      const { entityId, respawnPosition } = packet.data;
-      if (entityId === this.playerId && respawnPosition) {
-        if (this.playerMesh) {
-          this.playerMesh.position = new BabylonVector3(respawnPosition.x, respawnPosition.y, respawnPosition.z);
+      const { entityId, isDead, respawnPosition } = packet.data;
+      if (entityId === this.playerId) {
+        if (isDead) {
+          if (this.playerMesh && this.playerId) {
+            this.engine.startAnimationOnce(this.playerId, 'Death');
+          }
+          this.callbacks.onDeath?.(packet.data);
+        } else if (respawnPosition) {
+          if (this.playerMesh) {
+            this.playerMesh.position = new BabylonVector3(respawnPosition.x, respawnPosition.y, respawnPosition.z);
+          }
         }
-        this.callbacks.onDeath?.(packet.data);
       }
       if (entityId !== this.playerId) {
         this.engine.startAnimationOnce(entityId, 'Death');
@@ -501,6 +507,24 @@ export class GameClient {
           this.targetId = null;
           this.callbacks.onTargetChange?.(null);
         }
+      }
+    });
+
+    this.network.onPacket(PacketType.PLAYER_REVIVED, (packet: any) => {
+      const { characterId, zoneId, position, revivedBy } = packet.data;
+      if (characterId === this.playerId) {
+        if (this.playerMesh) {
+          if (zoneId && this.callbacks.onZoneChange) {
+            this.callbacks.onZoneChange(zoneId, '');
+          }
+          this.playerMesh.position = new BabylonVector3(position.x, position.y, position.z);
+        }
+        if (this.playerId) {
+          this.engine.startAnimationOnce(this.playerId, 'Idle');
+        }
+        this.callbacks.onDeath?.({ isDead: false, revivedBy });
+      } else {
+        this.engine.startAnimationOnce(characterId, 'Idle');
       }
     });
 
@@ -889,6 +913,14 @@ export class GameClient {
 
   sendPartyLootRoll(lootId: string): void {
     this.network.sendPacket({ type: PacketType.PARTY_LOOT_ROLL, timestamp: Date.now(), data: { lootId } });
+  }
+
+  sendRespawnRequest(): void {
+    this.network.sendPacket({ type: PacketType.RESPAWN_REQUEST, timestamp: Date.now(), data: {} });
+  }
+
+  sendRevivePlayer(targetId: string): void {
+    this.network.sendPacket({ type: PacketType.REVIVE_PLAYER, timestamp: Date.now(), data: { targetId } });
   }
 
   setSkillBarHandler(handler: SkillBarKeyHandler): void {

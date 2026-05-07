@@ -143,7 +143,64 @@ export const NPC_DATABASE: Record<string, NPCDefinition> = {
       }
     ],
     shopItems: ['iron_sword', 'chainmail', 'iron_helmet', 'swift_boots', 'health_potion', 'mana_potion']
-  }
+  },
+  'guard_varik': {
+    id: 'guard_varik',
+    name: 'Varik Border Guard',
+    type: NPCType.GENERIC,
+    modelFile: 'Witch.glb',
+    position: { x: 0, y: 0, z: -60 },
+    rotation: 0,
+    zoneId: 'mountains_of_jortio',
+    dialogs: [
+      {
+        id: 'greeting',
+        text: 'You stand at the border of the Varik Confederation. Only those who pledge their allegiance may pass. Do you wish to join Varik?',
+        options: [
+          { text: 'I wish to join Varik.', action: 'join_nation', actionData: { nation: 'varik' } },
+          { text: 'Not yet.', action: 'close' }
+        ]
+      }
+    ]
+  },
+  'guard_pfelstein': {
+    id: 'guard_pfelstein',
+    name: 'Pfelstein Border Guard',
+    type: NPCType.GENERIC,
+    modelFile: 'Witch.glb',
+    position: { x: 0, y: 0, z: -60 },
+    rotation: 0,
+    zoneId: 'nelstadt_plains',
+    dialogs: [
+      {
+        id: 'greeting',
+        text: 'You stand at the border of the Kingdom of St. Pfelstein. Only those who pledge their allegiance may pass. Do you wish to join Pfelstein?',
+        options: [
+          { text: 'I wish to join Pfelstein.', action: 'join_nation', actionData: { nation: 'pfelstein' } },
+          { text: 'Not yet.', action: 'close' }
+        ]
+      }
+    ]
+  },
+  'guard_latugan': {
+    id: 'guard_latugan',
+    name: 'Latugan Border Guard',
+    type: NPCType.GENERIC,
+    modelFile: 'Witch.glb',
+    position: { x: 0, y: 0, z: -60 },
+    rotation: 0,
+    zoneId: 'himurart_desert',
+    dialogs: [
+      {
+        id: 'greeting',
+        text: 'You stand at the border of the Latugan Empire. Only those who pledge their allegiance may pass. Do you wish to join Latugan?',
+        options: [
+          { text: 'I wish to join Latugan.', action: 'join_nation', actionData: { nation: 'latugan' } },
+          { text: 'Not yet.', action: 'close' }
+        ]
+      }
+    ]
+  },
 };
 
 export function getNPC(id: string): NPCDefinition | undefined {

@@ -63,6 +63,7 @@ export interface SkillDefinition {
   isDebuff?: boolean;
   hasDebuff?: boolean;
   selfBuffOnly?: boolean;
+  isRevive?: boolean;
   buffEffectTable?: BuffEffectTable;
   debuffEffectTable?: DebuffEffectTable;
   debuffDuration?: number;
@@ -98,6 +99,7 @@ export interface ClassSpecificSkill {
   isDebuff?: boolean;
   hasDebuff?: boolean;
   selfBuffOnly?: boolean;
+  isRevive?: boolean;
   buffEffectTable?: BuffEffectTable;
   debuffEffectTable?: DebuffEffectTable;
   debuffDuration?: number;
@@ -200,6 +202,7 @@ export const SKILL_TARGET_RULES: Record<string, SkillTargetType> = {
   'Impedimentia': SkillTargetType.OTHER_ONLY,
   'Tangled Fingers': SkillTargetType.OTHER_ONLY,
   'Befuddle': SkillTargetType.OTHER_ONLY,
+  'Revive': SkillTargetType.OTHER_ONLY,
 };
 
 export function isPassiveSkill(skill: SkillDefinition): boolean {

@@ -670,3 +670,9 @@ export const ZONE_DATABASE: Record<string, ZoneDefinition> = {
 export function getZoneDefinition(id: string): ZoneDefinition | undefined {
   return ZONE_DATABASE[id];
 }
+
+export const NATION_ZONE_MAP: Record<string, { nation: 'varik' | 'pfelstein' | 'latugan'; zoneId: string; borderZoneId: string }> = {
+  varik: { nation: 'varik', zoneId: 'varik_confederation', borderZoneId: 'mountains_of_jortio' },
+  pfelstein: { nation: 'pfelstein', zoneId: 'kingdom_pfelstein', borderZoneId: 'nelstadt_plains' },
+  latugan: { nation: 'latugan', zoneId: 'latugan_empire', borderZoneId: 'himurart_desert' },
+};

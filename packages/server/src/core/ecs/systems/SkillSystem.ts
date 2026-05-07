@@ -16,9 +16,9 @@ for (const category of Object.values(CLASS_SKILL_DATA)) {
   for (const subSkill of category.skills) {
     for (const skillName of Object.keys(subSkill.skills)) {
       SKILL_TO_SUBCATEGORY[skillName] = subSkill.name;
+      }
     }
   }
-}
 
 export interface TargetStats {
   defense: number;
@@ -40,6 +40,7 @@ export interface SkillUseResult {
   missed?: boolean;
   damageType?: 'physical' | 'magical';
   statusEffects?: StatusEffect[];
+  revived?: boolean;
   error?: string;
 }
 
@@ -265,6 +266,10 @@ export class SkillSystem {
     session.activeCast = null;
 
     this.gainProficiency(session, skillName);
+
+    if (skill.isRevive && targetId) {
+      return { success: true, revived: true };
+    }
 
     if (skill.duration > 0 && !isPassiveSkill(skill) && !skill.debuffEffectTable) {
       const targetType = SKILL_TARGET_RULES[skillName];
@@ -629,7 +634,11 @@ export class SkillSystem {
     };
 
     if (!bt) {
-      if (effects.length === 0) {
+      if (skill.name === 'Divine Aid') {
+        const baseMaxHp = target.stats.maxHealth;
+        const hpIncrease = Math.floor(baseMaxHp * 0.15) + 250;
+        pushEffect(StatusEffectType.BUFF_MAX_HP, 0, { maxHpFlat: hpIncrease, maxHpPercent: 0.15 });
+      } else if (effects.length === 0) {
         const desc = skill.description.toLowerCase();
         let effectType = StatusEffectType.BUFF_GENERIC;
         if (desc.includes('defense')) effectType = StatusEffectType.BUFF_DEFENSE;
@@ -786,6 +795,7 @@ export class SkillSystem {
           isDebuff: s.isDebuff,
           hasDebuff: s.hasDebuff,
           selfBuffOnly: s.selfBuffOnly,
+          isRevive: s.isRevive,
           buffEffectTable: s.buffEffectTable,
           debuffEffectTable: s.debuffEffectTable,
           debuffDuration: s.debuffDuration,

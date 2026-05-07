@@ -41,6 +41,10 @@ export interface PlayerSession {
   lastAttackTime: number;
   lastRegenTick: number;
   invulnerableUntil: number;
+  isDead: boolean;
+  deathTime: number;
+  nation: 'varik' | 'pfelstein' | 'latugan' | null;
+  lastSafeZoneId: string;
   skillCooldowns: SkillCooldownEntry[];
   activeCast: ActiveCast | null;
   statusEffects: StatusEffect[];
