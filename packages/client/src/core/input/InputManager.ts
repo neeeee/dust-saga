@@ -11,7 +11,7 @@ export interface InputState {
   interact: boolean;
 }
 
-export type SkillBarKeyHandler = (slotIndex: number) => void;
+export type SkillBarKeyHandler = (barIndex: number, slotIndex: number) => void;
 
 const SKILL_BAR_KEYS = [
   'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5',
@@ -48,6 +48,7 @@ export class InputManager {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
+    console.log('[InputManager] keydown:', e.code, 'chatFocused:', this.chatFocused, 'handler:', !!this.skillBarHandler, 'skillIdx:', SKILL_BAR_KEYS.indexOf(e.code));
     if (this.chatFocused) return;
     this.keys.set(e.code, true);
 
@@ -57,7 +58,13 @@ export class InputManager {
 
     const skillIdx = SKILL_BAR_KEYS.indexOf(e.code);
     if (skillIdx >= 0 && this.skillBarHandler) {
-      this.skillBarHandler(skillIdx);
+      if (e.shiftKey) {
+        this.skillBarHandler(1, skillIdx);
+      } else if (e.ctrlKey || e.metaKey) {
+        this.skillBarHandler(2, skillIdx);
+      } else {
+        this.skillBarHandler(0, skillIdx);
+      }
     }
   }
 
@@ -91,7 +98,7 @@ export class InputManager {
       left: this.keys.get('KeyA') || false,
       right: this.keys.get('KeyD') || false,
       jump: this.keys.get('Space') || false,
-      sprint: this.keys.get('ShiftLeft') || false,
+      sprint: false,
       attack: this.keys.get('KeyF') || false,
       interact: this.keys.get('KeyE') || false
     };

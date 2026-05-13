@@ -3,7 +3,10 @@ import {
   SkillBarSlot,
   SkillBarSlotCategory,
   SKILL_BAR_SIZE,
+  MAX_SKILL_BARS,
+  SkillBarLayout,
   createEmptySkillBar,
+  createDefaultLayout,
   CLASS_SKILL_DATA,
   getClassSpecificSkillsForJob,
   getCategoryForSubCategory,
@@ -60,7 +63,7 @@ function getStorageKey(): string {
 }
 
 interface SkillStoreState {
-  bar: SkillBarSlot[];
+  layout: SkillBarLayout;
   cooldowns: Record<string, SkillCooldownState>;
   cast: CastState;
   availableSkills: AvailableSkill[];
@@ -73,7 +76,12 @@ interface SkillStoreState {
 }
 
 const state = reactive<SkillStoreState>({
-  bar: createEmptySkillBar(),
+  layout: {
+    bars: [createEmptySkillBar()],
+    positions: [
+      { x: typeof window !== 'undefined' ? Math.round(window.innerWidth / 2 - 250) : 0, y: typeof window !== 'undefined' ? window.innerHeight - 60 : 0 },
+    ],
+  },
   cooldowns: {},
   cast: {
     active: false,
@@ -117,34 +125,52 @@ function stopTick(): void {
 
 startTick();
 
-function loadSkillBar(): SkillBarSlot[] {
+function loadLayout(): SkillBarLayout {
   try {
     const saved = localStorage.getItem(getStorageKey());
     if (saved) {
-      const parsed = JSON.parse(saved) as SkillBarSlot[];
-      if (Array.isArray(parsed) && parsed.length === SKILL_BAR_SIZE) {
+      const parsed = JSON.parse(saved) as SkillBarLayout;
+      if (parsed.bars && parsed.bars.length > 0 && parsed.positions && parsed.positions.length > 0) {
         return parsed;
       }
     }
   } catch {}
-  return createEmptySkillBar();
+  return createDefaultLayout();
 }
 
-function saveSkillBar(): void {
+function saveLayout(): void {
   try {
-    localStorage.setItem(getStorageKey(), JSON.stringify(state.bar));
+    localStorage.setItem(getStorageKey(), JSON.stringify(state.layout));
   } catch {}
 }
 
-watch(() => state.bar, saveSkillBar, { deep: true });
+watch(() => state.layout, saveLayout, { deep: true });
+
+function getSlot(barIndex: number, slotIndex: number): SkillBarSlot | null {
+  const bar = state.layout.bars[barIndex];
+  if (!bar || slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return null;
+  return bar[slotIndex];
+}
+
+function findSkillAcrossBars(skillName: string): { barIndex: number; slotIndex: number } | null {
+  for (let b = 0; b < state.layout.bars.length; b++) {
+    const idx = state.layout.bars[b].findIndex(s => s.skillName === skillName);
+    if (idx >= 0) return { barIndex: b, slotIndex: idx };
+  }
+  return null;
+}
 
 export function useSkillStore() {
   function initForCharacter(characterId: string): void {
     currentCharacterId = characterId;
-    const saved = loadSkillBar();
-    for (let i = 0; i < SKILL_BAR_SIZE; i++) {
-      state.bar[i] = saved[i];
+    const saved = loadLayout();
+    if (saved.positions[0] && saved.positions[0].x === 0 && saved.positions[0].y === 0) {
+      saved.positions[0] = {
+        x: Math.round(window.innerWidth / 2 - 250),
+        y: window.innerHeight - 60,
+      };
     }
+    state.layout = saved;
   }
 
   function updateSkillProficiencies(proficiencies: Record<string, number>, adeptness?: Record<string, number>, jobId?: string, baseClass?: string, unspentSkillPoints?: number, level?: number): void {
@@ -157,16 +183,17 @@ export function useSkillStore() {
     buildAvailableSkills();
   }
 
-  function setSkillInSlot(slotIndex: number, skillName: string, category: string, subCategory: string): void {
-    if (slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return;
+  function setSkillInSlot(barIndex: number, slotIndex: number, skillName: string, category: string, subCategory: string): void {
+    const bar = state.layout.bars[barIndex];
+    if (!bar || slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return;
 
-    const existingIndex = state.bar.findIndex(s => s.skillName === skillName);
-    if (existingIndex >= 0 && existingIndex !== slotIndex) {
-      const temp = { ...state.bar[existingIndex] };
-      state.bar[existingIndex] = { ...state.bar[slotIndex] };
-      state.bar[slotIndex] = temp;
+    const existing = findSkillAcrossBars(skillName);
+    if (existing && !(existing.barIndex === barIndex && existing.slotIndex === slotIndex)) {
+      const temp = { ...state.layout.bars[existing.barIndex][existing.slotIndex] };
+      state.layout.bars[existing.barIndex][existing.slotIndex] = { ...bar[slotIndex] };
+      bar[slotIndex] = temp;
     } else {
-      state.bar[slotIndex] = {
+      bar[slotIndex] = {
         skillName,
         category: category as SkillBarSlotCategory,
         subCategory,
@@ -174,20 +201,47 @@ export function useSkillStore() {
     }
   }
 
-  function removeFromSlot(slotIndex: number): void {
-    if (slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return;
-    state.bar[slotIndex] = {
+  function removeFromSlot(barIndex: number, slotIndex: number): void {
+    const bar = state.layout.bars[barIndex];
+    if (!bar || slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return;
+    bar[slotIndex] = {
       skillName: null,
       category: SkillBarSlotCategory.EMPTY,
       subCategory: '',
     };
   }
 
-  function swapSlots(fromIndex: number, toIndex: number): void {
-    if (fromIndex < 0 || toIndex < 0 || fromIndex >= SKILL_BAR_SIZE || toIndex >= SKILL_BAR_SIZE) return;
-    const temp = { ...state.bar[fromIndex] };
-    state.bar[fromIndex] = { ...state.bar[toIndex] };
-    state.bar[toIndex] = temp;
+  function swapSlots(fromBar: number, fromSlot: number, toBar: number, toSlot: number): void {
+    const from = state.layout.bars[fromBar];
+    const to = state.layout.bars[toBar];
+    if (!from || !to) return;
+    if (fromSlot < 0 || fromSlot >= SKILL_BAR_SIZE || toSlot < 0 || toSlot >= SKILL_BAR_SIZE) return;
+    const temp = { ...from[fromSlot] };
+    from[fromSlot] = { ...to[toSlot] };
+    to[toSlot] = temp;
+  }
+
+  function addBar(): boolean {
+    if (state.layout.bars.length >= MAX_SKILL_BARS) return false;
+    const lastPos = state.layout.positions[state.layout.positions.length - 1];
+    state.layout.bars.push(createEmptySkillBar());
+    state.layout.positions.push({
+      x: lastPos ? lastPos.x : window.innerWidth / 2,
+      y: lastPos ? lastPos.y - 70 : window.innerHeight - 130,
+    });
+    return true;
+  }
+
+  function removeBar(barIndex: number): boolean {
+    if (barIndex <= 0 || barIndex >= state.layout.bars.length) return false;
+    state.layout.bars.splice(barIndex, 1);
+    state.layout.positions.splice(barIndex, 1);
+    return true;
+  }
+
+  function moveBar(barIndex: number, x: number, y: number): void {
+    if (barIndex < 0 || barIndex >= state.layout.positions.length) return;
+    state.layout.positions[barIndex] = { x, y };
   }
 
   function startCooldown(skillName: string, cooldownMs: number): void {
@@ -250,9 +304,8 @@ export function useSkillStore() {
     };
   }
 
-  function getSkillInSlot(slotIndex: number): SkillBarSlot | null {
-    if (slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return null;
-    return state.bar[slotIndex];
+  function getSkillInSlot(barIndex: number, slotIndex: number): SkillBarSlot | null {
+    return getSlot(barIndex, slotIndex);
   }
 
   function checkSkillUnlocked(def: SkillDefinition, subCategoryName: string, proficiencies: Record<string, number>): boolean {
@@ -390,14 +443,24 @@ export function useSkillStore() {
     }
   }
 
+  function getSlotForUse(barIndex: number, slotIndex: number): SkillBarSlot | null {
+    void _now.value;
+    return getSlot(barIndex, slotIndex);
+  }
+
+  const _now = now;
+
   return {
     state,
-    now,
+    now: _now,
     initForCharacter,
     updateSkillProficiencies,
     setSkillInSlot,
     removeFromSlot,
     swapSlots,
+    addBar,
+    removeBar,
+    moveBar,
     startCooldown,
     getCooldownRemaining,
     getCooldownProgress,
@@ -406,6 +469,7 @@ export function useSkillStore() {
     updateCastProgress,
     endCast,
     getSkillInSlot,
+    getSlotForUse,
     buildAvailableSkills,
     getSkillsByCategory,
     getSubCategories,

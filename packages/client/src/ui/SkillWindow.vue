@@ -205,9 +205,12 @@ function onDragStart(skill: AvailableSkill, event: DragEvent): void {
 
 function onSkillClick(skill: AvailableSkill): void {
   if (!skill.unlocked || skill.isPassive) return;
-  const firstEmpty = skillStore.state.bar.findIndex(s => s.skillName === null);
-  if (firstEmpty >= 0) {
-    skillStore.setSkillInSlot(firstEmpty, skill.name, skill.category, skill.subCategory);
+  for (let b = 0; b < skillStore.state.layout.bars.length; b++) {
+    const idx = skillStore.state.layout.bars[b].findIndex(s => s.skillName === null);
+    if (idx >= 0) {
+      skillStore.setSkillInSlot(b, idx, skill.name, skill.category, skill.subCategory);
+      return;
+    }
   }
 }
 

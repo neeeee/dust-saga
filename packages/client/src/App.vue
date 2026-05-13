@@ -305,6 +305,7 @@ async function setupGameCanvas() {
   await nextTick();
   if (gameCanvas.value && gameClient) {
     await gameClient.initEngine(gameCanvas.value);
+    gameClient.setSkillBarHandler(handleSkillBarKey);
     const minimapCanvas = hudRef.value?.minimapCanvas;
     if (minimapCanvas) {
       gameClient.setMinimapCanvas(minimapCanvas);
@@ -387,16 +388,19 @@ function handleAllocateBatch(allocations: Record<string, number>) {
   gameClient.allocateStatBatch(allocations);
 }
 
-function handleUseSkillSlot(slotIndex: number) {
-  if (!gameClient) return;
-  const slot = skillStore.getSkillInSlot(slotIndex);
-  if (!slot?.skillName) return;
-  if (skillStore.isOnCooldown(slot.skillName)) return;
+function handleUseSkillSlot(barIndex: number, slotIndex: number) {
+  console.log('[handleUseSkillSlot] bar:', barIndex, 'slot:', slotIndex, 'gameClient:', !!gameClient, 'targetId:', targetId.value);
+  if (!gameClient) { console.warn('[handleUseSkillSlot] BLOCKED: no gameClient'); return; }
+  const slot = skillStore.getSkillInSlot(barIndex, slotIndex);
+  console.log('[handleUseSkillSlot] slot:', slot);
+  if (!slot?.skillName) { console.warn('[handleUseSkillSlot] BLOCKED: no skillName in slot'); return; }
+  if (skillStore.isOnCooldown(slot.skillName)) { console.warn('[handleUseSkillSlot] BLOCKED: on cooldown'); return; }
+  console.log('[handleUseSkillSlot] CASTING:', slot.skillName, 'target:', targetId.value);
   gameClient.useSkill(slot.skillName, targetId.value);
 }
 
-function handleSkillBarKey(slotIndex: number) {
-  handleUseSkillSlot(slotIndex);
+function handleSkillBarKey(barIndex: number, slotIndex: number) {
+  handleUseSkillSlot(barIndex, slotIndex);
 }
 
 function handlePartyAction(targetIdStr: string) {
@@ -586,8 +590,6 @@ onMounted(async () => {
   });
 
   await gameClient.initialize();
-
-  gameClient.setSkillBarHandler(handleSkillBarKey);
 
   const network = gameClient.getNetworkClient();
 

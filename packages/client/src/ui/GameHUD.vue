@@ -75,8 +75,9 @@
 
     <div class="hud-bottom-center">
       <CastBar />
-      <SkillBar @use-skill="$emit('use-skill', $event)" />
     </div>
+
+    <SkillBarContainer @use-skill="(bi, si) => $emit('use-skill', bi, si)" />
 
     <div class="hud-bottom-right">
       <div class="action-buttons">
@@ -92,7 +93,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { PlayerStats, StatusEffectType } from '@dust-saga/shared';
-import SkillBar from './SkillBar.vue';
+import SkillBarContainer from './SkillBarContainer.vue';
 import CastBar from './CastBar.vue';
 
 const BUFF_TYPES = new Set([
@@ -162,7 +163,7 @@ defineEmits<{
   'toggle-character': [];
   'toggle-skills': [];
   'clear-target': [];
-  'use-skill': [slotIndex: number];
+  'use-skill': [barIndex: number, slotIndex: number];
   'whisper-player': [playerName: string];
   'party-action': [targetId: string];
 }>();

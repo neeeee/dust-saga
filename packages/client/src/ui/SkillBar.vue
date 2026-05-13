@@ -1,67 +1,113 @@
 <template>
-  <div class="skill-bar">
-    <div
-      v-for="(slot, index) in skillStore.state.bar"
-      :key="index"
-      class="skill-slot"
-      :class="{
-        'skill-slot-filled': slot.skillName,
-        'skill-slot-cooldown': slot.skillName && isOnCooldown(slot.skillName),
-        'skill-slot-dragover': dragOverIndex === index,
-      }"
-      @dragover.prevent="onDragOver(index)"
-      @dragleave="onDragLeave(index)"
-      @drop="onDrop(index)"
-      @contextmenu.prevent="onRightClick(index)"
-      @click="$emit('use-skill', index)"
-    >
-      <template v-if="slot.skillName">
-        <div
-          class="skill-icon"
-          :style="{ backgroundColor: getCategoryColor(slot.category) }"
-          draggable="true"
-          @dragstart="onDragStart(index, $event)"
-        >
-          {{ getSkillAbbrev(slot.skillName) }}
-        </div>
-        <div
-          v-if="isOnCooldown(slot.skillName)"
-          class="cooldown-overlay"
-          :style="{ height: getCooldownHeight(slot.skillName) + '%' }"
-        >
-          <span class="cooldown-text">{{ getCooldownText(slot.skillName) }}</span>
-        </div>
-        <span v-if="getMpCost(slot.skillName)" class="mp-cost">{{ getMpCost(slot.skillName) }}</span>
-      </template>
-      <template v-else>
-        <span class="skill-key">{{ index + 1 === 10 ? 0 : index + 1 }}</span>
-      </template>
-      <span class="slot-key">{{ index + 1 === 10 ? 0 : index + 1 }}</span>
+  <div
+    class="skill-bar-wrapper"
+    :style="{ left: posX + 'px', top: posY + 'px' }"
+  >
+    <div class="skill-bar-drag-handle" @mousedown="startDrag">
+      <span class="drag-dots">⠿</span>
+    </div>
+    <button v-if="barIndex > 0" class="skill-bar-close" @click.stop="$emit('close')">x</button>
+    <div class="skill-bar">
+      <div
+        v-for="(slot, index) in bar"
+        :key="index"
+        class="skill-slot"
+        :class="{
+          'skill-slot-filled': slot.skillName,
+          'skill-slot-cooldown': slot.skillName && isOnCooldown(slot.skillName),
+          'skill-slot-dragover': dragOverIndex === index,
+        }"
+        @dragover.prevent="onDragOver(index)"
+        @dragleave="onDragLeave(index)"
+        @drop="onDrop(index, $event)"
+        @contextmenu.prevent="onRightClick(index)"
+        @click="$emit('use-skill', barIndex, index)"
+      >
+        <template v-if="slot.skillName">
+          <div
+            class="skill-icon"
+            :style="{ backgroundColor: getCategoryColor(slot.category) }"
+            draggable="true"
+            @dragstart="onDragStart(index, $event)"
+          >
+            {{ getSkillAbbrev(slot.skillName) }}
+          </div>
+          <div
+            v-if="isOnCooldown(slot.skillName)"
+            class="cooldown-overlay"
+            :style="{ height: getCooldownHeight(slot.skillName) + '%' }"
+          >
+            <span class="cooldown-text">{{ getCooldownText(slot.skillName) }}</span>
+          </div>
+          <span v-if="getMpCost(slot.skillName)" class="mp-cost">{{ getMpCost(slot.skillName) }}</span>
+        </template>
+        <template v-else>
+          <span class="skill-key">{{ keyLabel(index) }}</span>
+        </template>
+        <span class="slot-key">{{ keyLabel(index) }}</span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useSkillStore } from '../composables/useSkillStore';
-import { getCategoryColor } from '@dust-saga/shared';
+import { getCategoryColor, BAR_KEYBIND_LABELS, type SkillBarSlot } from '@dust-saga/shared';
+
+const props = defineProps<{
+  barIndex: number;
+  bar: SkillBarSlot[];
+  posX: number;
+  posY: number;
+}>();
+
+const emit = defineEmits<{
+  'use-skill': [barIndex: number, slotIndex: number];
+  close: [];
+  'move': [barIndex: number, x: number, y: number];
+}>();
 
 const skillStore = useSkillStore();
-const _now = skillStore.now;
-
-defineEmits<{
-  'use-skill': [slotIndex: number];
-}>();
 
 const dragOverIndex = ref<number | null>(null);
 const dragSourceIndex = ref<number | null>(null);
+const dragging = ref(false);
+const dragOffset = ref({ x: 0, y: 0 });
+
+function keyLabel(index: number): string {
+  const labels = BAR_KEYBIND_LABELS[props.barIndex];
+  return labels ? labels[index] : String(index + 1 === 10 ? 0 : index + 1);
+}
+
+function startDrag(e: MouseEvent): void {
+  dragging.value = true;
+  dragOffset.value = {
+    x: e.clientX - props.posX,
+    y: e.clientY - props.posY,
+  };
+  const onMove = (ev: MouseEvent) => {
+    if (!dragging.value) return;
+    const x = ev.clientX - dragOffset.value.x;
+    const y = ev.clientY - dragOffset.value.y;
+    emit('move', props.barIndex, x, y);
+  };
+  const onUp = () => {
+    dragging.value = false;
+    window.removeEventListener('mousemove', onMove);
+    window.removeEventListener('mouseup', onUp);
+  };
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+}
 
 function onDragStart(slotIndex: number, event: DragEvent): void {
   dragSourceIndex.value = slotIndex;
-  const slot = skillStore.state.bar[slotIndex];
+  const slot = props.bar[slotIndex];
   if (slot.skillName && event.dataTransfer) {
     event.dataTransfer.setData('text/plain', JSON.stringify({
       type: 'bar-swap',
+      barIndex: props.barIndex,
       slotIndex,
       skillName: slot.skillName,
       category: slot.category,
@@ -81,26 +127,40 @@ function onDragLeave(slotIndex: number): void {
   }
 }
 
-function onDrop(slotIndex: number): void {
+function onDrop(slotIndex: number, event?: DragEvent): void {
   dragOverIndex.value = null;
 
   const data = (window as any).__dragSkillData;
   if (data) {
     if (data.type === 'from-window') {
-      skillStore.setSkillInSlot(slotIndex, data.skillName, data.category, data.subCategory);
+      skillStore.setSkillInSlot(props.barIndex, slotIndex, data.skillName, data.category, data.subCategory);
     }
     (window as any).__dragSkillData = null;
     return;
   }
 
+  if (event?.dataTransfer) {
+    try {
+      const raw = event.dataTransfer.getData('text/plain');
+      if (raw) {
+        const transferData = JSON.parse(raw);
+        if (transferData.type === 'bar-swap') {
+          skillStore.swapSlots(transferData.barIndex, transferData.slotIndex, props.barIndex, slotIndex);
+          dragSourceIndex.value = null;
+          return;
+        }
+      }
+    } catch {}
+  }
+
   if (dragSourceIndex.value !== null && dragSourceIndex.value !== slotIndex) {
-    skillStore.swapSlots(dragSourceIndex.value, slotIndex);
+    skillStore.swapSlots(props.barIndex, dragSourceIndex.value, props.barIndex, slotIndex);
   }
   dragSourceIndex.value = null;
 }
 
 function onRightClick(slotIndex: number): void {
-  skillStore.removeFromSlot(slotIndex);
+  skillStore.removeFromSlot(props.barIndex, slotIndex);
 }
 
 function getSkillAbbrev(name: string): string {
@@ -112,26 +172,24 @@ function getSkillAbbrev(name: string): string {
 }
 
 function isOnCooldown(skillName: string): boolean {
-  void _now.value;
-  const cd = skillStore.state.cooldowns[skillName];
-  if (!cd) return false;
-  return _now.value < cd.readyAt;
+  void skillStore.now.value;
+  return skillStore.isOnCooldown(skillName);
 }
 
 function getCooldownHeight(skillName: string): number {
-  void _now.value;
+  void skillStore.now.value;
   const cd = skillStore.state.cooldowns[skillName];
   if (!cd) return 0;
-  const remaining = cd.readyAt - _now.value;
+  const remaining = cd.readyAt - skillStore.now.value;
   if (remaining <= 0) return 0;
   return (remaining / cd.duration) * 100;
 }
 
 function getCooldownText(skillName: string): string {
-  void _now.value;
+  void skillStore.now.value;
   const cd = skillStore.state.cooldowns[skillName];
   if (!cd) return '';
-  const remaining = cd.readyAt - _now.value;
+  const remaining = cd.readyAt - skillStore.now.value;
   if (remaining <= 0) return '';
   return (remaining / 1000).toFixed(1);
 }
@@ -143,6 +201,64 @@ function getMpCost(skillName: string): number {
 </script>
 
 <style scoped>
+.skill-bar-wrapper {
+  position: absolute;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  user-select: none;
+  z-index: 50;
+}
+
+.skill-bar-drag-handle {
+  width: 16px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  margin-right: 4px;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.skill-bar-drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-dots {
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.4);
+  line-height: 1;
+}
+
+.skill-bar-close {
+  width: 16px;
+  height: 16px;
+  background: rgba(200, 50, 50, 0.3);
+  border: 1px solid rgba(255, 100, 100, 0.3);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  margin-top: 5px;
+  flex-shrink: 0;
+  padding: 0;
+  line-height: 1;
+}
+
+.skill-bar-close:hover {
+  background: rgba(200, 50, 50, 0.6);
+  color: #fff;
+}
+
 .skill-bar {
   display: flex;
   gap: 3px;
@@ -202,7 +318,7 @@ function getMpCost(skillName: string): number {
 
 .skill-key {
   color: rgba(255, 255, 255, 0.2);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: bold;
 }
 
@@ -210,7 +326,7 @@ function getMpCost(skillName: string): number {
   position: absolute;
   bottom: 1px;
   right: 3px;
-  font-size: 0.55rem;
+  font-size: 0.5rem;
   color: rgba(255, 255, 255, 0.35);
   pointer-events: none;
 }
