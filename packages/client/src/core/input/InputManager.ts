@@ -50,6 +50,8 @@ export class InputManager {
   private handleKeyDown(e: KeyboardEvent): void {
     console.log('[InputManager] keydown:', e.code, 'chatFocused:', this.chatFocused, 'handler:', !!this.skillBarHandler, 'skillIdx:', SKILL_BAR_KEYS.indexOf(e.code));
     if (this.chatFocused) return;
+    const tag = (document.activeElement?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
     this.keys.set(e.code, true);
 
     if (e.code === 'Escape' && this.pointerLocked) {
@@ -70,6 +72,8 @@ export class InputManager {
 
   private handleKeyUp(e: KeyboardEvent): void {
     if (this.chatFocused) return;
+    const tag = (document.activeElement?.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
     this.keys.set(e.code, false);
   }
 

@@ -1,5 +1,13 @@
 <template>
-  <div class="chat-panel">
+  <div
+    ref="panelRef"
+    class="chat-panel"
+    data-draggable
+    :style="{ left: posX + 'px', top: posY + 'px' }"
+  >
+    <div class="chat-header" data-drag-handle>
+      <span class="drag-dots">&#8960;</span>
+    </div>
     <div class="chat-messages" ref="chatEl">
       <div v-for="(msg, i) in messages" :key="i" class="chat-msg">
         <span class="chat-sender">[{{ msg.sender }}]</span>
@@ -22,7 +30,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import { useDraggable } from '../composables/useDraggable';
+
+const { posX, posY, attach, detach } = useDraggable('[data-drag-handle]', 'panel-chat');
+const panelRef = ref<HTMLElement | null>(null);
 
 const props = defineProps<{
   messages: Array<{ sender: string; message: string; channel?: string }>;
@@ -65,15 +77,40 @@ function focusInput() {
 }
 
 defineExpose({ focusInput });
+
+onMounted(() => {
+  if (panelRef.value) attach(panelRef.value);
+});
+
+onUnmounted(() => {
+  if (panelRef.value) detach(panelRef.value);
+});
 </script>
 
 <style scoped>
 .chat-panel {
   position: absolute;
-  bottom: 70px;
-  left: 15px;
   width: 320px;
   pointer-events: auto;
+  user-select: none;
+}
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px 8px 0 0;
+}
+
+.drag-dots {
+  cursor: grab;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.drag-dots:active {
+  cursor: grabbing;
 }
 
 .chat-messages {

@@ -123,7 +123,7 @@
       />
 
       <SkillWindow
-        v-if="showSkillWindow"
+        v-show="showSkillWindow"
         :game-client="gameClient"
         @close="showSkillWindow = false"
       />
@@ -710,7 +710,8 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     return;
   }
 
-  if (chatFocused.value) return;
+  const tag = (document.activeElement?.tagName || '').toLowerCase();
+  if (chatFocused.value || tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
   if (e.code === 'KeyI') {
     showInventory.value = !showInventory.value;

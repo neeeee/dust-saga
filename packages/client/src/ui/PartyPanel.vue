@@ -1,6 +1,7 @@
 <template>
-  <div class="party-panel" v-if="party">
-    <div class="party-header">
+  <div ref="panelRef" class="party-panel" v-show="party" data-draggable :style="{ left: posX + 'px', top: posY + 'px' }">
+    <div class="party-header" data-drag-handle>
+      <span class="drag-dots">&#8960;</span>
       <span class="party-title">Party ({{ party.members.length }}/8)</span>
       <button class="party-leave-btn" @click="$emit('leave-party')">Leave</button>
     </div>
@@ -54,7 +55,12 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
 import { PartyData, PartyLootItem, StatusEffectType } from '@dust-saga/shared';
+import { useDraggable } from '../composables/useDraggable';
+
+const { posX, posY, attach, detach } = useDraggable('[data-drag-handle]', 'panel-party', { x: 10, y: 120 });
+const panelRef = ref<HTMLElement | null>(null);
 
 const BUFF_TYPES = new Set([
   StatusEffectType.HASTE,
@@ -128,14 +134,20 @@ function getEffectLabel(e: any): string {
   };
   return DEBUFF_ICONS[e.type] || '??';
 }
+
+onMounted(() => {
+  if (panelRef.value) attach(panelRef.value);
+});
+
+onUnmounted(() => {
+  if (panelRef.value) detach(panelRef.value);
+});
 </script>
 
 <style scoped>
 .party-panel {
   position: absolute;
-  top: 50%;
-  left: 8px;
-  transform: translateY(-50%);
+  position: absolute;
   width: 200px;
   background: rgba(0, 0, 0, 0.75);
   border: 1px solid #555;

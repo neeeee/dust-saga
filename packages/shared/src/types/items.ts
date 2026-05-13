@@ -38,6 +38,14 @@ export interface ItemStats {
   DEX?: number;
   SPI?: number;
   INT?: number;
+  accuracy?: number;
+  dodge?: number;
+  attackSpeed?: number;
+  fireResist?: number;
+  iceResist?: number;
+  lightningResist?: number;
+  poisonResist?: number;
+  darkResist?: number;
 }
 
 export interface ItemDefinition {

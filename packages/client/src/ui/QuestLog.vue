@@ -1,6 +1,7 @@
 <template>
-  <div class="quest-panel" v-if="visible">
-    <div class="panel-header">
+  <div ref="panelRef" class="quest-panel" v-show="visible" data-draggable :style="{ left: posX + 'px', top: posY + 'px' }">
+    <div class="panel-header" data-drag-handle>
+      <span class="drag-dots">&#8960;</span>
       <h3>Quest Log</h3>
       <button class="close-btn" @click="$emit('close')">x</button>
     </div>
@@ -42,7 +43,12 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
 import { QUEST_DATABASE } from '@dust-saga/shared';
+import { useDraggable } from '../composables/useDraggable';
+
+const { posX, posY, attach, detach } = useDraggable('[data-drag-handle]', 'panel-questlog', { x: 500, y: 120 });
+const panelRef = ref<HTMLElement | null>(null);
 
 defineProps<{
   visible: boolean;
@@ -82,14 +88,19 @@ function statusLabel(status: string): string {
   };
   return labels[status] || status;
 }
+
+onMounted(() => {
+  if (panelRef.value) attach(panelRef.value);
+});
+
+onUnmounted(() => {
+  if (panelRef.value) detach(panelRef.value);
+});
 </script>
 
 <style scoped>
 .quest-panel {
   position: absolute;
-  top: 50%;
-  right: 20px;
-  transform: translateY(-50%);
   width: 320px;
   max-height: 500px;
   background: rgba(10, 10, 25, 0.95);
@@ -106,6 +117,18 @@ function statusLabel(status: string): string {
   align-items: center;
   padding: 12px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  user-select: none;
+}
+
+.drag-dots {
+  cursor: grab;
+  color: #666;
+  font-size: 0.9rem;
+  margin-right: 8px;
+}
+
+.drag-dots:active {
+  cursor: grabbing;
 }
 
 .panel-header h3 {

@@ -266,12 +266,23 @@ export function getEffectiveStats(
 export interface StatBonusBreakdown {
   gear: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number };
   buffs: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number };
+  gearCombat?: {
+    accuracy: number;
+    dodge: number;
+    attackSpeed: number;
+    fireResist: number;
+    iceResist: number;
+    lightningResist: number;
+    poisonResist: number;
+    darkResist: number;
+  };
 }
 
 export function computeStatBreakdown(
   statPoints: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number },
   statusEffects: StatusEffect[],
-  gearBonuses: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number }
+  gearBonuses: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number },
+  gearCombat?: { accuracy: number; dodge: number; attackSpeed: number; fireResist: number; iceResist: number; lightningResist: number; poisonResist: number; darkResist: number }
 ): StatBonusBreakdown {
   const buffs = { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
 
@@ -286,7 +297,7 @@ export function computeStatBreakdown(
     if (bd.flatStats.dex) buffs.DEX += bd.flatStats.dex;
   }
 
-  return { gear: { ...gearBonuses }, buffs };
+  return { gear: { ...gearBonuses }, buffs, gearCombat: gearCombat || undefined };
 }
 
 export function resolveLapisMediowBuff(

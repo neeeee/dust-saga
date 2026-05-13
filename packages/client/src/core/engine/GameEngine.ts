@@ -47,6 +47,7 @@ export class GameEngine {
   private aoeIndicatorMat: StandardMaterial | null = null;
   private aoeValid: boolean = true;
   private aoeTargetingActive: boolean = false;
+  private isRotating: boolean = false;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -81,6 +82,7 @@ export class GameEngine {
       this.scene
     );
     this.camera.attachControl(this.canvas, true);
+    (this.camera.inputs.attached.pointers as any).buttons = [];
     this.camera.lowerRadiusLimit = 3;
     this.camera.upperRadiusLimit = 40;
     this.camera.lowerBetaLimit = 0.3;
@@ -88,6 +90,11 @@ export class GameEngine {
     this.camera.wheelPrecision = 30;
     this.camera.panningSensibility = 0;
     this.camera.inertia = 0.5;
+
+    this.canvas.addEventListener('pointerdown', this.handlePointerDown);
+    this.canvas.addEventListener('pointerup', this.handlePointerUp);
+    this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.canvas.addEventListener('pointermove', this.handlePointerMoveForCamera);
 
     const hemiLight = new HemisphericLight('hemiLight', new V3(0, 1, 0), this.scene);
     hemiLight.intensity = 0.6;
@@ -818,7 +825,30 @@ export class GameEngine {
     return this.aoeTargetCircle !== null;
   }
 
+  private handlePointerDown = (e: PointerEvent): void => {
+    if (e.button === 2 && this.camera && !this.isRotating) {
+      this.isRotating = true;
+      this.canvas?.requestPointerLock();
+    }
+  };
+
+  private handlePointerUp = (_e: PointerEvent): void => {
+    if (this.isRotating) {
+      this.isRotating = false;
+      document.exitPointerLock();
+    }
+  };
+
+  private handlePointerMoveForCamera = (e: PointerEvent): void => {
+    if (!this.isRotating || !this.camera) return;
+    this.camera.alpha -= e.movementX * 0.003;
+  };
+
   dispose(): void {
+    if (this.isRotating) document.exitPointerLock();
+    this.canvas?.removeEventListener('pointerdown', this.handlePointerDown);
+    this.canvas?.removeEventListener('pointerup', this.handlePointerUp);
+    this.canvas?.removeEventListener('pointermove', this.handlePointerMoveForCamera);
     this.hideAOETargetCircle();
     this.meshes.forEach(group => {
       group.root.dispose();

@@ -24,7 +24,7 @@ import { SkillSystem } from '../ecs/systems/SkillSystem';
 import { PartySystem } from '../ecs/systems/PartySystem';
 import { SpawnManager } from '../world/SpawnManager';
 import { QuestSystem } from '../../systems/QuestSystem';
-import { getEnemyDefinition, getZoneDefinition, NPC_DATABASE, getNPCsInZone, getItem, getQuest, QUEST_DATABASE } from '@dust-saga/shared';
+import { getEnemyDefinition, getZoneDefinition, NPC_DATABASE, getNPCsInZone, getItem, getQuest, QUEST_DATABASE, ITEM_DATABASE } from '@dust-saga/shared';
 import { v4 as uuidv4 } from 'uuid';
 
 interface ServerGameState {
@@ -2194,6 +2194,58 @@ export class NetworkServer {
         timestamp: Date.now(),
         data: { sender: 'System', message: `Killed ${killed} enemies in zone.`, channel: 'system' }
       });
+    } else if (cmd === '/resetskills') {
+      const categoryKeys = new Set(['melee', 'technique', 'prayer', 'magic', 'special']);
+      const spentSkillPoints = Object.entries(session.skillProficiencies)
+        .filter(([key]) => !categoryKeys.has(key))
+        .reduce((sum, [, v]) => sum + v, 0);
+      session.skillProficiencies = createDefaultSkillProficiencies();
+      session.unspentSkillPoints += spentSkillPoints;
+
+      this.sendToPlayer(session.characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'System', message: `Skill points reset. Refunded ${spentSkillPoints} points.`, channel: 'system' }
+      });
+      this.sendToPlayer(session.characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId: session.characterId, stats: session.stats, statPoints: session.statPoints, unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints, skillProficiencies: session.skillProficiencies,
+          skillAdeptness: session.skillAdeptness }
+      });
+      this.refreshPartyForMember(session.characterId);
+    } else if (cmd === '/giveitem') {
+      const itemId = parts[1];
+      const quantity = parseInt(parts[2]) || 1;
+      if (!itemId || !ITEM_DATABASE[itemId]) {
+        const itemNames = Object.keys(ITEM_DATABASE).join(', ');
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.CHAT_MESSAGE,
+          timestamp: Date.now(),
+          data: { sender: 'System', message: `Unknown item "${itemId || ''}". Available: ${itemNames}`, channel: 'system' }
+        });
+        return;
+      }
+      const added = this.playerSys.addItemToInventory(session, itemId, quantity);
+      if (added) {
+        const itemDef = ITEM_DATABASE[itemId];
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.CHAT_MESSAGE,
+          timestamp: Date.now(),
+          data: { sender: 'System', message: `Received ${itemDef.name} x${quantity}.`, channel: 'system' }
+        });
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.INVENTORY_UPDATE,
+          timestamp: Date.now(),
+          data: { inventory: session.inventory }
+        });
+      } else {
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.CHAT_MESSAGE,
+          timestamp: Date.now(),
+          data: { sender: 'System', message: 'Inventory full.', channel: 'system' }
+        });
+      }
     }
   }
 

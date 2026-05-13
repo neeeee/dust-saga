@@ -934,6 +934,10 @@ export class GameClient {
     });
   }
 
+  getEngine(): GameEngine {
+    return this.engine;
+  }
+
   dispose(): void {
     this.isRunning = false;
     this.network.disconnect();

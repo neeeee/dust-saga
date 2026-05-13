@@ -1,7 +1,7 @@
 <template>
-  <div v-if="visible" class="stat-panel-overlay" @click.self="$emit('close')">
-    <div class="stat-panel">
-      <div class="stat-panel-header">
+  <div ref="panelRef" class="stat-panel" v-show="visible" data-draggable :style="{ left: posX + 'px', top: posY + 'px' }">
+      <div class="stat-panel-header" data-drag-handle>
+        <span class="drag-dots">&#8960;</span>
         <h2>Character Stats</h2>
         <button class="close-btn" @click="handleCancel">x</button>
       </div>
@@ -51,6 +51,60 @@
         </div>
       </div>
 
+      <div class="combat-stats">
+        <h3>Combat Stats</h3>
+        <div class="combat-grid">
+          <div class="combat-item">
+            <span class="combat-label">Accuracy</span>
+            <span class="combat-value">{{ combatStats.accuracy }}</span>
+          </div>
+          <div class="combat-item">
+            <span class="combat-label">Dodge</span>
+            <span class="combat-value">{{ combatStats.dodge }}</span>
+          </div>
+          <div class="combat-item">
+            <span class="combat-label">Atk Speed</span>
+            <span class="combat-value">{{ formatPercent(combatStats.attackSpeed) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="resistances">
+        <h3>Elemental Resistances</h3>
+        <div class="resist-grid">
+          <div class="resist-item">
+            <span class="resist-icon fire">F</span>
+            <span class="resist-label">Fire</span>
+            <span class="resist-value">{{ resistances.fire }}</span>
+          </div>
+          <div class="resist-item">
+            <span class="resist-icon ice">I</span>
+            <span class="resist-label">Ice</span>
+            <span class="resist-value">{{ resistances.ice }}</span>
+          </div>
+          <div class="resist-item">
+            <span class="resist-icon lightning">L</span>
+            <span class="resist-label">Lightning</span>
+            <span class="resist-value">{{ resistances.lightning }}</span>
+          </div>
+          <div class="resist-item">
+            <span class="resist-icon poison">P</span>
+            <span class="resist-label">Poison</span>
+            <span class="resist-value">{{ resistances.poison }}</span>
+          </div>
+          <div class="resist-item">
+            <span class="resist-icon dark">D</span>
+            <span class="resist-label">Dark</span>
+            <span class="resist-value">{{ resistances.dark }}</span>
+          </div>
+          <div class="resist-item">
+            <span class="resist-icon dark">H</span>
+            <span class="resist-label">Holy</span>
+            <span class="resist-value">{{ resistances.holy }}</span>
+          </div>
+        </div>
+      </div>
+
       <div class="stat-actions" v-if="hasPending">
         <button class="confirm-btn" @click="handleConfirm">Confirm</button>
         <button class="cancel-btn" @click="handleCancel">Cancel</button>
@@ -61,16 +115,19 @@
         <span class="passive-desc">{{ racialPassive.description }}</span>
       </div>
     </div>
-  </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, computed, watch } from 'vue';
+import { reactive, computed, watch, ref, onMounted, onUnmounted } from 'vue';
 import {
   PlayerStats, StatPoints, StatType, RACE_DATA, Race,
   JOB_DEFINITIONS, JobId, BaseClass, calculateDerivedStats, getJobBaseStatModifier,
   getStatPointCost
 } from '@dust-saga/shared';
+import { useDraggable } from '../composables/useDraggable';
+
+const { posX, posY, attach, detach } = useDraggable('[data-drag-handle]', 'panel-stats', { x: 250, y: 120 });
+const panelRef = ref<HTMLElement | null>(null);
 
 const props = defineProps<{
   visible: boolean;
@@ -252,29 +309,52 @@ const racialPassive = computed(() => {
   if (!raceData) return null;
   return { name: raceData.passiveName, description: raceData.passiveDescription };
 });
+
+const combatStats = computed(() => {
+  const gc = props.statBreakdown?.gearCombat;
+  return {
+    accuracy: gc?.accuracy || 0,
+    dodge: gc?.dodge || 0,
+    attackSpeed: gc?.attackSpeed || 0,
+  };
+});
+
+const resistances = computed(() => {
+  const gc = props.statBreakdown?.gearCombat;
+  return {
+    fire: gc?.fireResist || 0,
+    ice: gc?.iceResist || 0,
+    lightning: gc?.lightningResist || 0,
+    poison: gc?.poisonResist || 0,
+    dark: gc?.darkResist || 0,
+    holy: gc?.holyResist || 0,
+  };
+});
+
+function formatPercent(value: number): string {
+  if (value === 0) return '0%';
+  return (value >= 0 ? '+' : '') + Math.round(value * 100) + '%';
+}
+
+onMounted(() => {
+  if (panelRef.value) attach(panelRef.value);
+});
+
+onUnmounted(() => {
+  if (panelRef.value) detach(panelRef.value);
+});
 </script>
 
 <style scoped>
-.stat-panel-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 50;
-}
-
 .stat-panel {
+  position: absolute;
   background: rgba(20, 20, 40, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
   padding: 1.5rem;
   width: 440px;
   color: white;
+  user-select: none;
 }
 
 .stat-panel-header {
@@ -287,6 +367,18 @@ const racialPassive = computed(() => {
 .stat-panel-header h2 {
   margin: 0;
   font-size: 1.2rem;
+  flex: 1;
+}
+
+.drag-dots {
+  cursor: grab;
+  color: #666;
+  font-size: 0.9rem;
+  margin-right: 8px;
+}
+
+.drag-dots:active {
+  cursor: grabbing;
 }
 
 .close-btn {
@@ -524,5 +616,111 @@ const racialPassive = computed(() => {
   font-size: 0.7rem;
   color: #aaa;
   line-height: 1.3;
+}
+
+.combat-stats h3,
+.resistances h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.combat-stats {
+  margin-bottom: 1rem;
+}
+
+.combat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.combat-item {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.combat-label {
+  color: #aaa;
+  font-size: 0.75rem;
+}
+
+.combat-value {
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.resistances {
+  margin-bottom: 1rem;
+}
+
+.resist-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+}
+
+.resist-item {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.resist-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.resist-icon.fire {
+  background: rgba(244, 67, 54, 0.3);
+  color: #ef5350;
+}
+
+.resist-icon.ice {
+  background: rgba(33, 150, 243, 0.3);
+  color: #42a5f5;
+}
+
+.resist-icon.lightning {
+  background: rgba(255, 193, 7, 0.3);
+  color: #ffca28;
+}
+
+.resist-icon.poison {
+  background: rgba(76, 175, 80, 0.3);
+  color: #66bb6a;
+}
+
+.resist-icon.dark {
+  background: rgba(156, 39, 176, 0.3);
+  color: #ab47bc;
+}
+
+.resist-label {
+  color: #aaa;
+  font-size: 0.75rem;
+  flex: 1;
+}
+
+.resist-value {
+  font-size: 0.8rem;
+  font-weight: bold;
 }
 </style>
