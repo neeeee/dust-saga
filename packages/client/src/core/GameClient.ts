@@ -406,6 +406,10 @@ export class GameClient {
         this.stats = data.stats;
         this.callbacks.onStatsUpdate?.(data.stats);
       }
+      if (data.statBreakdown && data.characterId === this.playerId) {
+        this.statBreakdown = data.statBreakdown;
+        this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints, this.statBreakdown);
+      }
       if (data.statPoints && data.characterId === this.playerId) {
         this.statPoints = data.statPoints;
         this.unspentStatPoints = data.unspentStatPoints ?? this.unspentStatPoints;

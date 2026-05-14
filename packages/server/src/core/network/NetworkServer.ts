@@ -2237,7 +2237,7 @@ export class NetworkServer {
         this.sendToPlayer(session.characterId, {
           type: PacketType.INVENTORY_UPDATE,
           timestamp: Date.now(),
-          data: { inventory: session.inventory }
+          data: { inventory: session.inventory, equipment: session.equipment }
         });
       } else {
         this.sendToPlayer(session.characterId, {
@@ -2274,12 +2274,12 @@ export class NetworkServer {
       this.sendToPlayer(characterId, {
         type: PacketType.INVENTORY_UPDATE,
         timestamp: Date.now(),
-        data: { inventory: session.inventory }
+        data: { inventory: session.inventory, equipment: session.equipment }
       });
       this.sendToPlayer(characterId, {
         type: PacketType.STATS_UPDATE,
         timestamp: Date.now(),
-        data: { characterId, stats: session.stats }
+        data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown }
       });
     }
   }
@@ -2300,7 +2300,7 @@ export class NetworkServer {
       this.sendToPlayer(characterId, {
         type: PacketType.STATS_UPDATE,
         timestamp: Date.now(),
-        data: { characterId, stats: session.stats }
+        data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown }
       });
     }
   }
@@ -2321,7 +2321,7 @@ export class NetworkServer {
       this.sendToPlayer(characterId, {
         type: PacketType.STATS_UPDATE,
         timestamp: Date.now(),
-        data: { characterId, stats: session.stats }
+        data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown }
       });
     }
   }
@@ -2347,7 +2347,7 @@ export class NetworkServer {
       this.sendToPlayer(characterId, {
         type: PacketType.INVENTORY_UPDATE,
         timestamp: Date.now(),
-        data: { inventory: session.inventory }
+        data: { inventory: session.inventory, equipment: session.equipment }
       });
     }
   }
@@ -2390,7 +2390,7 @@ export class NetworkServer {
       this.sendToPlayer(characterId, {
         type: PacketType.INVENTORY_UPDATE,
         timestamp: Date.now(),
-        data: { inventory: session.inventory }
+        data: { inventory: session.inventory, equipment: session.equipment }
       });
       this.sendToPlayer(characterId, {
         type: PacketType.STATS_UPDATE,
@@ -2480,7 +2480,7 @@ export class NetworkServer {
       this.sendToPlayer(characterId, {
         type: PacketType.INVENTORY_UPDATE,
         timestamp: Date.now(),
-        data: { inventory: session.inventory }
+        data: { inventory: session.inventory, equipment: session.equipment }
       });
       this.sendToPlayer(characterId, {
         type: PacketType.NOTIFICATION,

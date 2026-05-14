@@ -19,6 +19,8 @@
             class="equip-slot"
             :class="{ filled: equipment[slot.key] }"
             @click="handleEquipClick(slot.key)"
+            @mouseenter="equipment[slot.key] && showTooltip($event, equipment[slot.key].itemId)"
+            @mouseleave="hideTooltip"
           >
             <span class="slot-label">{{ slot.label }}</span>
             <span v-if="equipment[slot.key]" class="slot-item">{{ getItemName(equipment[slot.key]?.itemId) }}</span>
@@ -35,6 +37,8 @@
             class="item-slot"
             :class="getItemRarity(item.itemId)"
             @click="handleItemClick(item)"
+            @mouseenter="showTooltip($event, item.itemId)"
+            @mouseleave="hideTooltip"
           >
             <span class="item-name">{{ getItemName(item.itemId) }}</span>
             <span v-if="item.quantity > 1" class="item-qty">x{{ item.quantity }}</span>
@@ -42,11 +46,26 @@
         </div>
       </div>
     </div>
+
+    <div
+      v-if="tooltip.visible"
+      class="item-tooltip"
+      :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
+    >
+      <div class="tooltip-name" :class="tooltip.rarity">{{ tooltip.name }}</div>
+      <div class="tooltip-type">{{ tooltip.type }}</div>
+      <div v-if="tooltip.slot" class="tooltip-slot">Slot: {{ tooltip.slot }}</div>
+      <div v-if="tooltip.level > 0" class="tooltip-level">Required Level: {{ tooltip.level }}</div>
+      <div class="tooltip-desc">{{ tooltip.description }}</div>
+      <div v-if="tooltip.statLines.length > 0" class="tooltip-stats">
+        <div v-for="line in tooltip.statLines" :key="line" class="tooltip-stat">{{ line }}</div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, watch, onMounted, onUnmounted, nextTick, reactive } from 'vue';
 import { ITEM_DATABASE } from '@dust-saga/shared';
 import { useDraggable } from '../composables/useDraggable';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, DirectionalLight, MeshBuilder, StandardMaterial, Color3, Color4, Vector3, AbstractMesh } from '@babylonjs/core';
@@ -103,6 +122,59 @@ function getItemName(itemId: string): string {
 
 function getItemRarity(itemId: string): string {
   return ITEM_DATABASE[itemId]?.rarity || 'common';
+}
+
+const tooltip = reactive<{ visible: boolean; x: number; y: number; name: string; rarity: string; type: string; slot: string; level: number; description: string; statLines: string[] }>({
+  visible: false, x: 0, y: 0, name: '', rarity: 'common', type: '', slot: '', level: 0, description: '', statLines: [],
+});
+
+function showTooltip(event: MouseEvent, itemId: string): void {
+  const def = ITEM_DATABASE[itemId];
+  if (!def) return;
+  const statLines: string[] = [];
+  const s = def.stats;
+  if (s.attack) statLines.push(`+${s.attack} Attack`);
+  if (s.defense) statLines.push(`+${s.defense} Defense`);
+  if (s.health) statLines.push(`+${s.health} Health`);
+  if (s.mana) statLines.push(`+${s.mana} Mana`);
+  if (s.speed) statLines.push(`+${s.speed} Speed`);
+  if (s.criticalChance) statLines.push(`+${Math.round(s.criticalChance * 100)}% Critical`);
+  if (s.accuracy) statLines.push(`+${s.accuracy} Accuracy`);
+  if (s.dodge) {
+    const prefix = s.dodge >= 0 ? '+' : '';
+    statLines.push(`${prefix}${s.dodge} Dodge`);
+  }
+  if (s.attackSpeed) statLines.push(`+${Math.round(s.attackSpeed * 100)}% Attack Speed`);
+  if (s.fireResist) statLines.push(`+${s.fireResist} Fire Resist`);
+  if (s.iceResist) statLines.push(`+${s.iceResist} Ice Resist`);
+  if (s.lightningResist) statLines.push(`+${s.lightningResist} Lightning Resist`);
+  if (s.poisonResist) statLines.push(`+${s.poisonResist} Poison Resist`);
+  if (s.darkResist) statLines.push(`+${s.darkResist} Dark Resist`);
+  if (s.STA) statLines.push(`+${s.STA} STA`);
+  if (s.STR) statLines.push(`+${s.STR} STR`);
+  if (s.AGI) statLines.push(`+${s.AGI} AGI`);
+  if (s.DEX) statLines.push(`+${s.DEX} DEX`);
+  if (s.SPI) statLines.push(`+${s.SPI} SPI`);
+  if (s.INT) statLines.push(`+${s.INT} INT`);
+
+  const panelRect = panelRef.value?.getBoundingClientRect();
+  const tx = event.clientX + 12 - (panelRect?.left || 0);
+  const ty = event.clientY + 12 - (panelRect?.top || 0);
+
+  tooltip.visible = true;
+  tooltip.x = tx;
+  tooltip.y = ty;
+  tooltip.name = def.name;
+  tooltip.rarity = def.rarity;
+  tooltip.type = def.type.charAt(0).toUpperCase() + def.type.slice(1);
+  tooltip.slot = def.equipmentSlot ? def.equipmentSlot.charAt(0).toUpperCase() + def.equipmentSlot.slice(1) : '';
+  tooltip.level = def.requiredLevel;
+  tooltip.description = def.description;
+  tooltip.statLines = statLines;
+}
+
+function hideTooltip(): void {
+  tooltip.visible = false;
 }
 
 function initPreview(): void {
@@ -501,5 +573,59 @@ onUnmounted(() => {
 .item-qty {
   font-size: 0.6rem;
   color: #aaa;
+}
+
+.item-tooltip {
+  position: absolute;
+  background: rgba(8, 8, 20, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-width: 160px;
+  max-width: 220px;
+  z-index: 200;
+  pointer-events: none;
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.tooltip-name {
+  font-weight: bold;
+  font-size: 0.8rem;
+  margin-bottom: 2px;
+}
+
+.tooltip-name.common { color: #ccc; }
+.tooltip-name.uncommon { color: #4caf50; }
+.tooltip-name.rare { color: #42a5f5; }
+.tooltip-name.epic { color: #ab47bc; }
+.tooltip-name.legendary { color: #ffa726; }
+
+.tooltip-type {
+  color: #888;
+  font-size: 0.65rem;
+}
+
+.tooltip-slot,
+.tooltip-level {
+  color: #aaa;
+  font-size: 0.65rem;
+}
+
+.tooltip-desc {
+  color: #bbb;
+  margin: 4px 0;
+  font-style: italic;
+}
+
+.tooltip-stats {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.tooltip-stat {
+  color: #66bb6a;
+  font-size: 0.65rem;
 }
 </style>
