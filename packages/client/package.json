@@ -1,11 +1,39 @@
 {
   "name": "@dust-saga/client",
   "version": "1.0.0",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "pack": "electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "com.dustsaga.client",
+    "productName": "Dust Saga",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "public/**/*"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64"]
+        }
+      ],
+      "category": "public.app-category.games",
+      "icon": "public/icon.png"
+    },
+    "dmg": {
+      "title": "${productName} ${version}"
+    }
   },
   "dependencies": {
     "@babylonjs/core": "^9.2.0",
@@ -21,8 +49,12 @@
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@vitejs/plugin-vue": "^5.0.0",
+    "electron": "42.1.0",
+    "electron-builder": "^26.0.12",
     "typescript": "^6.0.2",
     "vite": "^8.0.10",
+    "vite-plugin-electron": "^0.29.4",
+    "vite-plugin-electron-renderer": "^0.14.6",
     "vue-tsc": "^3.2.7"
   }
 }

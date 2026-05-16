@@ -46,6 +46,7 @@ export interface ItemStats {
   lightningResist?: number;
   poisonResist?: number;
   darkResist?: number;
+  holyResist?: number;
 }
 
 export interface ItemDefinition {

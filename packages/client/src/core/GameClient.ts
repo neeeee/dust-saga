@@ -643,7 +643,8 @@ export class GameClient {
     const input = this.input.getInputState();
     const movementVector = this.input.getMovementVector();
 
-    const speed = input.sprint ? GAME_CONFIG.PLAYER_SPEED * 1.5 : GAME_CONFIG.PLAYER_SPEED;
+    const speedMultiplier = (this.stats as any)?.speedMultiplier ?? 1;
+    const speed = input.sprint ? GAME_CONFIG.PLAYER_SPEED * 1.5 * speedMultiplier : GAME_CONFIG.PLAYER_SPEED * speedMultiplier;
 
     const camera = this.engine.getScene()?.activeCamera;
     let camForward = BabylonVector3.Forward();

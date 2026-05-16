@@ -46,6 +46,17 @@ export class NetworkServer {
   private questSys: QuestSystem;
   private state: ServerGameState;
   private tickRate: number = 30;
+  private activePulses: Map<string, {
+    id: string;
+    casterId: string;
+    zoneId: string;
+    skillName: string;
+    position: { x: number; y: number; z: number };
+    radius: number;
+    remainingPulses: number;
+    nextPulseAt: number;
+    pulseInterval: number;
+  }> = new Map();
 
   constructor(httpServer: any) {
     this.io = new SocketIOServer(httpServer, {
@@ -809,6 +820,15 @@ export class NetworkServer {
     session.nation = (char.nation as 'varik' | 'pfelstein' | 'latugan' | null) || null;
     session.lastSafeZoneId = char.last_safe_zone_id || session.zoneId;
 
+    if (char.inventory) {
+      const parsed = typeof char.inventory === 'string' ? JSON.parse(char.inventory) : char.inventory;
+      if (Array.isArray(parsed)) session.inventory = parsed;
+    }
+    if (char.equipment) {
+      const parsed = typeof char.equipment === 'string' ? JSON.parse(char.equipment) : char.equipment;
+      if (parsed && typeof parsed === 'object') session.equipment = parsed;
+    }
+
     const zoneDef = getZoneDefinition(session.zoneId);
     if (char.position_x === 0 && char.position_y === 0 && char.position_z === 0) {
       session.position = { ...(zoneDef?.playerSpawn || { x: 0, y: 0, z: 0 }) };
@@ -969,15 +989,6 @@ export class NetworkServer {
         timestamp: Date.now(),
         data: { skillName, castTime, type: 'cast_start' }
       });
-      this.sendToPlayer(characterId, {
-        type: PacketType.CHAT_MESSAGE,
-        timestamp: Date.now(),
-        data: {
-          sender: 'Debug',
-          message: `[Cast] ${skillName}: base=${baseCastMs}ms castSpd=${100 + Math.floor(session.statPoints.DEX / 10) * 5}% effective=${castTime}ms | cooldown base=${skill?.cooldown || 0}s multiplier=${cooldownPct}% effective=${(effectiveCd / 1000).toFixed(1)}s`,
-          channel: 'system'
-        }
-      });
       return;
     }
 
@@ -990,449 +1001,12 @@ export class NetworkServer {
           magicDefense: Math.floor((def?.defense || 0) * 0.3),
           health: enemy.health,
           level: enemy.level,
-          dodge: Math.floor(enemy.level * 0.5)
-        };
-      }
-      const player = this.state.players.get(id);
-      if (player) {
-        const eff = getEffectiveStats(
-          player.stats,
-          player.statPoints,
-          player.statusEffects || []
-        );
-        return {
-          defense: eff.defense,
-          magicDefense: Math.floor(eff.defense * 0.3),
-          health: player.stats.health,
-          level: player.stats.level,
-          dodge: player.statPoints.AGI + eff.dodgeBonus,
-          damageTakenMultiplier: eff.damageTakenMultiplier,
-          physicalDamageReduction: eff.physicalDamageReduction,
-        };
-      }
-      return null;
-    };    const result = this.skillSys.executeSkill(session, skillName, targetId || null, getTargetStats);
-    this.playerSys.recalcStats(session);
-
-    if (this.skillSys.lastProficiencyGain) {
-      const pg = this.skillSys.lastProficiencyGain;
-      this.sendToPlayer(characterId, {
-        type: PacketType.STATS_UPDATE,
-        timestamp: Date.now(),
-        data: { characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
-      });
-      this.sendToPlayer(characterId, {
-        type: PacketType.CHAT_MESSAGE,
-        timestamp: Date.now(),
-        data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
-      });
-      this.skillSys.lastProficiencyGain = undefined;
-    }
-
-    if (this.skillSys.lastBuffDebug) {
-      this.sendToPlayer(characterId, {
-        type: PacketType.CHAT_MESSAGE,
-        timestamp: Date.now(),
-        data: { sender: 'Debug', message: this.skillSys.lastBuffDebug, channel: 'system' }
-      });
-      this.skillSys.lastBuffDebug = undefined;
-    }
-
-    this.sendToPlayer(characterId, {
-      type: PacketType.COOLDOWN_UPDATE,
-      timestamp: Date.now(),
-      data: {
-        skillName,
-        type: 'used',
-        mpCost: this.skillSys.findSkillDefinition(skillName)?.mpCost || 0,
-        cooldownRemaining: session.skillCooldowns.find(c => c.skillName === skillName)?.readyAt
-          ? Math.max(0, (session.skillCooldowns.find(c => c.skillName === skillName)!.readyAt - Date.now()))
-          : 0
-      }
-    });
-
-    this.sendToPlayer(characterId, {
-      type: PacketType.STATS_UPDATE,
-      timestamp: Date.now(),
-      data: { characterId, stats: session.stats }
-    });
-
-    if (session.statusEffects.length > 0) {
-      this.sendToPlayer(characterId, {
-        type: PacketType.STATUS_EFFECT_UPDATE,
-        timestamp: Date.now(),
-        data: { effects: session.statusEffects }
-      });
-      this.broadcastEntityEffects(session);
-    }
-
-    const skill = this.skillSys.findSkillDefinition(skillName);
-    if (skill && skill.duration > 0 && targetId && targetId !== characterId) {
-      const targetType = SKILL_TARGET_RULES[skillName];
-      const shouldApplyToTarget = !targetType
-        || targetType === SkillTargetType.SELF_OR_TARGET
-        || targetType === SkillTargetType.OTHER_ONLY;
-        if (shouldApplyToTarget) {
-          const targetSession = this.state.players.get(targetId);
-          if (targetSession && !targetSession.isDead) {
-          this.skillSys.applyBuffToTarget(targetSession, session.characterId, skill, session);
-          this.playerSys.recalcStats(targetSession);
-          if (this.skillSys.lastBuffDebug) {
-            this.sendToPlayer(characterId, {
-              type: PacketType.CHAT_MESSAGE,
-              timestamp: Date.now(),
-              data: { sender: 'Debug', message: this.skillSys.lastBuffDebug, channel: 'system' }
-            });
-            this.skillSys.lastBuffDebug = undefined;
-          }
-          this.sendToPlayer(targetId, {
-            type: PacketType.STATUS_EFFECT_UPDATE,
-            timestamp: Date.now(),
-            data: { effects: targetSession.statusEffects }
-          });
-          this.sendToPlayer(targetId, {
-            type: PacketType.STATS_UPDATE,
-            timestamp: Date.now(),
-            data: { characterId: targetId, stats: targetSession.stats }
-          });
-          this.broadcastEntityEffects(targetSession);
-        }
-      }
-    }
-
-    if (result.statusEffects && result.statusEffects.length > 0 && targetId) {
-      const targetSession = this.state.players.get(targetId);
-      if (targetSession) {
-        for (const effect of result.statusEffects) {
-          effect.targetId = targetId;
-          targetSession.statusEffects.push(effect);
-        }
-        this.playerSys.recalcStats(targetSession);
-        this.sendToPlayer(targetId, {
-          type: PacketType.STATUS_EFFECT_UPDATE,
-          timestamp: Date.now(),
-          data: { effects: targetSession.statusEffects }
-        });
-        this.sendToPlayer(targetId, {
-          type: PacketType.STATS_UPDATE,
-          timestamp: Date.now(),
-          data: { characterId: targetId, stats: targetSession.stats }
-        });
-        this.broadcastEntityEffects(targetSession);
-      } else {
-        const enemy = this.spawnMgr.getEnemy(targetId);
-        if (enemy && enemy.state !== 'dead') {
-          for (const effect of result.statusEffects) {
-            effect.targetId = targetId;
-            enemy.statusEffects.push(effect);
-          }
-          this.broadcastInZone(session.zoneId, {
-            type: PacketType.ENTITY_STATUS_EFFECTS,
-            timestamp: Date.now(),
-            data: { entityId: targetId, effects: enemy.statusEffects }
-          });
-        }
-      }
-    }
-
-    if (skill) {
-      const targetType = SKILL_TARGET_RULES[skillName];
-      if (targetType === SkillTargetType.PARTY) {
-        const partyMembers = this.partySys.getPartyMembers(characterId);
-        for (const memberId of partyMembers) {
-          if (memberId === characterId) continue;
-          const memberSession = this.state.players.get(memberId);
-          if (!memberSession || memberSession.isDead || memberSession.stats.health <= 0) continue;
-          if (memberSession.zoneId !== session.zoneId) continue;
-
-          if (skill.duration > 0) {
-            this.skillSys.applyBuffToTarget(memberSession, session.characterId, skill, session);
-            this.playerSys.recalcStats(memberSession);
-            if (this.skillSys.lastBuffDebug) {
-              this.sendToPlayer(characterId, {
-                type: PacketType.CHAT_MESSAGE,
-                timestamp: Date.now(),
-                data: { sender: 'Debug', message: this.skillSys.lastBuffDebug, channel: 'system' }
-              });
-              this.skillSys.lastBuffDebug = undefined;
-            }
-            this.sendToPlayer(memberId, {
-              type: PacketType.STATUS_EFFECT_UPDATE,
-              timestamp: Date.now(),
-              data: { effects: memberSession.statusEffects }
-            });
-            this.sendToPlayer(memberId, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { characterId: memberId, stats: memberSession.stats }
-            });
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { entityId: memberId, health: memberSession.stats.health, maxHealth: memberSession.stats.maxHealth }
-            }, memberId);
-            this.broadcastEntityEffects(memberSession);
-          }
-
-          if (result.healing) {
-            memberSession.stats.health = Math.min(memberSession.stats.maxHealth, memberSession.stats.health + result.healing);
-            this.sendToPlayer(memberId, {
-              type: PacketType.HEAL,
-              timestamp: Date.now(),
-              data: { targetId: memberId, amount: result.healing }
-            });
-            this.sendToPlayer(memberId, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { characterId: memberId, stats: memberSession.stats }
-            });
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { entityId: memberId, health: memberSession.stats.health, maxHealth: memberSession.stats.maxHealth }
-            }, characterId);
-            this.refreshPartyForMember(memberId);
-          }
-
-          if (result.maxHpIncrease) {
-            const hpIncrease = this.skillSys.calculateMaxHpBuff(memberSession, skill);
-            const healthRatio = memberSession.stats.maxHealth > 0 ? memberSession.stats.health / memberSession.stats.maxHealth : 1;
-            memberSession.stats.maxHealth += hpIncrease;
-            memberSession.stats.health = Math.min(memberSession.stats.maxHealth, Math.floor(memberSession.stats.maxHealth * healthRatio) + hpIncrease);
-            this.sendToPlayer(memberId, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { characterId: memberId, stats: memberSession.stats }
-            });
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { entityId: memberId, health: memberSession.stats.health, maxHealth: memberSession.stats.maxHealth }
-            }, characterId);
-            this.refreshPartyForMember(memberId);
-          }
-
-          if (result.mpRestored) {
-            memberSession.stats.mana = Math.min(memberSession.stats.maxMana, memberSession.stats.mana + result.mpRestored);
-            this.sendToPlayer(memberId, {
-              type: PacketType.HEAL,
-              timestamp: Date.now(),
-              data: { targetId: memberId, amount: result.mpRestored, mpRestore: true }
-            });
-          }
-        }
-      }
-    }
-
-    if (result.missed && targetId) {
-      this.broadcastInZone(session.zoneId, {
-        type: PacketType.DAMAGE,
-        timestamp: Date.now(),
-        data: {
-          attackerId: characterId,
-          targetId,
-          damage: 0,
-          isCritical: false,
-          damageType: result.damageType || 'physical',
-          skillName,
-          missed: true
-        }
-      });
-    } else if (result.damage && targetId) {
-      const enemy = this.spawnMgr.getEnemy(targetId);
-      if (enemy) {
-        enemy.health = Math.max(0, enemy.health - result.damage);
-        this.broadcastInZone(session.zoneId, {
-          type: PacketType.DAMAGE,
-          timestamp: Date.now(),
-          data: {
-            attackerId: characterId,
-            targetId,
-            damage: result.damage,
-            isCritical: result.isCritical || false,
-            damageType: result.damageType || 'physical',
-            skillName
-          }
-        });
-        if (enemy.health <= 0) {
-          enemy.state = 'dead';
-          enemy.deathTime = Date.now();
-
-          const enemyDef = getEnemyDefinition(enemy.enemyType);
-          if (enemyDef) {
-            this.playerSys.grantExperience(session, enemyDef.experience);
-            this.sendToPlayer(characterId, {
-              type: PacketType.EXPERIENCE_GAIN,
-              timestamp: Date.now(),
-              data: { experience: enemyDef.experience, totalExperience: session.stats.experience, level: session.stats.level }
-            });
-            this.sendToPlayer(characterId, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { characterId, stats: session.stats }
-            });
-
-            const lootItems = this.loot.generateLoot(enemyDef.lootTable, enemy.position, characterId);
-            lootItems.forEach(loot => {
-              this.broadcastInZone(session.zoneId, {
-                type: PacketType.LOOT_SPAWN,
-                timestamp: Date.now(),
-                data: loot
-              });
-            });
-          }
-
-          this.broadcastInZone(session.zoneId, {
-            type: PacketType.DEATH,
-            timestamp: Date.now(),
-            data: { entityId: targetId, killerId: characterId }
-          });
-
-          this.broadcastInZone(session.zoneId, {
-            type: PacketType.ENTITY_DESPAWN,
-            timestamp: Date.now(),
-            data: { entityId: targetId }
-          });
-        } else {
-          this.broadcastInZone(session.zoneId, {
-            type: PacketType.STATS_UPDATE,
-            timestamp: Date.now(),
-            data: { entityId: targetId, health: enemy.health, maxHealth: enemy.maxHealth }
-          });
-        }
-      } else {
-        const playerTarget = this.state.players.get(targetId);
-        if (playerTarget) {
-          playerTarget.stats.health = Math.max(0, playerTarget.stats.health - result.damage);
-          this.broadcastInZone(session.zoneId, {
-            type: PacketType.DAMAGE,
-            timestamp: Date.now(),
-            data: {
-              attackerId: characterId,
-              targetId,
-              damage: result.damage,
-              isCritical: result.isCritical || false,
-              damageType: result.damageType || 'physical',
-              skillName
-            }
-          });
-          this.sendToPlayer(targetId, {
-            type: PacketType.STATS_UPDATE,
-            timestamp: Date.now(),
-            data: { characterId: targetId, stats: playerTarget.stats }
-          });
-          this.broadcastInZone(session.zoneId, {
-            type: PacketType.STATS_UPDATE,
-            timestamp: Date.now(),
-            data: { entityId: targetId, health: playerTarget.stats.health, maxHealth: playerTarget.stats.maxHealth }
-          }, characterId);
-          this.refreshPartyForMember(targetId);
-          this.consumeDebuffsOnHit(playerTarget);
-          if (playerTarget.stats.health <= 0) {
-            this.handlePlayerDeath(playerTarget);
-          }
-        }
-      }
-    }
-
-    if (result.revived && targetId) {
-      this.handleRevivePlayerBySession(session, targetId);
-    }
-
-    if (result.healing) {
-      const healTarget = targetId && targetId !== characterId ? this.state.players.get(targetId) : null;
-      if (healTarget) {
-        if (healTarget.isDead) return;
-        healTarget.stats.health = Math.min(healTarget.stats.maxHealth, healTarget.stats.health + result.healing);
-        this.broadcastInZone(session.zoneId, {
-          type: PacketType.HEAL,
-          timestamp: Date.now(),
-          data: { targetId, amount: result.healing }
-        });
-        this.sendToPlayer(targetId, {
-          type: PacketType.STATS_UPDATE,
-          timestamp: Date.now(),
-          data: { characterId: targetId, stats: healTarget.stats }
-        });
-        this.broadcastInZone(session.zoneId, {
-          type: PacketType.STATS_UPDATE,
-          timestamp: Date.now(),
-          data: { entityId: targetId, health: healTarget.stats.health, maxHealth: healTarget.stats.maxHealth }
-        }, characterId);
-        this.refreshPartyForMember(targetId);
-      } else {
-        if (!session.isDead) {
-          session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + result.healing);
-          this.sendToPlayer(characterId, {
-            type: PacketType.HEAL,
-            timestamp: Date.now(),
-            data: { targetId: characterId, amount: result.healing }
-          });
-          this.sendToPlayer(characterId, {
-            type: PacketType.STATS_UPDATE,
-            timestamp: Date.now(),
-            data: { characterId, stats: session.stats }
-          });
-          this.refreshPartyForMember(characterId);
-        }
-      }
-    }
-
-    if (result.mpRestored) {
-      this.sendToPlayer(characterId, {
-        type: PacketType.HEAL,
-        timestamp: Date.now(),
-        data: { targetId: characterId, amount: result.mpRestored, mpRestore: true }
-      });
-      this.sendToPlayer(characterId, {
-        type: PacketType.STATS_UPDATE,
-        timestamp: Date.now(),
-        data: { characterId, stats: session.stats }
-      });
-    }
-  }
-
-  private handleGroundAOESkillUse(
-    socket: Socket,
-    session: PlayerSession,
-    skillName: string,
-    aoePosition: { x: number; y: number; z: number }
-  ): void {
-    const characterId = session.characterId;
-
-    const check = this.skillSys.canUseSkill(session, skillName, null);
-    if (!check.canUse) {
-      this.sendToPlayer(characterId, {
-        type: PacketType.SKILL_USE,
-        timestamp: Date.now(),
-        data: { skillName, error: check.error }
-      });
-      return;
-    }
-
-    const { started, castTime } = this.skillSys.beginCast(session, skillName, null, aoePosition);
-    if (!started) return;
-
-    if (castTime > 0) {
-      const skill = this.skillSys.findSkillDefinition(skillName);
-      this.sendToPlayer(characterId, {
-        type: PacketType.COOLDOWN_UPDATE,
-        timestamp: Date.now(),
-        data: { skillName, castTime, type: 'cast_start', aoePosition }
-      });
-      return;
-    }
-
-    const getTargetStats = (id: string) => {
-      const enemy = this.spawnMgr.getEnemy(id);
-      if (enemy) {
-        const def = getEnemyDefinition(enemy.enemyType);
-        return {
-          defense: this.getEnemyEffectiveDefense(enemy),
-          magicDefense: Math.floor((def?.defense || 0) * 0.3),
-          health: enemy.health,
-          level: enemy.level,
-          dodge: Math.floor(enemy.level * 0.5)
+          dodge: Math.floor(enemy.level * 0.5),
+          fireResist: def?.fireResist || 0,
+          iceResist: def?.iceResist || 0,
+          lightningResist: def?.lightningResist || 0,
+          darkResist: def?.darkResist || 0,
+          holyResist: def?.holyResist || 0,
         };
       }
       const player = this.state.players.get(id);
@@ -1450,6 +1024,11 @@ export class NetworkServer {
           dodge: player.statPoints.AGI + eff.dodgeBonus,
           damageTakenMultiplier: eff.damageTakenMultiplier,
           physicalDamageReduction: eff.physicalDamageReduction,
+          fireResist: player.statBreakdown?.gearCombat?.fireResist || 0,
+          iceResist: player.statBreakdown?.gearCombat?.iceResist || 0,
+          lightningResist: player.statBreakdown?.gearCombat?.lightningResist || 0,
+          darkResist: player.statBreakdown?.gearCombat?.darkResist || 0,
+          holyResist: player.statBreakdown?.gearCombat?.holyResist || 0,
         };
       }
       return null;
@@ -1462,311 +1041,9 @@ export class NetworkServer {
     const firstTargetId = firstTarget?.id || null;
 
     const result = this.skillSys.executeSkill(session, skillName, firstTargetId, getTargetStats);
+    this.sendDamageDebug(session, result);
     this.playerSys.recalcStats(session);
 
-    if (this.skillSys.lastProficiencyGain) {
-      const pg = this.skillSys.lastProficiencyGain;
-      this.sendToPlayer(characterId, {
-        type: PacketType.STATS_UPDATE,
-        timestamp: Date.now(),
-        data: { characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
-      });
-      this.sendToPlayer(characterId, {
-        type: PacketType.CHAT_MESSAGE,
-        timestamp: Date.now(),
-        data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
-      });
-      this.skillSys.lastProficiencyGain = undefined;
-    }
-
-    this.sendToPlayer(characterId, {
-      type: PacketType.COOLDOWN_UPDATE,
-      timestamp: Date.now(),
-      data: {
-        skillName,
-        type: 'used',
-        mpCost: skill?.mpCost || 0,
-        cooldownRemaining: session.skillCooldowns.find(c => c.skillName === skillName)?.readyAt
-          ? Math.max(0, (session.skillCooldowns.find(c => c.skillName === skillName)!.readyAt - Date.now()))
-          : 0
-      }
-    });
-
-    this.sendToPlayer(characterId, {
-      type: PacketType.STATS_UPDATE,
-      timestamp: Date.now(),
-      data: { characterId, stats: session.stats }
-    });
-
-    if (session.statusEffects.length > 0) {
-      this.sendToPlayer(characterId, {
-        type: PacketType.STATUS_EFFECT_UPDATE,
-        timestamp: Date.now(),
-        data: { effects: session.statusEffects }
-      });
-    }
-
-    if (result.damage && firstTargetId) {
-      const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
-
-      for (const target of targets) {
-        const targetResult = target.id === firstTargetId
-          ? result
-          : this.skillSys.calculateAOEDamage(session, skillName, target.id, getTargetStats);
-
-        if (!targetResult.damage) continue;
-
-        const enemy = this.spawnMgr.getEnemy(target.id);
-        if (enemy) {
-          enemy.health = Math.max(0, enemy.health - targetResult.damage);
-          this.broadcastInZone(session.zoneId, {
-            type: PacketType.DAMAGE,
-            timestamp: Date.now(),
-            data: {
-              attackerId: characterId,
-              targetId: target.id,
-              damage: targetResult.damage,
-              isCritical: targetResult.isCritical || false,
-              damageType: targetResult.damageType || 'physical',
-              skillName
-            }
-          });
-
-          if (enemy.health <= 0) {
-            enemy.state = 'dead';
-            enemy.deathTime = Date.now();
-            const enemyDef = getEnemyDefinition(enemy.enemyType);
-            if (enemyDef) {
-              this.playerSys.grantExperience(session, enemyDef.experience);
-              this.sendToPlayer(characterId, {
-                type: PacketType.EXPERIENCE_GAIN,
-                timestamp: Date.now(),
-                data: { experience: enemyDef.experience, totalExperience: session.stats.experience, level: session.stats.level }
-              });
-              this.sendToPlayer(characterId, {
-                type: PacketType.STATS_UPDATE,
-                timestamp: Date.now(),
-                data: { characterId, stats: session.stats }
-              });
-              const lootItems = this.loot.generateLoot(enemyDef.lootTable, enemy.position, characterId);
-              lootItems.forEach(loot => {
-                this.broadcastInZone(session.zoneId, {
-                  type: PacketType.LOOT_SPAWN,
-                  timestamp: Date.now(),
-                  data: loot
-                });
-              });
-            }
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.DEATH,
-              timestamp: Date.now(),
-              data: { entityId: target.id, killerId: characterId }
-            });
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.ENTITY_DESPAWN,
-              timestamp: Date.now(),
-              data: { entityId: target.id }
-            });
-          } else {
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { entityId: target.id, health: enemy.health, maxHealth: enemy.maxHealth }
-            });
-          }
-        } else {
-          const playerTarget = this.state.players.get(target.id);
-          if (playerTarget && target.id !== characterId) {
-            playerTarget.stats.health = Math.max(0, playerTarget.stats.health - targetResult.damage);
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.DAMAGE,
-              timestamp: Date.now(),
-              data: {
-                attackerId: characterId,
-                targetId: target.id,
-                damage: targetResult.damage,
-                isCritical: targetResult.isCritical || false,
-                damageType: targetResult.damageType || 'physical',
-                skillName
-              }
-            });
-            this.sendToPlayer(target.id, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { characterId: target.id, stats: playerTarget.stats }
-            });
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { entityId: target.id, health: playerTarget.stats.health, maxHealth: playerTarget.stats.maxHealth }
-            }, characterId);
-            this.refreshPartyForMember(target.id);
-            this.consumeDebuffsOnHit(playerTarget);
-            if (playerTarget.stats.health <= 0) {
-              this.handlePlayerDeath(playerTarget);
-            }
-          }
-        }
-      }
-    }
-
-    if (result.statusEffects && result.statusEffects.length > 0) {
-      const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
-      for (const target of targets) {
-        const enemy = this.spawnMgr.getEnemy(target.id);
-        if (enemy && enemy.state !== 'dead') {
-          for (const effect of result.statusEffects) {
-            const cloned = { ...effect, targetId: target.id };
-            enemy.statusEffects.push(cloned);
-          }
-          this.broadcastInZone(session.zoneId, {
-            type: PacketType.ENTITY_STATUS_EFFECTS,
-            timestamp: Date.now(),
-            data: { entityId: target.id, effects: enemy.statusEffects }
-          });
-        } else {
-          const playerTarget = this.state.players.get(target.id);
-          if (playerTarget && target.id !== characterId) {
-            for (const effect of result.statusEffects) {
-              const cloned = { ...effect, targetId: target.id };
-              playerTarget.statusEffects.push(cloned);
-            }
-            this.playerSys.recalcStats(playerTarget);
-            this.sendToPlayer(target.id, {
-              type: PacketType.STATUS_EFFECT_UPDATE,
-              timestamp: Date.now(),
-              data: { effects: playerTarget.statusEffects }
-            });
-            this.sendToPlayer(target.id, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { characterId: target.id, stats: playerTarget.stats }
-            });
-            this.broadcastEntityEffects(playerTarget);
-          }
-        }
-      }
-    }
-
-    if (session.statusEffects.length > 0) {
-      this.sendToPlayer(characterId, {
-        type: PacketType.STATUS_EFFECT_UPDATE,
-        timestamp: Date.now(),
-        data: { effects: session.statusEffects }
-      });
-    }
-  }
-
-  private findClosestEntityToPosition(
-    session: PlayerSession,
-    pos: { x: number; y: number; z: number },
-    radius: number
-  ): { id: string; distance: number } | null {
-    let closest: { id: string; distance: number } | null = null;
-
-    for (const [id, enemy] of this.spawnMgr.getAllEnemies()) {
-      if (enemy.state === 'dead') continue;
-      const dx = enemy.position.x - pos.x;
-      const dz = enemy.position.z - pos.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist <= radius && (!closest || dist < closest.distance)) {
-        closest = { id, distance: dist };
-      }
-    }
-
-    for (const [id, player] of this.state.players) {
-      if (id === session.characterId) continue;
-      if (player.stats.health <= 0) continue;
-      if (!player.position) continue;
-      const dx = player.position.x - pos.x;
-      const dz = player.position.z - pos.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist <= radius && (!closest || dist < closest.distance)) {
-        closest = { id, distance: dist };
-      }
-    }
-
-    return closest;
-  }
-
-  private findAllEntitiesInRadius(
-    session: PlayerSession,
-    pos: { x: number; y: number; z: number },
-    radius: number
-  ): Array<{ id: string; distance: number }> {
-    const results: Array<{ id: string; distance: number }> = [];
-
-    for (const [id, enemy] of this.spawnMgr.getAllEnemies()) {
-      if (enemy.state === 'dead') continue;
-      const dx = enemy.position.x - pos.x;
-      const dz = enemy.position.z - pos.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist <= radius) {
-        results.push({ id, distance: dist });
-      }
-    }
-
-    for (const [id, player] of this.state.players) {
-      if (id === session.characterId) continue;
-      if (player.stats.health <= 0) continue;
-      if (!player.position) continue;
-      const dx = player.position.x - pos.x;
-      const dz = player.position.z - pos.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist <= radius) {
-        results.push({ id, distance: dist });
-      }
-    }
-
-    return results;
-  }
-
-  private handleAOECastCompletion(
-    session: PlayerSession,
-    castResult: { skillName: string; targetId: string | null; aoePosition?: { x: number; y: number; z: number } }
-  ): void {
-    const characterId = session.characterId;
-    const { skillName } = castResult;
-    const aoePosition = castResult.aoePosition!;
-
-    const getTargetStats = (id: string) => {
-      const enemy = this.spawnMgr.getEnemy(id);
-      if (enemy) {
-        const def = getEnemyDefinition(enemy.enemyType);
-        return {
-          defense: this.getEnemyEffectiveDefense(enemy),
-          magicDefense: Math.floor((def?.defense || 0) * 0.3),
-          health: enemy.health,
-          level: enemy.level,
-          dodge: Math.floor(enemy.level * 0.5)
-        };
-      }
-      const player = this.state.players.get(id);
-      if (player) {
-        const eff = getEffectiveStats(
-          player.stats,
-          player.statPoints,
-          player.statusEffects || []
-        );
-        return {
-          defense: eff.defense,
-          magicDefense: Math.floor(eff.defense * 0.3),
-          health: player.stats.health,
-          level: player.stats.level,
-          dodge: player.statPoints.AGI + eff.dodgeBonus,
-          damageTakenMultiplier: eff.damageTakenMultiplier,
-          physicalDamageReduction: eff.physicalDamageReduction,
-        };
-      }
-      return null;
-    };    const skill = this.skillSys.findSkillDefinition(skillName);
-    const aoeRadius = skill?.aoeRadius || DEFAULT_AOE_RADIUS;
-
-    const firstTarget = this.findClosestEntityToPosition(session, aoePosition, aoeRadius);
-    const firstTargetId = firstTarget?.id || null;
-
-    const result = this.skillSys.executeSkill(session, skillName, firstTargetId, getTargetStats);
-    this.playerSys.recalcStats(session);
 
     if (this.skillSys.lastProficiencyGain) {
       const pg = this.skillSys.lastProficiencyGain;
@@ -1797,94 +1074,10 @@ export class NetworkServer {
     });
 
     if (result.damage) {
-      const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
-
-      for (const target of targets) {
-        const targetResult = target.id === firstTargetId
-          ? result
-          : this.skillSys.calculateAOEDamage(session, skillName, target.id, getTargetStats);
-
-        if (!targetResult.damage) continue;
-
-        const enemy = this.spawnMgr.getEnemy(target.id);
-        if (enemy) {
-          enemy.health = Math.max(0, enemy.health - targetResult.damage);
-          this.broadcastInZone(session.zoneId, {
-            type: PacketType.DAMAGE,
-            timestamp: Date.now(),
-            data: {
-              attackerId: characterId,
-              targetId: target.id,
-              damage: targetResult.damage,
-              isCritical: targetResult.isCritical || false,
-              damageType: targetResult.damageType || 'physical',
-              skillName
-            }
-          });
-          if (enemy.health <= 0) {
-            enemy.state = 'dead';
-            enemy.deathTime = Date.now();
-            const enemyDef = getEnemyDefinition(enemy.enemyType);
-            if (enemyDef) {
-              this.playerSys.grantExperience(session, enemyDef.experience);
-              this.sendToPlayer(characterId, {
-                type: PacketType.EXPERIENCE_GAIN,
-                timestamp: Date.now(),
-                data: { experience: enemyDef.experience, totalExperience: session.stats.experience, level: session.stats.level }
-              });
-            }
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.DEATH,
-              timestamp: Date.now(),
-              data: { entityId: target.id, killerId: characterId }
-            });
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.ENTITY_DESPAWN,
-              timestamp: Date.now(),
-              data: { entityId: target.id }
-            });
-          } else {
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { entityId: target.id, health: enemy.health, maxHealth: enemy.maxHealth }
-            });
-          }
-        } else {
-          const playerTarget = this.state.players.get(target.id);
-          if (playerTarget && target.id !== characterId) {
-            playerTarget.stats.health = Math.max(0, playerTarget.stats.health - targetResult.damage);
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.DAMAGE,
-              timestamp: Date.now(),
-              data: {
-                attackerId: characterId,
-                targetId: target.id,
-                damage: targetResult.damage,
-                isCritical: targetResult.isCritical || false,
-                damageType: targetResult.damageType || 'physical',
-                skillName
-              }
-            });
-            this.sendToPlayer(target.id, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { characterId: target.id, stats: playerTarget.stats }
-            });
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
-              data: { entityId: target.id, health: playerTarget.stats.health, maxHealth: playerTarget.stats.maxHealth }
-            }, characterId);
-             this.refreshPartyForMember(target.id);
-            this.consumeDebuffsOnHit(playerTarget);
-            if (playerTarget.stats.health <= 0) {
-              this.handlePlayerDeath(playerTarget);
-            }
-          }
-        }
-      }
+      this.applyAOEDamageToTargets(session, skillName, aoePosition, aoeRadius, result);
     }
+
+    this.registerAOEPulse(session, skillName, aoePosition, aoeRadius, 1000, 1000);
 
     if (result.statusEffects && result.statusEffects.length > 0) {
       const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
@@ -1979,6 +1172,16 @@ export class NetworkServer {
       }
     }
     return defense;
+  }
+
+  private damageEnemy(enemy: EnemyInstance, damage: number): { died: boolean; actualDamage: number } {
+    enemy.health = Math.max(0, enemy.health - damage);
+    const actualDamage = damage;
+    if (enemy.invulnerable) {
+      enemy.health = enemy.maxHealth;
+      return { died: false, actualDamage };
+    }
+    return { died: enemy.health <= 0, actualDamage };
   }
 
   private handleChatMessage(socket: Socket, data: any): void {
@@ -2168,6 +1371,7 @@ export class NetworkServer {
       let killed = 0;
       enemies.forEach((enemy, enemyId) => {
         if (enemy.state === 'dead') return;
+        if (enemy.invulnerable) return;
         enemy.health = 0;
         enemy.state = 'dead';
         enemy.deathTime = Date.now();
@@ -2194,6 +1398,53 @@ export class NetworkServer {
         timestamp: Date.now(),
         data: { sender: 'System', message: `Killed ${killed} enemies in zone.`, channel: 'system' }
       });
+    } else if (cmd === '/dummy') {
+      const subCmd = parts[1];
+      if (subCmd === 'set' && parts[2] && parts[3]) {
+        const stat = parts[2];
+        const value = parseFloat(parts[3]);
+        if (isNaN(value)) {
+          this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: 'Invalid value.', channel: 'system' } });
+          return;
+        }
+        const statKey: Record<string, string> = { defense: 'defense', level: 'level', maxhealth: 'maxHealth', health: 'health', fireresist: 'fireResist', iceresist: 'iceResist', lightningresist: 'lightningResist', darkresist: 'darkResist', holyresist: 'holyResist', magicresist: 'magicResist' };
+        const resolvedStat = statKey[stat] || null;
+        if (!resolvedStat) {
+          this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: `Unknown stat "${stat}". Valid: defense, level, maxHealth, health, fireResist, iceResist, lightningResist, darkResist, holyResist, magicResist`, channel: 'system' } });
+          return;
+        }
+        const enemies = this.spawnMgr.getEnemiesInZone(session.zoneId);
+        let found = false;
+        for (const [enemyId, enemy] of enemies) {
+          if (enemy.enemyType !== 'striking_dummy') continue;
+          found = true;
+          const def = getEnemyDefinition(enemy.enemyType);
+          if (!def) continue;
+          switch (resolvedStat) {
+            case 'defense': def.defense = value; break;
+            case 'level': def.level = value; enemy.level = value; break;
+            case 'maxHealth': def.health = value; enemy.health = value; enemy.maxHealth = value; break;
+            case 'health': enemy.health = Math.min(value, enemy.maxHealth); break;
+            case 'fireResist': def.fireResist = value; break;
+            case 'iceResist': def.iceResist = value; break;
+            case 'lightningResist': def.lightningResist = value; break;
+            case 'darkResist': def.darkResist = value; break;
+            case 'holyResist': def.holyResist = value; break;
+            case 'magicResist':
+              def.fireResist = value; def.iceResist = value; def.lightningResist = value;
+              def.darkResist = value; def.holyResist = value; break;
+            default: this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: `Unknown stat "${stat}". Valid: defense, level, maxHealth, health, fireResist, iceResist, lightningResist, darkResist, holyResist, magicResist`, channel: 'system' } }); return;
+          }
+          this.broadcastInZone(session.zoneId, { type: PacketType.STATS_UPDATE, timestamp: Date.now(), data: { entityId: enemyId, health: enemy.health, maxHealth: enemy.maxHealth } });
+        }
+        if (found) {
+          this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: `Striking dummy: set ${stat} = ${value}`, channel: 'system' } });
+        } else {
+          this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: 'No striking dummy in this zone.', channel: 'system' } });
+        }
+      } else {
+        this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: 'Usage: /dummy set <stat> <value>  —  Stats: defense, level, maxHealth, health', channel: 'system' } });
+      }
     } else if (cmd === '/resetskills') {
       const categoryKeys = new Set(['melee', 'technique', 'prayer', 'magic', 'special']);
       const spentSkillPoints = Object.entries(session.skillProficiencies)
@@ -2952,7 +2203,15 @@ export class NetworkServer {
           jobId: session.jobId,
           nation: session.nation,
           lastSafeZoneId: session.lastSafeZoneId,
+          inventory: session.inventory,
+          equipment: session.equipment,
         }).catch(err => console.error('Failed to save character on disconnect:', err));
+
+        for (const [pid, pulse] of this.activePulses) {
+          if (pulse.casterId === characterId) {
+            this.activePulses.delete(pid);
+          }
+        }
 
         this.broadcastInZone(session.zoneId, {
           type: PacketType.ENTITY_DESPAWN,
@@ -3059,7 +2318,7 @@ export class NetworkServer {
       const castResult = this.skillSys.checkCasting(session);
       if (castResult?.completed) {
         if (castResult.aoePosition) {
-          this.handleAOECastCompletion(session, castResult);
+          this.handleAOECastCompletion(session, { skillName: castResult.skillName, aoePosition: castResult.aoePosition!, targetId: castResult.targetId });
           this.sendToPlayer(session.characterId, {
             type: PacketType.STATS_UPDATE,
             timestamp: Date.now(),
@@ -3083,7 +2342,12 @@ export class NetworkServer {
               magicDefense: Math.floor((def?.defense || 0) * 0.3),
               health: enemy.health,
               level: enemy.level,
-              dodge: Math.floor(enemy.level * 0.5)
+              dodge: Math.floor(enemy.level * 0.5),
+              fireResist: def?.fireResist || 0,
+              iceResist: def?.iceResist || 0,
+              lightningResist: def?.lightningResist || 0,
+              darkResist: def?.darkResist || 0,
+              holyResist: def?.holyResist || 0,
             };
           }
           const player = this.state.players.get(id);
@@ -3101,12 +2365,18 @@ export class NetworkServer {
               dodge: player.statPoints.AGI + eff.dodgeBonus,
               damageTakenMultiplier: eff.damageTakenMultiplier,
               physicalDamageReduction: eff.physicalDamageReduction,
+              fireResist: player.statBreakdown?.gearCombat?.fireResist || 0,
+              iceResist: player.statBreakdown?.gearCombat?.iceResist || 0,
+              lightningResist: player.statBreakdown?.gearCombat?.lightningResist || 0,
+              darkResist: player.statBreakdown?.gearCombat?.darkResist || 0,
+              holyResist: player.statBreakdown?.gearCombat?.holyResist || 0,
             };
           }
           return null;
         };
 
         const result = this.skillSys.executeSkill(session, castResult.skillName, castResult.targetId, getTargetStats);
+        this.sendDamageDebug(session, result);
         this.playerSys.recalcStats(session);
 
         if (this.skillSys.lastProficiencyGain) {
@@ -3163,13 +2433,13 @@ export class NetworkServer {
         } else if (result.damage && castResult.targetId) {
           const enemy = this.spawnMgr.getEnemy(castResult.targetId);
           if (enemy) {
-            enemy.health = Math.max(0, enemy.health - result.damage);
+            const { died } = this.damageEnemy(enemy, result.damage);
             this.broadcastInZone(session.zoneId, {
               type: PacketType.DAMAGE,
               timestamp: Date.now(),
               data: { attackerId: session.characterId, targetId: castResult.targetId, damage: result.damage, isCritical: result.isCritical || false, damageType: result.damageType || 'physical', skillName: castResult.skillName }
             });
-            if (enemy.health <= 0) {
+            if (died) {
               enemy.state = 'dead';
               enemy.deathTime = Date.now();
 
@@ -3528,6 +2798,28 @@ export class NetworkServer {
       }
     });
 
+    // Tick active pulsing AOEs
+    const now2 = Date.now();
+    const pulseEntries = [...this.activePulses.entries()];
+    for (const [pulseId, pulse] of pulseEntries) {
+      if (now2 < pulse.nextPulseAt) continue;
+
+      const caster = this.state.players.get(pulse.casterId);
+      if (!caster || caster.isDead) {
+        this.activePulses.delete(pulseId);
+        continue;
+      }
+
+      pulse.nextPulseAt = now2 + pulse.pulseInterval;
+      pulse.remainingPulses--;
+
+      this.applyAOEDamageToTargets(caster, pulse.skillName, pulse.position, pulse.radius);
+
+      if (pulse.remainingPulses <= 0) {
+        this.activePulses.delete(pulseId);
+      }
+    }
+
     this.spawnMgr.getAllEnemies().forEach((enemy, enemyId) => {
       if (enemy.state === 'dead') return;
       if (!enemy.statusEffects || enemy.statusEffects.length === 0) return;
@@ -3538,7 +2830,7 @@ export class NetworkServer {
       );
 
       if (tick.damage > 0) {
-        enemy.health = Math.max(0, enemy.health - tick.damage);
+        const { died } = this.damageEnemy(enemy, tick.damage);
         const zoneId = this.findZoneOfEnemy(enemyId);
         if (zoneId) {
           this.broadcastInZone(zoneId, {
@@ -3552,7 +2844,7 @@ export class NetworkServer {
             data: { entityId: enemyId, health: enemy.health, maxHealth: enemy.maxHealth }
           });
         }
-        if (enemy.health <= 0) {
+        if (died) {
           enemy.state = 'dead';
           enemy.deathTime = now;
           const zoneId = this.findZoneOfEnemy(enemyId);
@@ -3691,10 +2983,531 @@ export class NetworkServer {
           jobId: session.jobId,
           nation: session.nation,
           lastSafeZoneId: session.lastSafeZoneId,
+          inventory: session.inventory,
+          equipment: session.equipment,
       }));
     });
     await Promise.all(saves);
     console.log(`Saved ${saves.length} character(s)`);
+  }
+
+  private sendDamageDebug(session: PlayerSession, result: { debugCalc?: string }): void {
+    if (result.debugCalc) {
+      this.sendToPlayer(session.characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'Damage', message: result.debugCalc, channel: 'system' }
+      });
+    }
+  }
+
+  private applyAOEDamageToTargets(
+    session: PlayerSession,
+    skillName: string,
+    aoePosition: { x: number; y: number; z: number },
+    aoeRadius: number,
+    primaryResult?: { damage?: number; isCritical?: boolean; damageType?: string }
+  ): void {
+    const characterId = session.characterId;
+    const getTargetStats = (id: string) => {
+      const enemy = this.spawnMgr.getEnemy(id);
+      if (enemy) {
+        const def = getEnemyDefinition(enemy.enemyType);
+        return {
+          defense: this.getEnemyEffectiveDefense(enemy),
+          magicDefense: Math.floor((def?.defense || 0) * 0.3),
+          health: enemy.health,
+          level: enemy.level,
+          dodge: Math.floor(enemy.level * 0.5)
+        };
+      }
+      const player = this.state.players.get(id);
+      if (player) {
+        const eff = getEffectiveStats(
+          player.stats,
+          player.statPoints,
+          player.statusEffects || []
+        );
+        return {
+          defense: eff.defense,
+          magicDefense: Math.floor(eff.defense * 0.3),
+          health: player.stats.health,
+          level: player.stats.level,
+          dodge: player.statPoints.AGI + eff.dodgeBonus,
+          damageTakenMultiplier: eff.damageTakenMultiplier,
+          physicalDamageReduction: eff.physicalDamageReduction,
+        };
+      }
+      return null;
+    };
+
+    const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
+
+    for (const target of targets) {
+      const targetResult = primaryResult && primaryResult.damage
+        ? primaryResult
+        : this.skillSys.calculateAOEDamage(session, skillName, target.id, getTargetStats);
+
+      if (!targetResult?.damage) continue;
+
+      const enemy = this.spawnMgr.getEnemy(target.id);
+      if (enemy) {
+        const { died } = this.damageEnemy(enemy, targetResult.damage);
+        this.broadcastInZone(session.zoneId, {
+          type: PacketType.DAMAGE,
+          timestamp: Date.now(),
+          data: {
+            attackerId: characterId,
+            targetId: target.id,
+            damage: targetResult.damage,
+            isCritical: targetResult.isCritical || false,
+            damageType: targetResult.damageType || 'physical',
+            skillName
+          }
+        });
+
+        if (died) {
+          enemy.state = 'dead';
+          enemy.deathTime = Date.now();
+          const enemyDef = getEnemyDefinition(enemy.enemyType);
+          if (enemyDef) {
+            this.playerSys.grantExperience(session, enemyDef.experience);
+            this.sendToPlayer(characterId, {
+              type: PacketType.EXPERIENCE_GAIN,
+              timestamp: Date.now(),
+              data: { experience: enemyDef.experience, totalExperience: session.stats.experience, level: session.stats.level }
+            });
+            this.sendToPlayer(characterId, {
+              type: PacketType.STATS_UPDATE,
+              timestamp: Date.now(),
+              data: { characterId, stats: session.stats }
+            });
+            const lootItems = this.loot.generateLoot(enemyDef.lootTable, enemy.position, characterId);
+            lootItems.forEach(loot => {
+              this.broadcastInZone(session.zoneId, {
+                type: PacketType.LOOT_SPAWN,
+                timestamp: Date.now(),
+                data: loot
+              });
+            });
+          }
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.DEATH,
+            timestamp: Date.now(),
+            data: { entityId: target.id, killerId: characterId }
+          });
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.ENTITY_DESPAWN,
+            timestamp: Date.now(),
+            data: { entityId: target.id }
+          });
+        } else {
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { entityId: target.id, health: enemy.health, maxHealth: enemy.maxHealth }
+          });
+        }
+      } else {
+        const playerTarget = this.state.players.get(target.id);
+        if (playerTarget && target.id !== characterId) {
+          playerTarget.stats.health = Math.max(0, playerTarget.stats.health - targetResult.damage);
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.DAMAGE,
+            timestamp: Date.now(),
+            data: {
+              attackerId: characterId,
+              targetId: target.id,
+              damage: targetResult.damage,
+              isCritical: targetResult.isCritical || false,
+              damageType: targetResult.damageType || 'physical',
+              skillName
+            }
+          });
+          this.sendToPlayer(target.id, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: target.id, stats: playerTarget.stats }
+          });
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { entityId: target.id, health: playerTarget.stats.health, maxHealth: playerTarget.stats.maxHealth }
+          }, characterId);
+          this.refreshPartyForMember(target.id);
+          this.consumeDebuffsOnHit(playerTarget);
+          if (playerTarget.stats.health <= 0) {
+            this.handlePlayerDeath(playerTarget);
+          }
+        }
+      }
+    }
+  }
+
+  private registerAOEPulse(
+    session: PlayerSession,
+    skillName: string,
+    aoePosition: { x: number; y: number; z: number },
+    aoeRadius: number,
+    pulseInterval: number,
+    defaultPulseInterval: number
+  ): void {
+    const skill = this.skillSys.findSkillDefinition(skillName);
+    if (!skill || !skill.pulseCount || skill.pulseCount <= 1) return;
+
+    const pulseId = uuidv4();
+    this.activePulses.set(pulseId, {
+      id: pulseId,
+      casterId: session.characterId,
+      zoneId: session.zoneId,
+      skillName,
+      position: aoePosition,
+      radius: aoeRadius,
+      remainingPulses: skill.pulseCount - 1,
+      nextPulseAt: Date.now() + (skill.pulseInterval || defaultPulseInterval),
+      pulseInterval: skill.pulseInterval || defaultPulseInterval,
+    });
+  }
+
+  private findClosestEntityToPosition(
+    session: PlayerSession,
+    pos: { x: number; y: number; z: number },
+    radius: number
+  ): { id: string; distance: number } | null {
+    let closest: { id: string; distance: number } | null = null;
+
+    for (const [id, enemy] of this.spawnMgr.getAllEnemies()) {
+      if (enemy.state === 'dead') continue;
+      const dx = enemy.position.x - pos.x;
+      const dz = enemy.position.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist <= radius && (!closest || dist < closest.distance)) {
+        closest = { id, distance: dist };
+      }
+    }
+
+    for (const [id, player] of this.state.players) {
+      if (id === session.characterId) continue;
+      if (player.stats.health <= 0) continue;
+      if (!player.position) continue;
+      const dx = player.position.x - pos.x;
+      const dz = player.position.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist <= radius && (!closest || dist < closest.distance)) {
+        closest = { id, distance: dist };
+      }
+    }
+
+    return closest;
+  }
+
+  private findAllEntitiesInRadius(
+    session: PlayerSession,
+    pos: { x: number; y: number; z: number },
+    radius: number
+  ): Array<{ id: string; distance: number }> {
+    const results: Array<{ id: string; distance: number }> = [];
+
+    for (const [id, enemy] of this.spawnMgr.getAllEnemies()) {
+      if (enemy.state === 'dead') continue;
+      const dx = enemy.position.x - pos.x;
+      const dz = enemy.position.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist <= radius) {
+        results.push({ id, distance: dist });
+      }
+    }
+
+    for (const [id, player] of this.state.players) {
+      if (id === session.characterId) continue;
+      if (player.stats.health <= 0) continue;
+      if (!player.position) continue;
+      const dx = player.position.x - pos.x;
+      const dz = player.position.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist <= radius) {
+        results.push({ id, distance: dist });
+      }
+    }
+
+    return results;
+  }
+
+  private handleGroundAOESkillUse(
+    socket: Socket,
+    session: PlayerSession,
+    skillName: string,
+    aoePosition: { x: number; y: number; z: number }
+  ): void {
+    const characterId = session.characterId;
+
+    const check = this.skillSys.canUseSkill(session, skillName, null);
+    if (!check.canUse) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.SKILL_USE,
+        timestamp: Date.now(),
+        data: { skillName, error: check.error }
+      });
+      return;
+    }
+
+    const { started, castTime } = this.skillSys.beginCast(session, skillName, null, aoePosition);
+    if (!started) return;
+
+    if (castTime > 0) {
+      const skill = this.skillSys.findSkillDefinition(skillName);
+      this.sendToPlayer(characterId, {
+        type: PacketType.COOLDOWN_UPDATE,
+        timestamp: Date.now(),
+        data: { skillName, castTime, type: 'cast_start', aoePosition }
+      });
+      return;
+    }
+
+    const getTargetStats = (id: string) => {
+      const enemy = this.spawnMgr.getEnemy(id);
+      if (enemy) {
+        const def = getEnemyDefinition(enemy.enemyType);
+        return {
+          defense: this.getEnemyEffectiveDefense(enemy),
+          magicDefense: Math.floor((def?.defense || 0) * 0.3),
+          health: enemy.health,
+          level: enemy.level,
+          dodge: Math.floor(enemy.level * 0.5),
+          fireResist: def?.fireResist || 0,
+          iceResist: def?.iceResist || 0,
+          lightningResist: def?.lightningResist || 0,
+          darkResist: def?.darkResist || 0,
+          holyResist: def?.holyResist || 0,
+        };
+      }
+      const player = this.state.players.get(id);
+      if (player) {
+        const eff = getEffectiveStats(
+          player.stats,
+          player.statPoints,
+          player.statusEffects || []
+        );
+        return {
+          defense: eff.defense,
+          magicDefense: Math.floor(eff.defense * 0.3),
+          health: player.stats.health,
+          level: player.stats.level,
+          dodge: player.statPoints.AGI + eff.dodgeBonus,
+          damageTakenMultiplier: eff.damageTakenMultiplier,
+          physicalDamageReduction: eff.physicalDamageReduction,
+          fireResist: player.statBreakdown?.gearCombat?.fireResist || 0,
+          iceResist: player.statBreakdown?.gearCombat?.iceResist || 0,
+          lightningResist: player.statBreakdown?.gearCombat?.lightningResist || 0,
+          darkResist: player.statBreakdown?.gearCombat?.darkResist || 0,
+          holyResist: player.statBreakdown?.gearCombat?.holyResist || 0,
+        };
+      }
+      return null;
+    };
+    const skill = this.skillSys.findSkillDefinition(skillName);
+    const aoeRadius = skill?.aoeRadius || DEFAULT_AOE_RADIUS;
+
+    const firstTarget = this.findClosestEntityToPosition(
+      session, aoePosition, aoeRadius
+    );
+    const firstTargetId = firstTarget?.id || null;
+
+    const result = this.skillSys.executeSkill(session, skillName, firstTargetId, getTargetStats);
+    this.sendDamageDebug(session, result);
+    this.playerSys.recalcStats(session);
+
+    if (this.skillSys.lastProficiencyGain) {
+      const pg = this.skillSys.lastProficiencyGain;
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+      });
+      this.sendToPlayer(characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
+      });
+      this.skillSys.lastProficiencyGain = undefined;
+    }
+
+    this.sendToPlayer(characterId, {
+      type: PacketType.COOLDOWN_UPDATE,
+      timestamp: Date.now(),
+      data: {
+        skillName,
+        type: 'used',
+        mpCost: skill?.mpCost || 0,
+        cooldownRemaining: session.skillCooldowns.find(c => c.skillName === skillName)?.readyAt
+          ? Math.max(0, (session.skillCooldowns.find(c => c.skillName === skillName)!.readyAt - Date.now()))
+          : 0
+      }
+    });
+
+    this.sendToPlayer(characterId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: { characterId, stats: session.stats }
+    });
+
+    if (session.statusEffects.length > 0) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATUS_EFFECT_UPDATE,
+        timestamp: Date.now(),
+        data: { effects: session.statusEffects }
+      });
+    }
+
+    if (result.damage) {
+      this.applyAOEDamageToTargets(session, skillName, aoePosition, aoeRadius, result);
+    }
+
+    this.registerAOEPulse(session, skillName, aoePosition, aoeRadius, 1000, 1000);
+
+    if (result.statusEffects && result.statusEffects.length > 0) {
+      const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
+      for (const target of targets) {
+        const enemy = this.spawnMgr.getEnemy(target.id);
+        if (enemy && enemy.state !== 'dead') {
+          for (const effect of result.statusEffects) {
+            const cloned = { ...effect, targetId: target.id };
+            enemy.statusEffects.push(cloned);
+          }
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.ENTITY_STATUS_EFFECTS,
+            timestamp: Date.now(),
+            data: { entityId: target.id, effects: enemy.statusEffects }
+          });
+        }
+      }
+    }
+  }
+
+  private handleAOECastCompletion(session: PlayerSession, castResult: { skillName: string; aoePosition: { x: number; y: number; z: number }; targetId: string | null }): void {
+    const characterId = session.characterId;
+    const skillName = castResult.skillName;
+    const aoePosition = castResult.aoePosition;
+
+    const skill = this.skillSys.findSkillDefinition(skillName);
+    if (!skill) return;
+
+    const getTargetStats = (id: string) => {
+      const enemy = this.spawnMgr.getEnemy(id);
+      if (enemy) {
+        const def = getEnemyDefinition(enemy.enemyType);
+        return {
+          defense: this.getEnemyEffectiveDefense(enemy),
+          magicDefense: Math.floor((def?.defense || 0) * 0.3),
+          health: enemy.health,
+          level: enemy.level,
+          dodge: Math.floor(enemy.level * 0.5),
+          fireResist: def?.fireResist || 0,
+          iceResist: def?.iceResist || 0,
+          lightningResist: def?.lightningResist || 0,
+          darkResist: def?.darkResist || 0,
+          holyResist: def?.holyResist || 0,
+        };
+      }
+      const player = this.state.players.get(id);
+      if (player) {
+        const eff = getEffectiveStats(
+          player.stats,
+          player.statPoints,
+          player.statusEffects || []
+        );
+        return {
+          defense: eff.defense,
+          magicDefense: Math.floor(eff.defense * 0.3),
+          health: player.stats.health,
+          level: player.stats.level,
+          dodge: player.statPoints.AGI + eff.dodgeBonus,
+          damageTakenMultiplier: eff.damageTakenMultiplier,
+          physicalDamageReduction: eff.physicalDamageReduction,
+          fireResist: player.statBreakdown?.gearCombat?.fireResist || 0,
+          iceResist: player.statBreakdown?.gearCombat?.iceResist || 0,
+          lightningResist: player.statBreakdown?.gearCombat?.lightningResist || 0,
+          darkResist: player.statBreakdown?.gearCombat?.darkResist || 0,
+          holyResist: player.statBreakdown?.gearCombat?.holyResist || 0,
+        };
+      }
+      return null;
+    };
+
+    const aoeRadius = skill?.aoeRadius || DEFAULT_AOE_RADIUS;
+
+    const firstTarget = this.findClosestEntityToPosition(session, aoePosition, aoeRadius);
+    const firstTargetId = firstTarget?.id || null;
+
+    const result = this.skillSys.executeSkill(session, skillName, firstTargetId, getTargetStats);
+    this.sendDamageDebug(session, result);
+    this.playerSys.recalcStats(session);
+
+    if (this.skillSys.lastProficiencyGain) {
+      const pg = this.skillSys.lastProficiencyGain;
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+      });
+      this.sendToPlayer(characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
+      });
+      this.skillSys.lastProficiencyGain = undefined;
+    }
+
+    this.sendToPlayer(characterId, {
+      type: PacketType.COOLDOWN_UPDATE,
+      timestamp: Date.now(),
+      data: {
+        skillName,
+        type: 'used',
+        mpCost: skill?.mpCost || 0,
+        cooldownRemaining: session.skillCooldowns.find(c => c.skillName === skillName)?.readyAt
+          ? Math.max(0, (session.skillCooldowns.find(c => c.skillName === skillName)!.readyAt - Date.now()))
+          : 0
+      }
+    });
+
+    this.sendToPlayer(characterId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: { characterId, stats: session.stats }
+    });
+
+    if (session.statusEffects.length > 0) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATUS_EFFECT_UPDATE,
+        timestamp: Date.now(),
+        data: { effects: session.statusEffects }
+      });
+    }
+
+    if (result.damage && firstTargetId) {
+      this.applyAOEDamageToTargets(session, skillName, aoePosition, aoeRadius, result);
+    }
+
+    this.registerAOEPulse(session, skillName, aoePosition, aoeRadius, 1000, 1000);
+
+    if (result.statusEffects && result.statusEffects.length > 0) {
+      const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
+      for (const target of targets) {
+        const enemy = this.spawnMgr.getEnemy(target.id);
+        if (enemy && enemy.state !== 'dead') {
+          for (const effect of result.statusEffects) {
+            const cloned = { ...effect, targetId: target.id };
+            enemy.statusEffects.push(cloned);
+          }
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.ENTITY_STATUS_EFFECTS,
+            timestamp: Date.now(),
+            data: { entityId: target.id, statusEffects: enemy.statusEffects }
+          });
+        }
+      }
+    }
   }
 
   getSpawnManager(): SpawnManager {

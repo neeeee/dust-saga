@@ -6,6 +6,9 @@ export interface DebuffEffectTable {
   dotHPPercent?: number;
   dotTickInterval?: number;
   dotMpDrain?: number;
+  dotSPIBase?: number;
+  dotSPIMax?: number;
+  dotSPICap?: number;
   attackDown?: number;
   defenseDown?: number;
   speedDown?: number;

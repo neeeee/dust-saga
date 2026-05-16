@@ -91,11 +91,14 @@ onUnmounted(() => {
 .chat-panel {
   position: absolute;
   width: 320px;
+  z-index: 10;
   pointer-events: auto;
-  user-select: none;
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
 .chat-header {
+  user-select: none !important;
   display: flex;
   align-items: center;
   padding: 2px 6px;
@@ -120,11 +123,15 @@ onUnmounted(() => {
   padding: 8px;
   border-radius: 8px 8px 0 0;
   font-size: 0.8rem;
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
 .chat-msg {
   margin-bottom: 2px;
   word-wrap: break-word;
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }
 
 .chat-sender {

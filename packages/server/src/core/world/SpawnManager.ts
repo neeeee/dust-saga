@@ -58,7 +58,8 @@ export class SpawnManager {
           deathTime: 0,
           patrolPoints,
           currentPatrolIndex: 0,
-          statusEffects: []
+          statusEffects: [],
+          invulnerable: spawn.enemyType === 'striking_dummy',
         };
 
         enemies.set(enemy.id, enemy);

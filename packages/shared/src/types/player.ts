@@ -12,6 +12,7 @@ export interface PlayerStats {
   attack: number;
   defense: number;
   speed: number;
+  speedMultiplier: number;
   magicAttack: number;
   level: number;
   experience: number;
@@ -92,6 +93,7 @@ export interface EnemyInstance {
   patrolPoints: Array<{ x: number; y: number; z: number }>;
   currentPatrolIndex: number;
   statusEffects: StatusEffect[];
+  invulnerable?: boolean;
 }
 
 export interface DamageInfo {

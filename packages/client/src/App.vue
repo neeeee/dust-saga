@@ -389,13 +389,10 @@ function handleAllocateBatch(allocations: Record<string, number>) {
 }
 
 function handleUseSkillSlot(barIndex: number, slotIndex: number) {
-  console.log('[handleUseSkillSlot] bar:', barIndex, 'slot:', slotIndex, 'gameClient:', !!gameClient, 'targetId:', targetId.value);
-  if (!gameClient) { console.warn('[handleUseSkillSlot] BLOCKED: no gameClient'); return; }
+  if (!gameClient) return;
   const slot = skillStore.getSkillInSlot(barIndex, slotIndex);
-  console.log('[handleUseSkillSlot] slot:', slot);
-  if (!slot?.skillName) { console.warn('[handleUseSkillSlot] BLOCKED: no skillName in slot'); return; }
-  if (skillStore.isOnCooldown(slot.skillName)) { console.warn('[handleUseSkillSlot] BLOCKED: on cooldown'); return; }
-  console.log('[handleUseSkillSlot] CASTING:', slot.skillName, 'target:', targetId.value);
+  if (!slot?.skillName) return;
+  if (skillStore.isOnCooldown(slot.skillName)) return;
   gameClient.useSkill(slot.skillName, targetId.value);
 }
 

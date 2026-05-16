@@ -16,6 +16,12 @@ export interface EnemyDefinition {
   respawnTime: number;
   lootTable: LootTable;
   patrolSpeed: number;
+  fireResist?: number;
+  iceResist?: number;
+  lightningResist?: number;
+  darkResist?: number;
+  holyResist?: number;
+  poisonResist?: number;
 }
 
 export const ENEMY_DATABASE: Record<string, EnemyDefinition> = {
@@ -458,6 +464,24 @@ export const ENEMY_DATABASE: Record<string, EnemyDefinition> = {
       ]
     }
   }
+};
+
+ENEMY_DATABASE['striking_dummy'] = {
+  id: 'striking_dummy',
+  name: 'Striking Dummy',
+  modelFile: 'Enemy Small.glb',
+  level: 1,
+  health: 999999,
+  attack: 0,
+  defense: 0,
+  speed: 0,
+  experience: 0,
+  aggroRange: 0,
+  attackRange: 0,
+  leashRange: 0,
+  respawnTime: 5000,
+  lootTable: { rolls: 0, drops: [] },
+  patrolSpeed: 0,
 };
 
 export function getEnemyDefinition(id: string): EnemyDefinition | undefined {

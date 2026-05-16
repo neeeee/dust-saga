@@ -90,7 +90,9 @@ export class CombatSystem extends System {
 
     if (isEnemy && enemyRef) {
       enemyRef.health = Math.max(0, enemyRef.health - damage);
-      if (enemyRef.health <= 0) {
+      if (enemyRef.invulnerable) {
+        enemyRef.health = enemyRef.maxHealth;
+      } else if (enemyRef.health <= 0) {
         enemyRef.state = 'dead';
         enemyRef.deathTime = Date.now();
         this.deathCallbacks.forEach(cb => cb(targetId, attacker.characterId));

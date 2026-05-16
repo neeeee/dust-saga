@@ -115,7 +115,7 @@ for (let i = 71; i <= 90; i++) STAT_POINT_COSTS[i] = [5, 1];
 for (let i = 91; i <= 99; i++) STAT_POINT_COSTS[i] = [6, 1];
 
 export function getStatPointCost(currentValue: number): [number, number] {
-  return STAT_POINT_COSTS[Math.min(currentValue, 99)] || [6, 1];
+  return STAT_POINT_COSTS[currentValue + 1] || [6, 1];
 }
 
 export const MAX_LEVEL = 60;

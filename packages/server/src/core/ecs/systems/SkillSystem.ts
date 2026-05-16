@@ -28,6 +28,11 @@ export interface TargetStats {
   dodge: number;
   damageTakenMultiplier?: number;
   physicalDamageReduction?: number;
+  fireResist?: number;
+  iceResist?: number;
+  lightningResist?: number;
+  darkResist?: number;
+  holyResist?: number;
 }
 
 export interface SkillUseResult {
@@ -42,6 +47,7 @@ export interface SkillUseResult {
   statusEffects?: StatusEffect[];
   revived?: boolean;
   error?: string;
+  debugCalc?: string;
 }
 
 interface SkillClassification {
@@ -369,49 +375,75 @@ export class SkillSystem {
       return { success: true, damage: 0, missed: true, damageType };
     }
 
-    const effective = getEffectiveStats(
-      session.stats,
-      session.statPoints,
-      session.statusEffects || []
-    );
-    let attackStat = isMagical ? effective.magicAttack : effective.attack;
+    const basePower = skill.basePower ?? 1;
+    const baseStats = session.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+    const primaryStat = isMagical ? (session.statPoints.INT || 0) + (baseStats.INT || 0) : (session.statPoints.STR || 0) + (baseStats.STR || 0);
+    const secondaryStat = isMagical ? (session.statPoints.SPI || 0) + (baseStats.SPI || 0) : (session.statPoints.DEX || 0) + (baseStats.DEX || 0);
+    const defenseStat = isMagical ? target.magicDefense : target.defense;
+
+    let attackMultiplier = 1;
     const attackBuff = session.statusEffects?.find(e => e.type === StatusEffectType.BUFF_ATTACK);
     if (attackBuff && !isMagical) {
-      attackStat = Math.floor(attackStat * attackBuff.potency);
+      attackMultiplier = attackBuff.potency;
     }
-    const defenseStat = isMagical ? target.magicDefense : target.defense;
-    const primaryStat = isMagical ? session.statPoints.INT : session.statPoints.STR;
-    const secondaryStat = isMagical ? session.statPoints.SPI : session.statPoints.DEX;
-
-    const skillPower = 1.0 + (skill.mpCost / 50);
 
     let damage = Math.floor(
-      (attackStat * 1.5 + primaryStat * 1.0 + secondaryStat * 0.3) * skillPower
-      - defenseStat * 0.6
+      basePower * (primaryStat + secondaryStat * 0.3) * attackMultiplier
+      - defenseStat * 0.5
     );
+    const steps: string[] = [];
+    steps.push(`basePower=${basePower} ${isMagical ? 'INT' : 'STR'}=${primaryStat}(base${isMagical ? baseStats.INT : baseStats.STR}+alloc${isMagical ? session.statPoints.INT : session.statPoints.STR}) ${isMagical ? 'SPI' : 'DEX'}=${secondaryStat}`);
+    steps.push(`raw=${basePower}×(${primaryStat}+${secondaryStat}×0.3)×${attackMultiplier}-${defenseStat}×0.5=${damage}`);
+
+    if (isMagical && skill.damageSubType) {
+      const resistMap: Record<string, number | undefined> = {
+        fire: target.fireResist,
+        ice: target.iceResist,
+        lightning: target.lightningResist,
+        dark: target.darkResist,
+        holy: target.holyResist,
+      };
+      const resist = resistMap[skill.damageSubType] || 0;
+      if (resist > 0) {
+        const reduction = Math.min(0.75, resist / 100);
+        damage = Math.floor(damage * (1 - reduction));
+        steps.push(`${skill.damageSubType}Res(${resist}%)→${(reduction * 100).toFixed(0)}% reduction=${damage}`);
+      }
+    }
 
     if (!isMagical && target.physicalDamageReduction && target.physicalDamageReduction > 0) {
       damage = Math.floor(damage * (1 - Math.min(0.9, target.physicalDamageReduction)));
+      steps.push(`physReduction=${damage}`);
     }
 
-    const critChance = COMBAT_CONFIG.CRITICAL_CHANCE + session.statPoints.DEX * 0.002;
-    const isCritical = Math.random() < critChance;
+    let isCritical = false;
+    if (!isMagical) {
+      const totalDex = (session.statPoints.DEX || 0) + (session.baseStats?.DEX || 0);
+      const critChance = COMBAT_CONFIG.CRITICAL_CHANCE + totalDex * 0.002;
+      isCritical = Math.random() < critChance;
+    }
     if (isCritical) {
       damage = Math.floor(damage * COMBAT_CONFIG.CRITICAL_MULTIPLIER);
+      steps.push(`crit=${damage}`);
     }
 
     const levelDiff = session.stats.level - target.level;
     if (levelDiff > 0) {
       damage = Math.floor(damage * (1 + levelDiff * 0.03));
+      steps.push(`lvlDiff(+${levelDiff})=${damage}`);
     } else if (levelDiff < 0) {
       damage = Math.floor(damage * Math.max(0.3, 1 + levelDiff * 0.02));
+      steps.push(`lvlDiff(${levelDiff})=${damage}`);
     }
 
-    damage = Math.floor(damage * (0.9 + Math.random() * 0.2));
+    const varianceRoll = 0.9 + Math.random() * 0.2;
+    damage = Math.floor(damage * varianceRoll);
+    steps.push(`variance(${varianceRoll.toFixed(2)})=${damage}`);
     damage = Math.max(COMBAT_CONFIG.MIN_DAMAGE, damage);
 
     if (target.damageTakenMultiplier && target.damageTakenMultiplier > 1) {
       damage = Math.floor(damage * target.damageTakenMultiplier);
+      steps.push(`dmgTaken×${target.damageTakenMultiplier}=${damage}`);
     }
 
     const statusEffects = this.buildStatusEffects(session, skill, damage);
@@ -421,7 +453,8 @@ export class SkillSystem {
       damage,
       isCritical,
       damageType,
-      statusEffects: statusEffects.length > 0 ? statusEffects : undefined
+      statusEffects: statusEffects.length > 0 ? statusEffects : undefined,
+      debugCalc: `[${skill.name}] ${steps.join(' → ')} → final=${damage}`
     };
   }
 
@@ -508,10 +541,18 @@ export class SkillSystem {
           return effects;
       }
 
-      addEffect(statusType, dt.dotPotency || 5, {
+      let dotHPPercent = dt.dotHPPercent;
+      if (dt.dotSPIBase !== undefined && dt.dotSPIMax !== undefined) {
+        const casterSPI = casterSession.statPoints.SPI || 0;
+        const cap = dt.dotSPICap || 110;
+        const progress = Math.min(1, casterSPI / cap);
+        dotHPPercent = dt.dotSPIBase + progress * (dt.dotSPIMax - dt.dotSPIBase);
+      }
+
+      addEffect(statusType, dt.dotPotency || 0, {
         tickInterval,
         dotMpDrain: dt.dotMpDrain,
-        dotHPPercent: dt.dotHPPercent,
+        dotHPPercent,
       });
       return effects;
     }
@@ -542,7 +583,8 @@ export class SkillSystem {
 
   private calculateAccuracy(session: PlayerSession, target: TargetStats): number {
     const base = 0.85;
-    const dexBonus = session.statPoints.DEX * 0.003;
+    const totalDex = (session.statPoints.DEX || 0) + (session.baseStats?.DEX || 0);
+    const dexBonus = totalDex * 0.003;
     const levelBonus = (session.stats.level - target.level) * 0.015;
     const dodgePenalty = target.dodge * 0.002;
     return Math.min(0.99, Math.max(0.2, base + dexBonus + levelBonus - dodgePenalty));
@@ -799,6 +841,11 @@ export class SkillSystem {
           buffEffectTable: s.buffEffectTable,
           debuffEffectTable: s.debuffEffectTable,
           debuffDuration: s.debuffDuration,
+          damageType: s.damageType,
+          damageSubType: s.damageSubType,
+          basePower: s.basePower,
+          pulseCount: s.pulseCount,
+          pulseInterval: s.pulseInterval,
         };
       }
     }
@@ -859,27 +906,13 @@ export class SkillSystem {
 
       if (effect.tickInterval > 0 && now - effect.lastTickAt >= effect.tickInterval) {
         effect.lastTickAt = now;
-        if (effect.type === StatusEffectType.POISON || effect.type === StatusEffectType.BURN) {
+        if (effect.dotHPPercent && effect.dotHPPercent > 0) {
+          damage += Math.floor(session.stats.maxHealth * effect.dotHPPercent);
+        } else if (effect.potency > 0) {
           damage += effect.potency;
         }
-        if (effect.type === StatusEffectType.BLEED) {
-          if (effect.dotHPPercent && effect.dotHPPercent > 0) {
-            damage += Math.floor(session.stats.maxHealth * effect.dotHPPercent);
-          } else {
-            damage += effect.potency;
-          }
-        }
-        if (effect.type === StatusEffectType.SEVERE_POISON) {
-          damage += effect.potency;
-          if (effect.dotMpDrain) {
-            mpDamage += effect.dotMpDrain;
-          }
-        }
-        if (effect.type === StatusEffectType.MP_DRAIN) {
-          if (effect.dotMpDrain) {
-            mpDamage += effect.dotMpDrain;
-          }
-          damage += effect.potency;
+        if (effect.dotMpDrain) {
+          mpDamage += effect.dotMpDrain;
         }
       }
     }

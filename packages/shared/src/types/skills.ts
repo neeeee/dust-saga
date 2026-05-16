@@ -67,6 +67,9 @@ export interface SkillDefinition {
   buffEffectTable?: BuffEffectTable;
   debuffEffectTable?: DebuffEffectTable;
   debuffDuration?: number;
+  basePower?: number;
+  pulseCount?: number;
+  pulseInterval?: number;
 }
 
 export interface SkillSubCategory {
@@ -103,6 +106,9 @@ export interface ClassSpecificSkill {
   buffEffectTable?: BuffEffectTable;
   debuffEffectTable?: DebuffEffectTable;
   debuffDuration?: number;
+  basePower?: number;
+  pulseCount?: number;
+  pulseInterval?: number;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;

@@ -51,6 +51,11 @@ export const ZONE_DATABASE: Record<string, ZoneDefinition> = {
     connections: ['forest_zone', 'astir_central'],
     spawns: [
       {
+        enemyType: 'striking_dummy',
+        count: 1,
+        spawnArea: { centerX: 5, centerZ: -45, radius: 2 }
+      },
+      {
         enemyType: 'green_slime',
         count: 8,
         spawnArea: { centerX: 30, centerZ: 30, radius: 25 }
