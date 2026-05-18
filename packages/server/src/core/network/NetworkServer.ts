@@ -1007,6 +1007,7 @@ export class NetworkServer {
           lightningResist: def?.lightningResist || 0,
           darkResist: def?.darkResist || 0,
           holyResist: def?.holyResist || 0,
+          poisonResist: def?.poisonResist || 0,
         };
       }
       const player = this.state.players.get(id);
@@ -1029,16 +1030,20 @@ export class NetworkServer {
           lightningResist: player.statBreakdown?.gearCombat?.lightningResist || 0,
           darkResist: player.statBreakdown?.gearCombat?.darkResist || 0,
           holyResist: player.statBreakdown?.gearCombat?.holyResist || 0,
+          poisonResist: player.statBreakdown?.gearCombat?.poisonResist || 0,
         };
       }
       return null;
     };    const skill = this.skillSys.findSkillDefinition(skillName);
     const aoeRadius = skill?.aoeRadius || DEFAULT_AOE_RADIUS;
+    let firstTargetId: string | null = targetId || null;
 
-    const firstTarget = this.findClosestEntityToPosition(
-      session, aoePosition, aoeRadius
-    );
-    const firstTargetId = firstTarget?.id || null;
+    if (skill?.isAOE && aoePosition) {
+      const firstTarget = this.findClosestEntityToPosition(
+        session, aoePosition, aoeRadius
+      );
+      firstTargetId = firstTarget?.id || targetId || null;
+    }
 
     const result = this.skillSys.executeSkill(session, skillName, firstTargetId, getTargetStats);
     this.sendDamageDebug(session, result);
@@ -1407,7 +1412,7 @@ export class NetworkServer {
           this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: 'Invalid value.', channel: 'system' } });
           return;
         }
-        const statKey: Record<string, string> = { defense: 'defense', level: 'level', maxhealth: 'maxHealth', health: 'health', fireresist: 'fireResist', iceresist: 'iceResist', lightningresist: 'lightningResist', darkresist: 'darkResist', holyresist: 'holyResist', magicresist: 'magicResist' };
+        const statKey: Record<string, string> = { defense: 'defense', level: 'level', maxhealth: 'maxHealth', health: 'health', fireresist: 'fireResist', iceresist: 'iceResist', lightningresist: 'lightningResist', darkresist: 'darkResist', holyresist: 'holyResist', poisonresist: 'poisonResist', magicresist: 'magicResist' };
         const resolvedStat = statKey[stat] || null;
         if (!resolvedStat) {
           this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: `Unknown stat "${stat}". Valid: defense, level, maxHealth, health, fireResist, iceResist, lightningResist, darkResist, holyResist, magicResist`, channel: 'system' } });
@@ -1430,10 +1435,11 @@ export class NetworkServer {
             case 'lightningResist': def.lightningResist = value; break;
             case 'darkResist': def.darkResist = value; break;
             case 'holyResist': def.holyResist = value; break;
+            case 'poisonResist': def.poisonResist = value; break;
             case 'magicResist':
               def.fireResist = value; def.iceResist = value; def.lightningResist = value;
-              def.darkResist = value; def.holyResist = value; break;
-            default: this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: `Unknown stat "${stat}". Valid: defense, level, maxHealth, health, fireResist, iceResist, lightningResist, darkResist, holyResist, magicResist`, channel: 'system' } }); return;
+              def.darkResist = value; def.holyResist = value; def.poisonResist = value; break;
+            default:           this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: `Unknown stat "${stat}". Valid: defense, level, maxHealth, health, fireResist, iceResist, lightningResist, darkResist, holyResist, poisonResist, magicResist`, channel: 'system' } }); return;
           }
           this.broadcastInZone(session.zoneId, { type: PacketType.STATS_UPDATE, timestamp: Date.now(), data: { entityId: enemyId, health: enemy.health, maxHealth: enemy.maxHealth } });
         }
@@ -2348,6 +2354,7 @@ export class NetworkServer {
               lightningResist: def?.lightningResist || 0,
               darkResist: def?.darkResist || 0,
               holyResist: def?.holyResist || 0,
+              poisonResist: def?.poisonResist || 0,
             };
           }
           const player = this.state.players.get(id);
@@ -2370,6 +2377,7 @@ export class NetworkServer {
               lightningResist: player.statBreakdown?.gearCombat?.lightningResist || 0,
               darkResist: player.statBreakdown?.gearCombat?.darkResist || 0,
               holyResist: player.statBreakdown?.gearCombat?.holyResist || 0,
+              poisonResist: player.statBreakdown?.gearCombat?.poisonResist || 0,
             };
           }
           return null;
@@ -2434,10 +2442,15 @@ export class NetworkServer {
           const enemy = this.spawnMgr.getEnemy(castResult.targetId);
           if (enemy) {
             const { died } = this.damageEnemy(enemy, result.damage);
+            if (result.elementalDamage) {
+              for (const el of result.elementalDamage) {
+                this.damageEnemy(enemy, el.damage);
+              }
+            }
             this.broadcastInZone(session.zoneId, {
               type: PacketType.DAMAGE,
               timestamp: Date.now(),
-              data: { attackerId: session.characterId, targetId: castResult.targetId, damage: result.damage, isCritical: result.isCritical || false, damageType: result.damageType || 'physical', skillName: castResult.skillName }
+              data: { attackerId: session.characterId, targetId: castResult.targetId, damage: result.damage, isCritical: result.isCritical || false, damageType: result.damageType || 'physical', skillName: castResult.skillName, elementalDamage: result.elementalDamage }
             });
             if (died) {
               enemy.state = 'dead';
@@ -2479,10 +2492,15 @@ export class NetworkServer {
             const playerTarget = this.state.players.get(castResult.targetId);
             if (playerTarget) {
               playerTarget.stats.health = Math.max(0, playerTarget.stats.health - result.damage);
+              if (result.elementalDamage) {
+                for (const el of result.elementalDamage) {
+                  playerTarget.stats.health = Math.max(0, playerTarget.stats.health - el.damage);
+                }
+              }
               this.broadcastInZone(session.zoneId, {
                 type: PacketType.DAMAGE,
                 timestamp: Date.now(),
-                data: { attackerId: session.characterId, targetId: castResult.targetId, damage: result.damage, isCritical: result.isCritical || false, damageType: result.damageType || 'physical', skillName: castResult.skillName }
+                data: { attackerId: session.characterId, targetId: castResult.targetId, damage: result.damage, isCritical: result.isCritical || false, damageType: result.damageType || 'physical', skillName: castResult.skillName, elementalDamage: result.elementalDamage }
               });
               this.sendToPlayer(castResult.targetId, {
                 type: PacketType.STATS_UPDATE,
@@ -3006,7 +3024,7 @@ export class NetworkServer {
     skillName: string,
     aoePosition: { x: number; y: number; z: number },
     aoeRadius: number,
-    primaryResult?: { damage?: number; isCritical?: boolean; damageType?: string }
+    primaryResult?: { damage?: number; isCritical?: boolean; damageType?: string; elementalDamage?: Array<{ element: string; damage: number }> }
   ): void {
     const characterId = session.characterId;
     const getTargetStats = (id: string) => {
@@ -3018,7 +3036,13 @@ export class NetworkServer {
           magicDefense: Math.floor((def?.defense || 0) * 0.3),
           health: enemy.health,
           level: enemy.level,
-          dodge: Math.floor(enemy.level * 0.5)
+          dodge: Math.floor(enemy.level * 0.5),
+          fireResist: def?.fireResist || 0,
+          iceResist: def?.iceResist || 0,
+          lightningResist: def?.lightningResist || 0,
+          darkResist: def?.darkResist || 0,
+          holyResist: def?.holyResist || 0,
+          poisonResist: def?.poisonResist || 0,
         };
       }
       const player = this.state.players.get(id);
@@ -3036,6 +3060,12 @@ export class NetworkServer {
           dodge: player.statPoints.AGI + eff.dodgeBonus,
           damageTakenMultiplier: eff.damageTakenMultiplier,
           physicalDamageReduction: eff.physicalDamageReduction,
+          fireResist: player.statBreakdown?.gearCombat?.fireResist || 0,
+          iceResist: player.statBreakdown?.gearCombat?.iceResist || 0,
+          lightningResist: player.statBreakdown?.gearCombat?.lightningResist || 0,
+          darkResist: player.statBreakdown?.gearCombat?.darkResist || 0,
+          holyResist: player.statBreakdown?.gearCombat?.holyResist || 0,
+          poisonResist: player.statBreakdown?.gearCombat?.poisonResist || 0,
         };
       }
       return null;
@@ -3053,6 +3083,11 @@ export class NetworkServer {
       const enemy = this.spawnMgr.getEnemy(target.id);
       if (enemy) {
         const { died } = this.damageEnemy(enemy, targetResult.damage);
+        if (targetResult.elementalDamage) {
+          for (const el of targetResult.elementalDamage) {
+            this.damageEnemy(enemy, el.damage);
+          }
+        }
         this.broadcastInZone(session.zoneId, {
           type: PacketType.DAMAGE,
           timestamp: Date.now(),
@@ -3062,7 +3097,8 @@ export class NetworkServer {
             damage: targetResult.damage,
             isCritical: targetResult.isCritical || false,
             damageType: targetResult.damageType || 'physical',
-            skillName
+            skillName,
+            elementalDamage: targetResult.elementalDamage,
           }
         });
 
@@ -3112,6 +3148,11 @@ export class NetworkServer {
         const playerTarget = this.state.players.get(target.id);
         if (playerTarget && target.id !== characterId) {
           playerTarget.stats.health = Math.max(0, playerTarget.stats.health - targetResult.damage);
+          if (targetResult.elementalDamage) {
+            for (const el of targetResult.elementalDamage) {
+              playerTarget.stats.health = Math.max(0, playerTarget.stats.health - el.damage);
+            }
+          }
           this.broadcastInZone(session.zoneId, {
             type: PacketType.DAMAGE,
             timestamp: Date.now(),
@@ -3121,7 +3162,8 @@ export class NetworkServer {
               damage: targetResult.damage,
               isCritical: targetResult.isCritical || false,
               damageType: targetResult.damageType || 'physical',
-              skillName
+              skillName,
+              elementalDamage: targetResult.elementalDamage,
             }
           });
           this.sendToPlayer(target.id, {
@@ -3279,6 +3321,7 @@ export class NetworkServer {
           lightningResist: def?.lightningResist || 0,
           darkResist: def?.darkResist || 0,
           holyResist: def?.holyResist || 0,
+          poisonResist: def?.poisonResist || 0,
         };
       }
       const player = this.state.players.get(id);
@@ -3301,6 +3344,7 @@ export class NetworkServer {
           lightningResist: player.statBreakdown?.gearCombat?.lightningResist || 0,
           darkResist: player.statBreakdown?.gearCombat?.darkResist || 0,
           holyResist: player.statBreakdown?.gearCombat?.holyResist || 0,
+          poisonResist: player.statBreakdown?.gearCombat?.poisonResist || 0,
         };
       }
       return null;
@@ -3407,6 +3451,7 @@ export class NetworkServer {
           lightningResist: def?.lightningResist || 0,
           darkResist: def?.darkResist || 0,
           holyResist: def?.holyResist || 0,
+          poisonResist: def?.poisonResist || 0,
         };
       }
       const player = this.state.players.get(id);
@@ -3429,6 +3474,7 @@ export class NetworkServer {
           lightningResist: player.statBreakdown?.gearCombat?.lightningResist || 0,
           darkResist: player.statBreakdown?.gearCombat?.darkResist || 0,
           holyResist: player.statBreakdown?.gearCombat?.holyResist || 0,
+          poisonResist: player.statBreakdown?.gearCombat?.poisonResist || 0,
         };
       }
       return null;

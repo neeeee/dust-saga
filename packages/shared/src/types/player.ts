@@ -102,4 +102,5 @@ export interface DamageInfo {
   damage: number;
   isCritical: boolean;
   damageType: 'physical' | 'magical';
+  elementalDamage?: Array<{ element: string; damage: number }>;
 }

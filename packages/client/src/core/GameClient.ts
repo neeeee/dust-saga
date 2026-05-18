@@ -63,6 +63,8 @@ export class GameClient {
   private currentZoneId: string | null = null;
   private targetId: string | null = null;
   private lastMoveSend: number = 0;
+  private autoAttacking: boolean = false;
+  private lastAutoAttackTime: number = 0;
   private enemies: Map<string, any> = new Map();
   private lootBeacons: Map<string, any> = new Map();
   private knownEntities: Map<string, { type: string; data: any }> = new Map();
@@ -123,6 +125,7 @@ export class GameClient {
         });
       } else {
         this.targetId = null;
+        this.autoAttacking = false;
         this.engine.setTargetIndicator(null);
         this.callbacks.onTargetChange?.(null);
       }
@@ -335,6 +338,7 @@ export class GameClient {
       this.lootBeacons.delete(entityId);
       if (this.targetId === entityId) {
         this.targetId = null;
+        this.autoAttacking = false;
         this.callbacks.onTargetChange?.(null);
       }
     });
@@ -380,22 +384,43 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.DAMAGE, (packet: any) => {
-      const { targetId, damage, isCritical } = packet.data;
+      const { targetId, damage, isCritical, elementalDamage } = packet.data;
       this.engine.showDamageNumber(targetId, damage, isCritical);
+
+      if (elementalDamage && Array.isArray(elementalDamage)) {
+        for (const el of elementalDamage) {
+          this.engine.showDamageNumber(targetId, el.damage, false, el.element);
+        }
+      }
 
       const entity = this.knownEntities.get(targetId);
       if (entity?.type === 'enemy') {
         const enemyData = this.enemies.get(targetId);
         if (enemyData) {
           enemyData.health = Math.max(0, enemyData.health - damage);
+          if (elementalDamage) {
+            for (const el of elementalDamage) {
+              enemyData.health = Math.max(0, enemyData.health - el.damage);
+            }
+          }
         }
       }
       if (entity?.type === 'player') {
         entity.data.health = Math.max(0, (entity.data.health || 0) - damage);
+        if (elementalDamage) {
+          for (const el of elementalDamage) {
+            entity.data.health = Math.max(0, entity.data.health - el.damage);
+          }
+        }
       }
 
       if (targetId === this.playerId && this.stats) {
         this.stats.health = Math.max(0, this.stats.health - damage);
+        if (elementalDamage) {
+          for (const el of elementalDamage) {
+            this.stats.health = Math.max(0, this.stats.health - el.damage);
+          }
+        }
         this.callbacks.onStatsUpdate?.(this.stats);
       }
     });
@@ -509,6 +534,7 @@ export class GameClient {
         this.engine.startAnimationOnce(entityId, 'Death');
         if (this.targetId === entityId) {
           this.targetId = null;
+          this.autoAttacking = false;
           this.callbacks.onTargetChange?.(null);
         }
       }
@@ -695,8 +721,17 @@ export class GameClient {
       this.lastMoveSend = now;
     }
 
-    if (input.attack && this.targetId) {
-      this.network.sendAttack(this.targetId);
+    if (input.attack && this.targetId && !this.autoAttacking) {
+      this.autoAttacking = true;
+      this.lastAutoAttackTime = 0;
+    }
+
+    if (this.autoAttacking && this.targetId) {
+      const now = Date.now();
+      if (now - this.lastAutoAttackTime >= 1000) {
+        this.network.sendAttack(this.targetId);
+        this.lastAutoAttackTime = now;
+      }
     }
 
     const entities = this.entityManager.getAllEntities();
@@ -879,6 +914,7 @@ export class GameClient {
   }
 
   useSkill(skillName: string, targetId: string | null): void {
+    this.autoAttacking = false;
     if (GROUND_TARGETED_AOE_SKILLS.has(skillName)) {
       if (this.aoeTargetingActive && this.aoeTargetingSkillName === skillName) {
         return;

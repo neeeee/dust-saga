@@ -154,20 +154,42 @@ export class AssetManager {
     }
   }
 
-  createDamageNumber(value: number, position: Vector3, isCritical: boolean): void {
+  private static ELEMENT_COLORS: Record<string, string> = {
+    fire: '#ff6600',
+    ice: '#00ccff',
+    lightning: '#ffee00',
+    holy: '#eeeeff',
+    dark: '#aa44ff',
+    poison: '#44ff66',
+  };
+
+  createDamageNumber(value: number, position: Vector3, isCritical: boolean, element?: string): void {
     const plane = MeshBuilder.CreatePlane(`dmg_${Date.now()}`, { width: 1, height: 0.5 }, this.scene);
-    plane.position = position.add(new Vector3((Math.random() - 0.5) * 0.5, 2, (Math.random() - 0.5) * 0.5));
+    const yOff = element ? 2.4 : 2;
+    plane.position = position.add(new Vector3((Math.random() - 0.5) * 0.5, yOff, (Math.random() - 0.5) * 0.5));
     plane.billboardMode = 7;
 
     const texture = new DynamicTexture(`dmg_tex_${Date.now()}`, { width: 128, height: 64 }, this.scene, true);
     texture.hasAlpha = true;
     const ctx = texture.getContext();
     ctx.clearRect(0, 0, 128, 64);
-    ctx.font = isCritical ? 'bold 40px Arial' : 'bold 28px Arial';
-    ctx.fillStyle = isCritical ? '#ff4444' : '#ffcc00';
+
+    let color: string;
+    if (element) {
+      color = AssetManager.ELEMENT_COLORS[element] || '#ffcc00';
+      ctx.font = 'bold 24px Arial';
+    } else if (isCritical) {
+      color = '#ff4444';
+      ctx.font = 'bold 40px Arial';
+    } else {
+      color = '#ffcc00';
+      ctx.font = 'bold 28px Arial';
+    }
+
+    ctx.fillStyle = color;
     ctx.strokeStyle = 'black';
     ctx.lineWidth = 3;
-    const text = isCritical ? `${value}!` : `${value}`;
+    const text = (!element && isCritical) ? `${value}!` : `${value}`;
     ctx.strokeText(text, 64, 44);
     ctx.fillText(text, 64, 44);
     texture.update();

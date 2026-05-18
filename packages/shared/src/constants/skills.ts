@@ -832,9 +832,14 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 10,
             duration: 120,
             description: "Coat weapon with poison",
-            // added isBuff property. toxify, bless weapon, gloom, all buff weapons.
             isBuff: true,
             selfBuffOnly: true,
+            buffEffectTable: {
+              weaponAura: {
+                element: 'poison',
+                formula: 'toxify',
+              },
+            },
           },
           "Serum": {
             name: "Serum",
@@ -1507,6 +1512,22 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 1.5,
             duration: 480,
             description: "Embue weapon with holy aura",
+            buffEffectTable: {
+              weaponAura: {
+                element: 'holy',
+                spiTiers: [
+                  { spi: 0, min: 4, max: 5 },
+                  { spi: 17, min: 6, max: 7 },
+                  { spi: 34, min: 7, max: 9 },
+                  { spi: 50, min: 9, max: 12 },
+                  { spi: 67, min: 12, max: 16 },
+                  { spi: 84, min: 15, max: 20 },
+                  { spi: 100, min: 18, max: 24 },
+                  { spi: 117, min: 23, max: 30 },
+                  { spi: 134, min: 27, max: 36 },
+                ],
+              },
+            },
           },
           "Remedium": {
             name: "Remedium",
@@ -2018,6 +2039,22 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageSubType: MagicalDamageSubType.DARK,
             isBuff: true,
             selfBuffOnly: true,
+            buffEffectTable: {
+              weaponAura: {
+                element: 'dark',
+                spiTiers: [
+                  { spi: 0, min: 16, max: 16 },
+                  { spi: 17, min: 26, max: 26 },
+                  { spi: 34, min: 47, max: 47 },
+                  { spi: 50, min: 69, max: 69 },
+                  { spi: 67, min: 82, max: 82 },
+                  { spi: 84, min: 100, max: 100 },
+                  { spi: 100, min: 110, max: 110 },
+                  { spi: 117, min: 120, max: 120 },
+                  { spi: 134, min: 150, max: 150 },
+                ],
+              },
+            },
           },
           "Blood Drain": {
             name: "Blood Drain",

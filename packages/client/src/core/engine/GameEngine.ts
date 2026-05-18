@@ -521,11 +521,11 @@ export class GameEngine {
     this.assetManager.updateHealthBar(entityId, current, max, group.healthBarBg, group.healthBarFg);
   }
 
-  showDamageNumber(entityId: string, damage: number, isCritical: boolean): void {
+  showDamageNumber(entityId: string, damage: number, isCritical: boolean, element?: string): void {
     const group = this.meshes.get(entityId);
     if (!group?.root || !this.assetManager) return;
 
-    this.assetManager.createDamageNumber(damage, group.root.position, isCritical);
+    this.assetManager.createDamageNumber(damage, group.root.position, isCritical, element);
   }
 
   createLootBeacon(position: V3): void {

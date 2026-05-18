@@ -47,6 +47,8 @@ export interface ItemStats {
   poisonResist?: number;
   darkResist?: number;
   holyResist?: number;
+  weaponElement?: 'fire' | 'ice' | 'lightning' | 'holy' | 'dark' | 'poison';
+  weaponElementPower?: number;
 }
 
 export interface ItemDefinition {

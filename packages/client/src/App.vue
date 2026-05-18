@@ -645,6 +645,11 @@ onMounted(async () => {
   network.onPacket(PacketType.DAMAGE, (packet: any) => {
     if (packet.data.targetId === targetId.value && !packet.data.missed) {
       targetHealth.value = Math.max(0, targetHealth.value - packet.data.damage);
+      if (packet.data.elementalDamage) {
+        for (const el of packet.data.elementalDamage) {
+          targetHealth.value = Math.max(0, targetHealth.value - el.damage);
+        }
+      }
     }
   });
 
@@ -724,6 +729,9 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     showDialog.value = false;
     showStatPanel.value = false;
     showSkillWindow.value = false;
+    if (gameClient) {
+      gameClient.setTarget(null);
+    }
   }
 }
 

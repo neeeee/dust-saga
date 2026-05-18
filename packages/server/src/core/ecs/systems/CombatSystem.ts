@@ -1,5 +1,5 @@
 import { EntityManager, System } from '../EntityManager';
-import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats } from '@dust-saga/shared';
+import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats, calculateWeaponElementalDamage } from '@dust-saga/shared';
 
 export class CombatSystem extends System {
   private damageCallbacks: Array<(info: DamageInfo) => void> = [];
@@ -99,12 +99,65 @@ export class CombatSystem extends System {
       }
     }
 
+    const baseStats = attacker.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+    const totalSPI = (attacker.statPoints.SPI || 0) + (baseStats.SPI || 0);
+    const totalINT = (attacker.statPoints.INT || 0) + (baseStats.INT || 0);
+
+    let targetResists: Record<string, number | undefined> = {};
+    if (isEnemy && enemyRef) {
+      const def = getEnemyDefinition(enemyRef.enemyType);
+      targetResists = {
+        fireResist: def?.fireResist,
+        iceResist: def?.iceResist,
+        lightningResist: def?.lightningResist,
+        darkResist: def?.darkResist,
+        holyResist: def?.holyResist,
+        poisonResist: def?.poisonResist,
+      };
+    } else if (!isEnemy) {
+      const targetPlayer = players.get(targetId);
+      if (targetPlayer) {
+        const te = getEffectiveStats(targetPlayer.stats, targetPlayer.statPoints, targetPlayer.statusEffects || []);
+        targetResists = {
+          fireResist: (targetPlayer.statBreakdown?.gearCombat?.fireResist ?? 0),
+          iceResist: (targetPlayer.statBreakdown?.gearCombat?.iceResist ?? 0),
+          lightningResist: (targetPlayer.statBreakdown?.gearCombat?.lightningResist ?? 0),
+          darkResist: (targetPlayer.statBreakdown?.gearCombat?.darkResist ?? 0),
+          holyResist: (targetPlayer.statBreakdown?.gearCombat?.holyResist ?? 0),
+          poisonResist: (targetPlayer.statBreakdown?.gearCombat?.poisonResist ?? 0),
+        };
+      }
+    }
+
+    const elementalDamage = calculateWeaponElementalDamage(
+      attacker.equipment?.weapon?.itemId,
+      attacker.statusEffects || [],
+      totalSPI,
+      totalINT,
+      attacker.stats.level,
+      targetResists
+    );
+
+    if (elementalDamage.length > 0 && isEnemy && enemyRef) {
+      for (const el of elementalDamage) {
+        enemyRef.health = Math.max(0, enemyRef.health - el.damage);
+      }
+      if (enemyRef.invulnerable) {
+        enemyRef.health = enemyRef.maxHealth;
+      } else if (enemyRef.health <= 0 && enemyRef.state !== 'dead') {
+        enemyRef.state = 'dead';
+        enemyRef.deathTime = Date.now();
+        this.deathCallbacks.forEach(cb => cb(targetId, attacker.characterId));
+      }
+    }
+
     const info: DamageInfo = {
       attackerId: attacker.characterId,
       targetId,
       damage,
       isCritical,
-      damageType: 'physical'
+      damageType: 'physical',
+      elementalDamage: elementalDamage.length > 0 ? elementalDamage : undefined,
     };
 
     this.damageCallbacks.forEach(cb => cb(info));

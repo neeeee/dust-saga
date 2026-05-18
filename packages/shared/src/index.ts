@@ -35,3 +35,4 @@ export * from './utils/skillAnimations';
 export * from './utils/math';
 export * from './utils/validator';
 export * from './utils/racialPassives';
+export * from './utils/elementalDamage';

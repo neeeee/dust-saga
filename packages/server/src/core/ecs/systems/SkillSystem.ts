@@ -7,6 +7,7 @@ import {
   getEffectiveStats,
   recalculateCategoryTotals, calculateProficiencyGain, ProficiencyGainResult,
   DebuffEffectTable,
+  calculateWeaponElementalDamage,
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
 import { CLASS_SPECIFIC_SKILLS, getClassSpecificSkillsForJob } from '@dust-saga/shared';
@@ -33,6 +34,7 @@ export interface TargetStats {
   lightningResist?: number;
   darkResist?: number;
   holyResist?: number;
+  poisonResist?: number;
 }
 
 export interface SkillUseResult {
@@ -48,6 +50,7 @@ export interface SkillUseResult {
   revived?: boolean;
   error?: string;
   debugCalc?: string;
+  elementalDamage?: Array<{ element: string; damage: number }>;
 }
 
 interface SkillClassification {
@@ -283,10 +286,7 @@ export class SkillSystem {
         this.applyBuff(session, skill);
       } else if (targetType === SkillTargetType.PARTY) {
         this.applyBuff(session, skill);
-      } else if (
-        targetType === SkillTargetType.SELF_OR_TARGET
-        && (!targetId || targetId === session.characterId)
-      ) {
+      } else if (targetType === SkillTargetType.SELF_OR_TARGET) {
         this.applyBuff(session, skill);
       }
     }
@@ -455,13 +455,33 @@ export class SkillSystem {
 
     const statusEffects = this.buildStatusEffects(session, skill, damage);
 
+    const totalSPI = (session.statPoints.SPI || 0) + (baseStats.SPI || 0);
+    const totalINT = (session.statPoints.INT || 0) + (baseStats.INT || 0);
+    const targetResists: Record<string, number | undefined> = {
+      fireResist: target.fireResist,
+      iceResist: target.iceResist,
+      lightningResist: target.lightningResist,
+      darkResist: target.darkResist,
+      holyResist: target.holyResist,
+      poisonResist: target.poisonResist,
+    };
+    const elementalDamage = calculateWeaponElementalDamage(
+      session.equipment?.weapon?.itemId,
+      session.statusEffects || [],
+      totalSPI,
+      totalINT,
+      session.stats.level,
+      targetResists
+    );
+
     return {
       success: true,
       damage,
       isCritical,
       damageType,
       statusEffects: statusEffects.length > 0 ? statusEffects : undefined,
-      debugCalc: `[${skill.name}] ${steps.join(' → ')} → final=${damage}`
+      debugCalc: `[${skill.name}] ${steps.join(' → ')} → final=${damage}`,
+      elementalDamage: elementalDamage.length > 0 ? elementalDamage : undefined,
     };
   }
 
@@ -754,6 +774,35 @@ export class SkillSystem {
 
     if (bt.dodgeChance) {
       pushEffect(StatusEffectType.BUFF_DODGE, bt.dodgeChance);
+    }
+
+    if (bt.weaponAura) {
+      const aura = bt.weaponAura;
+      const caster = casterSession || target;
+      const subCategory = SKILL_TO_SUBCATEGORY[skill.name];
+      const proficiency = subCategory ? (caster.skillProficiencies?.[subCategory] || 0) : 0;
+      const casterBaseSPI = (caster.baseStats?.SPI || 0) + (caster.statPoints?.SPI || 0);
+
+      if (aura.spiTiers) {
+        const lookupValue = casterBaseSPI + proficiency;
+        let matchedTier = aura.spiTiers[0];
+        for (const tier of aura.spiTiers) {
+          if (lookupValue >= tier.spi) {
+            matchedTier = tier;
+          } else {
+            break;
+          }
+        }
+        pushEffect(StatusEffectType.WEAPON_AURA, 0, {
+          weaponAura: { element: aura.element, minDamage: matchedTier.min, maxDamage: matchedTier.max },
+        });
+      } else if (aura.formula === 'toxify') {
+        const level = caster.stats?.level || 1;
+        const auraDamage = Math.floor(level * (100 + proficiency) / 100);
+        pushEffect(StatusEffectType.WEAPON_AURA, 0, {
+          weaponAura: { element: aura.element, minDamage: auraDamage, maxDamage: auraDamage },
+        });
+      }
     }
 
     if (bt.accuracy) {
