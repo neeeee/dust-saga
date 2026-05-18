@@ -265,11 +265,11 @@ const currentDerived = computed(() => {
       magicAttack: props.stats.magicAttack,
     };
   }
-  return calculateDerivedStats(props.race as Race, props.jobId as JobId, props.stats?.level || 1, props.statPoints || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 });
+  return calculateDerivedStats(props.race as Race, props.jobId as JobId, 1, props.statPoints || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 });
 });
 
 const previewDerived = computed(() => {
-  const previewStatPoints: StatPoints = { ...props.statPoints } as StatPoints || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+  const previewStatPoints: StatPoints = props.statPoints ? { ...props.statPoints } : { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
   for (const key of Object.keys(pendingPoints)) {
     previewStatPoints[key as StatType] = (previewStatPoints[key as StatType] || 0) + pendingPoints[key];
   }

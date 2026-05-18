@@ -15,6 +15,17 @@ export interface DebuffEffectTable {
   accuracyDown?: number;
   castSpeedDown?: number;
   damageTakenUp?: number;
+  moveSpeedDown?: number;
+  hasKnockback?: {
+    knockbackDistance: number;
+  };
+  hasStun?: {
+    stunDuration: number;
+  };
+  preventEquipment?: {
+    equipmentSlotDisabled: string;
+  };
   consumable?: boolean;
   preventFieldSpells?: boolean;
+  preventSpellCast?: boolean;
 }

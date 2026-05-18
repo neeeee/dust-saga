@@ -404,10 +404,16 @@ export class SkillSystem {
         holy: target.holyResist,
       };
       const resist = resistMap[skill.damageSubType] || 0;
-      if (resist > 0) {
-        const reduction = Math.min(0.75, resist / 100);
-        damage = Math.floor(damage * (1 - reduction));
-        steps.push(`${skill.damageSubType}Res(${resist}%)→${(reduction * 100).toFixed(0)}% reduction=${damage}`);
+      if (resist !== 0) {
+        const multiplier = resist > 0
+          ? 1 - Math.min(0.75, resist / 100)
+          : 1 + Math.min(1.0, Math.abs(resist) / 100);
+        damage = Math.floor(damage * multiplier);
+        if (resist > 0) {
+          steps.push(`${skill.damageSubType}Res(${resist}%)→${((1 - multiplier) * 100).toFixed(0)}% reduction=${damage}`);
+        } else {
+          steps.push(`${skill.damageSubType}Vuln(${resist}%)→+${((multiplier - 1) * 100).toFixed(0)}% bonus=${damage}`);
+        }
       }
     }
 
@@ -432,7 +438,8 @@ export class SkillSystem {
       damage = Math.floor(damage * (1 + levelDiff * 0.03));
       steps.push(`lvlDiff(+${levelDiff})=${damage}`);
     } else if (levelDiff < 0) {
-      damage = Math.floor(damage * Math.max(0.3, 1 + levelDiff * 0.02));
+      const penalty = 1 - 0.5 * (1 - Math.exp(levelDiff * 0.03));
+      damage = Math.floor(damage * Math.max(0.25, penalty));
       steps.push(`lvlDiff(${levelDiff})=${damage}`);
     }
 

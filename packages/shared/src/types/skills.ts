@@ -141,65 +141,88 @@ export enum SkillTargetType {
 }
 
 export const SKILL_TARGET_RULES: Record<string, SkillTargetType> = {
+  // Melee self buffs
   'Ossify': SkillTargetType.SELF,
   'Concentration': SkillTargetType.SELF,
+
+  // Defensive self buffs
+  'Providence': SkillTargetType.PARTY,
+  'Quick Step': SkillTargetType.SELF,
+  'Avoidance': SkillTargetType.SELF,
+  'Mana Shield': SkillTargetType.SELF,
+  'Clear Mind': SkillTargetType.SELF,
+  'Elemental Absorption': SkillTargetType.SELF,
   'Parapet': SkillTargetType.SELF,
   'Auto-guard': SkillTargetType.SELF,
   'Defensive March': SkillTargetType.SELF,
+
+  // Offensive self buffs
   'Toxify': SkillTargetType.SELF,
   'Rush': SkillTargetType.SELF,
-  'Quick Step': SkillTargetType.SELF,
-  'Avoidance': SkillTargetType.SELF,
-  'Elemental Absorption': SkillTargetType.SELF,
-  'Green Song': SkillTargetType.SELF,
-  'Blue Song': SkillTargetType.SELF,
-  'Red Song': SkillTargetType.SELF,
-  'Yellow Song': SkillTargetType.SELF,
-  'Mana Shield': SkillTargetType.SELF,
-  'Clear Mind': SkillTargetType.SELF,
   'Gloom': SkillTargetType.SELF,
   'Raging Soul': SkillTargetType.SELF,
   'War Cry': SkillTargetType.SELF,
   'Lunge': SkillTargetType.SELF,
   'Desperado': SkillTargetType.SELF,
+  'Magical Aid': SkillTargetType.SELF,
   'Skill Focus': SkillTargetType.SELF,
-  'Invigorate': SkillTargetType.SELF,
+
+  // Enchanter song buffs
+  'Green Song': SkillTargetType.SELF,
+  'Blue Song': SkillTargetType.SELF,
+  'Red Song': SkillTargetType.SELF,
+  'Yellow Song': SkillTargetType.SELF,
+
+  // Scout buffs
   'Hide': SkillTargetType.SELF,
   'Snipers Nest': SkillTargetType.SELF,
   'Watchful Eye': SkillTargetType.SELF,
   'Horse Archer': SkillTargetType.SELF,
   'Cloak': SkillTargetType.SELF,
-  'Magical Aid': SkillTargetType.SELF,
+  'Invigorate': SkillTargetType.SELF,
+  'Sprint': SkillTargetType.SELF,
+  'Spurt': SkillTargetType.SELF,
+  'Bolster': SkillTargetType.SELF_OR_TARGET,
+  'Accelerate': SkillTargetType.SELF_OR_TARGET,
+  'Move Stream': SkillTargetType.PARTY,
+  
+  'Dash': SkillTargetType.SELF,
 
-  'Mental Aid': SkillTargetType.SELF_OR_TARGET,
-  'Physical Barrier': SkillTargetType.SELF_OR_TARGET,
-  'Magical Barrier': SkillTargetType.SELF_OR_TARGET,
-  'Regenerate': SkillTargetType.SELF_OR_TARGET,
-  'Velox': SkillTargetType.SELF_OR_TARGET,
-  'Battle Prayer': SkillTargetType.SELF_OR_TARGET,
-  'Enchantment': SkillTargetType.SELF_OR_TARGET,
-  'Locomitigation': SkillTargetType.SELF_OR_TARGET,
-  'Spirit Protection': SkillTargetType.SELF_OR_TARGET,
-  'Bless Weapon': SkillTargetType.SELF_OR_TARGET,
+    
+  // Elemental resistances
   'Resist Fire': SkillTargetType.SELF_OR_TARGET,
   'Resist Ice': SkillTargetType.SELF_OR_TARGET,
   'Resist Lightning': SkillTargetType.SELF_OR_TARGET,
   'Resist Malice': SkillTargetType.SELF_OR_TARGET,
   'Resist Charm': SkillTargetType.SELF_OR_TARGET,
-  'Accelerate': SkillTargetType.SELF_OR_TARGET,
+  
+  // Ascetic buffs
+  'Bless Weapon': SkillTargetType.SELF_OR_TARGET,
   'Mana Restore': SkillTargetType.SELF_OR_TARGET,
-
-  'Providence': SkillTargetType.PARTY,
+  'Speedy Gale': SkillTargetType.PARTY,
+  'Devotion': SkillTargetType.OTHER_ONLY,
+  'Mental Aid': SkillTargetType.SELF_OR_TARGET,
+  'Third Eye': SkillTargetType.PARTY,
+  'Physical Barrier': SkillTargetType.SELF_OR_TARGET,
+  'Magical Barrier': SkillTargetType.SELF_OR_TARGET,
+  
+  // Prayer 
   'Lapis Mediow': SkillTargetType.PARTY,
   'Group Barrier': SkillTargetType.PARTY,
-  'Third Eye': SkillTargetType.PARTY,
   'Tranquil Mind': SkillTargetType.PARTY,
   'Divine Aid': SkillTargetType.PARTY,
-  'Speedy Gale': SkillTargetType.PARTY,
   'Restoration': SkillTargetType.PARTY,
-
+  'Regenerate': SkillTargetType.SELF_OR_TARGET,
+  'Velox': SkillTargetType.SELF_OR_TARGET,
+  'Battle Prayer': SkillTargetType.SELF_OR_TARGET,
+  'Enchantment': SkillTargetType.SELF_OR_TARGET,
   'Saltio': SkillTargetType.OTHER_ONLY,
-  'Devotion': SkillTargetType.OTHER_ONLY,
+  'Revive': SkillTargetType.OTHER_ONLY,
+  'Locomitigation': SkillTargetType.SELF_OR_TARGET,
+  'Spirit Protection': SkillTargetType.SELF_OR_TARGET,
+
+
+  // Debuffs
   'Poison': SkillTargetType.OTHER_ONLY,
   'Mind Venom': SkillTargetType.OTHER_ONLY,
   'Weakness': SkillTargetType.OTHER_ONLY,
@@ -208,7 +231,6 @@ export const SKILL_TARGET_RULES: Record<string, SkillTargetType> = {
   'Impedimentia': SkillTargetType.OTHER_ONLY,
   'Tangled Fingers': SkillTargetType.OTHER_ONLY,
   'Befuddle': SkillTargetType.OTHER_ONLY,
-  'Revive': SkillTargetType.OTHER_ONLY,
 };
 
 export function isPassiveSkill(skill: SkillDefinition): boolean {

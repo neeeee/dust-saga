@@ -121,7 +121,7 @@
               :key="skill.name"
               class="skill-entry"
               :class="{ locked: !skill.unlocked, passive: skill.isPassive }"
-              draggable="skill.unlocked && !skill.isPassive"
+              :draggable="skill.unlocked && !skill.isPassive"
               @dragstart="onDragStart(skill, $event)"
               @click="onSkillClick(skill)"
             >
