@@ -1491,6 +1491,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 5,
             duration: 0,
             description: "Shoot a holy projectile",
+            damageType: DamageType.MAGICAL,
             damageSubType: MagicalDamageSubType.HOLY,
             basePower: 1,
           },

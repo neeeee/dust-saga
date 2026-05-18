@@ -169,6 +169,18 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     requiredLevel: 15,
     equipmentSlot: EquipmentSlot.WEAPON
   },
+  'basic_staff': {
+    id: 'basic_staff',
+    name: 'Basic Staff',
+    type: ItemType.WEAPON,
+    rarity: ItemRarity.COMMON,
+    stats: { magicAttack: 0.05, INT: 6, DEX: 3, SPI: 4 },
+    description: 'A basic staff. +5% MATK.',
+    maxStack: 1,
+    sellPrice: 250,
+    requiredLevel: 1,
+    equipmentSlot: EquipmentSlot.WEAPON
+  },
   'thunder_helm': {
     id: 'thunder_helm',
     name: 'Thunder Helm',
@@ -271,6 +283,54 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 10,
     sellPrice: 50,
     requiredLevel: 0
+  },
+  'rod_of_origin': {
+    id: 'rod_of_origin',
+    name: 'Rod of Origin',
+    type: ItemType.WEAPON,
+    rarity: ItemRarity.LEGENDARY,
+    stats: { magicAttack: 0.15, INT: 10, SPI: 8, DEX: 5, accuracy: 8 },
+    description: 'A rod of immense arcane power. +15% MATK, +10 INT, +8 SPI, +5 DEX, +8 Accuracy.',
+    maxStack: 1,
+    sellPrice: 1000,
+    requiredLevel: 25,
+    equipmentSlot: EquipmentSlot.WEAPON
+  },
+  'eternal_torso': {
+    id: 'eternal_torso',
+    name: 'Eternal Torso',
+    type: ItemType.ARMOR,
+    rarity: ItemRarity.LEGENDARY,
+    stats: { defense: 30, magicAttack: 0.05, health: 80, SPI: 5 },
+    description: 'Armor forged from eternal flame. +5% MATK, +30 Defense, +80 HP, +5 SPI.',
+    maxStack: 1,
+    sellPrice: 800,
+    requiredLevel: 25,
+    equipmentSlot: EquipmentSlot.ARMOR
+  },
+  'eternal_legs': {
+    id: 'eternal_legs',
+    name: 'Eternal Legs',
+    type: ItemType.BOOTS,
+    rarity: ItemRarity.LEGENDARY,
+    stats: { defense: 20, magicAttack: 0.05, speed: 0.10, health: 50, INT: 4 },
+    description: 'Leggings forged from eternal flame. +5% MATK, +10% Speed, +20 Defense, +50 HP, +4 INT.',
+    maxStack: 1,
+    sellPrice: 800,
+    requiredLevel: 25,
+    equipmentSlot: EquipmentSlot.BOOTS
+  },
+  'earring_of_power': {
+    id: 'earring_of_power',
+    name: 'Earring of Power',
+    type: ItemType.ACCESSORY,
+    rarity: ItemRarity.EPIC,
+    stats: { magicAttack: 0.03, INT: 3, mana: 30 },
+    description: 'A glowing earring that amplifies magic. +3% MATK, +3 INT, +30 MP.',
+    maxStack: 1,
+    sellPrice: 300,
+    requiredLevel: 15,
+    equipmentSlot: EquipmentSlot.ACCESSORY
   }
 };
 

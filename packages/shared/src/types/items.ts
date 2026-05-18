@@ -27,6 +27,7 @@ export enum EquipmentSlot {
 
 export interface ItemStats {
   attack?: number;
+  magicAttack?: number;
   defense?: number;
   health?: number;
   mana?: number;

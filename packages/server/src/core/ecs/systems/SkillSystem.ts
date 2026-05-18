@@ -377,8 +377,12 @@ export class SkillSystem {
 
     const basePower = skill.basePower ?? 1;
     const baseStats = session.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
-    const primaryStat = isMagical ? (session.statPoints.INT || 0) + (baseStats.INT || 0) : (session.statPoints.STR || 0) + (baseStats.STR || 0);
-    const secondaryStat = isMagical ? (session.statPoints.SPI || 0) + (baseStats.SPI || 0) : (session.statPoints.DEX || 0) + (baseStats.DEX || 0);
+    const primaryStat = isMagical
+      ? session.stats.magicAttack || ((session.statPoints.INT || 0) + (baseStats.INT || 0))
+      : (session.statPoints.STR || 0) + (baseStats.STR || 0);
+    const secondaryStat = isMagical
+      ? (session.statPoints.SPI || 0) + (baseStats.SPI || 0)
+      : (session.statPoints.DEX || 0) + (baseStats.DEX || 0);
     const defenseStat = isMagical ? target.magicDefense : target.defense;
 
     let attackMultiplier = 1;
