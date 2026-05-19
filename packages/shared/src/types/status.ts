@@ -32,6 +32,7 @@ export enum StatusEffectType {
   DEBUFF_CAST_SPEED_DOWN = 'debuff_cast_speed_down',
   DEBUFF_DAMAGE_TAKEN_UP = 'debuff_damage_taken_up',
   WEAPON_AURA = 'weapon_aura',
+  BUFF_RESIST = 'buff_resist',
 }
 
 export interface SpiValueTier {
@@ -61,6 +62,7 @@ export interface BuffEffectTable {
     spiTiers?: Array<{ spi: number; min: number; max: number }>;
     formula?: 'toxify';
   };
+  resistMods?: Record<string, number>;
 }
 
 export interface BuffData {
@@ -77,6 +79,7 @@ export interface BuffData {
   accuracyFlat?: number;
   attackSpeedPercent?: number;
   weaponAura?: { element: string; minDamage: number; maxDamage: number };
+  resistMods?: Record<string, number>;
 }
 
 export interface StatusEffect {
@@ -140,6 +143,7 @@ export const STATUS_EFFECT_DEFS: Partial<Record<StatusEffectType, StatusEffectDe
   [StatusEffectType.DEBUFF_CAST_SPEED_DOWN]: { type: StatusEffectType.DEBUFF_CAST_SPEED_DOWN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP]: { type: StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.WEAPON_AURA]: { type: StatusEffectType.WEAPON_AURA, duration: 480000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_RESIST]: { type: StatusEffectType.BUFF_RESIST, duration: 30000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
 };
 
 export function isCCImmune(activeEffects: StatusEffect[]): boolean {

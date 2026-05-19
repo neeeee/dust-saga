@@ -242,6 +242,9 @@ export class PlayerSystem extends System {
     const healthRatio = session.stats.maxHealth > 0 ? session.stats.health / session.stats.maxHealth : 1;
     const manaRatio = session.stats.maxMana > 0 ? session.stats.mana / session.stats.maxMana : 1;
 
+    const oldMaxHealth = session.stats.maxHealth;
+    const oldMaxMana = session.stats.maxMana;
+
     session.stats.maxHealth = derived.maxHealth + gear.health;
     session.stats.maxMana = derived.maxMana + gear.mana;
     session.stats.attack = derived.attack + gear.attack;
@@ -262,11 +265,29 @@ export class PlayerSystem extends System {
     session.stats.maxMana = effective.maxMana;
     session.stats.speed = effective.speed;
 
-    session.stats.health = Math.floor(effective.maxHealth * healthRatio);
-    session.stats.mana = Math.floor(effective.maxMana * manaRatio);
+    if (session.stats.maxHealth !== oldMaxHealth) {
+      session.stats.health = Math.floor(effective.maxHealth * healthRatio);
+    }
+    if (session.stats.maxMana !== oldMaxMana) {
+      session.stats.mana = Math.floor(effective.maxMana * manaRatio);
+    }
 
     const { STA, STR, AGI, DEX, SPI, INT, accuracy, dodge, attackSpeed, fireResist, iceResist, lightningResist, poisonResist, darkResist, holyResist, ailmentResist, disorderResist, ...flatGear } = gear;
-    session.statBreakdown = computeStatBreakdown(session.statPoints, session.statusEffects || [], { STA, STR, AGI, DEX, SPI, INT }, { accuracy, dodge, attackSpeed, fireResist, iceResist, lightningResist, poisonResist, darkResist, holyResist, ailmentResist, disorderResist });
+
+    let buffFireResist = 0, buffIceResist = 0, buffLightningResist = 0, buffPoisonResist = 0, buffDarkResist = 0, buffHolyResist = 0;
+    for (const effect of session.statusEffects || []) {
+      if (effect.buffData?.resistMods) {
+        const mods = effect.buffData.resistMods;
+        if (mods.fire) buffFireResist += mods.fire;
+        if (mods.ice) buffIceResist += mods.ice;
+        if (mods.lightning) buffLightningResist += mods.lightning;
+        if (mods.poison) buffPoisonResist += mods.poison;
+        if (mods.dark) buffDarkResist += mods.dark;
+        if (mods.holy) buffHolyResist += mods.holy;
+      }
+    }
+
+    session.statBreakdown = computeStatBreakdown(session.statPoints, session.statusEffects || [], { STA, STR, AGI, DEX, SPI, INT }, { accuracy, dodge, attackSpeed, fireResist: fireResist + buffFireResist, iceResist: iceResist + buffIceResist, lightningResist: lightningResist + buffLightningResist, poisonResist: poisonResist + buffPoisonResist, darkResist: darkResist + buffDarkResist, holyResist: holyResist + buffHolyResist, ailmentResist, disorderResist });
   }
 
   healPlayer(session: PlayerSession): void {

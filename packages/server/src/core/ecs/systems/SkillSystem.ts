@@ -650,6 +650,21 @@ export class SkillSystem {
         consumable: dt.consumable || false,
       });
     }
+    if (dt.moveSpeedDown) {
+      addEffect(StatusEffectType.SLOW, dt.moveSpeedDown);
+    }
+    if (dt.hasFreeze) {
+      addEffect(StatusEffectType.FREEZE, 0.5, { duration: dt.hasFreeze.duration * 1000 });
+    }
+    if (dt.hasSleep) {
+      addEffect(StatusEffectType.SLEEP, 0, { duration: dt.hasSleep.duration * 1000 });
+    }
+    if (dt.hasStun) {
+      addEffect(StatusEffectType.STUN, 0, { duration: dt.hasStun.duration * 1000 });
+    }
+    if (dt.hasSilence) {
+      addEffect(StatusEffectType.SILENCE, 0, { duration: dt.hasSilence.duration * 1000 });
+    }
 
     return effects;
   }
@@ -857,6 +872,10 @@ export class SkillSystem {
 
     if (bt.attackSpeed) {
       pushEffect(StatusEffectType.BUFF_ATTACK_SPEED, bt.attackSpeed / 100);
+    }
+
+    if (bt.resistMods) {
+      pushEffect(StatusEffectType.BUFF_RESIST, 0, { resistMods: bt.resistMods });
     }
 
     if (bt.spiValues) {

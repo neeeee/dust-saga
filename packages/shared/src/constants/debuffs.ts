@@ -17,11 +17,12 @@ export interface DebuffEffectTable {
   castSpeedDown?: number;
   damageTakenUp?: number;
   moveSpeedDown?: number;
+  hasFreeze?: { duration: number };
+  hasSleep?: { duration: number };
+  hasStun?: { duration: number };
+  hasSilence?: { duration: number };
   hasKnockback?: {
     knockbackDistance: number;
-  };
-  hasStun?: {
-    stunDuration: number;
   };
   preventEquipment?: {
     equipmentSlotDisabled: string;

@@ -11,8 +11,8 @@ export function computeDebuffAccuracy(
   proficiencyAdeptness: number,
   category: 'ailment' | 'disorder'
 ): number {
-  const BASE_HIT_CHANCE = 65;
-  const SPI_BONUS_PER_POINT = 0.35;
+  const BASE_HIT_CHANCE = 20;
+  const SPI_BONUS_PER_POINT = 0.30;
   const PROFICIENCY_BONUS_PER_POINT = category === 'disorder' ? 0.5 : 0.3;
   const accuracy = BASE_HIT_CHANCE + casterSPI * SPI_BONUS_PER_POINT + proficiencyAdeptness * PROFICIENCY_BONUS_PER_POINT;
   return Math.min(95, accuracy);

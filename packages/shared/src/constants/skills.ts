@@ -1758,6 +1758,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 20,
             description: "Reduce fire damage taken, increase ice and lightning damage taken",
             basePower: 0,
+            buffEffectTable: {
+              resistMods: { fire: 25, ice: -50, lightning: -50 },
+            },
           },
           "Resist Ice": {
             name: "Resist Ice",
@@ -1768,6 +1771,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 20,
             description: "Reduce ice damage taken, increase fire and lightning damage taken",
             basePower: 0,
+            buffEffectTable: {
+              resistMods: { ice: 25, fire: -50, lightning: -50 },
+            },
           },
           "Resist Lightning": {
             name: "Resist Lightning",
@@ -1778,6 +1784,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 20,
             description: "Reduce lightning damage taken, increase fire and ice damage taken",
             basePower: 0,
+            buffEffectTable: {
+              resistMods: { lightning: 25, fire: -50, ice: -50 },
+            },
           },
           "Ice Storm": {
             name: "Ice Storm",
@@ -2109,6 +2118,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Reduce dark damage taken, greatly reducing charm resistance",
             basePower: 2,
             isBuff: true,
+            buffEffectTable: {
+              resistMods: { dark: 25, charm: -50 },
+            },
           },
           "Undermine": {
             name: "Undermine",
@@ -2226,6 +2238,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 20,
             description: "Summon a sandstorm that puts target to sleep",
             basePower: 3,
+            debuffEffectTable: {
+              
+            }
           },
           "Psionic Blast": {
             name: "Psionic Blast",
@@ -2259,6 +2274,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 5,
             duration: 120,
             description: "Reduce target's dodge",
+            debuffEffectTable: {
+              debuffCategory: 'ailment',
+            }
           },
           "Resist Charm": {
             name: "Resist Charm",
@@ -2268,6 +2286,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 3.5,
             duration: 7,
             description: "Increase charm resistance, greatly reducing dark resistance",
+            buffEffectTable: {
+              resistMods: { charm: 25, dark: -50 },
+            },
           },
           "Icy Strike": {
             name: "Icy Strike",
@@ -2278,7 +2299,14 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 15,
             description: "Freeze target, slowing them",
             damageSubType: MagicalDamageSubType.ICE,
-            basePower: 2,
+            basePower: 1,
+            debuffEffectTable: {
+              debuffCategory: 'ailment',
+              hasFreeze: {
+                duration: 5
+              },
+              moveSpeedDown: 0.3
+            }
           },
           "Wasteland": {
             name: "Wasteland",
@@ -2292,6 +2320,15 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             isAOE: true,
             aoeTargetMode: AOETargetMode.GROUND_TARGETED,
             aoeRadius: 8,
+            debuffEffectTable: {
+              dot: 'poison',
+              dotPotency: 0,
+              dotTickInterval: 2000,
+              dotSPIBase: 0.05,
+              dotSPIMax: 0.10,
+              dotSPICap: 110,
+              moveSpeedDown: 0.5
+            },
           },
           "Siren Storm": {
             name: "Siren Storm",
