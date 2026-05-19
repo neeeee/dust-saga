@@ -572,6 +572,10 @@ export class NetworkServer {
           this.handleAttack(socket, packet.data);
           break;
 
+        case PacketType.MANUAL_ATTACK:
+          this.handleManualAttack(socket, packet.data);
+          break;
+
         case PacketType.SKILL_USE:
           this.handleSkillUse(socket, packet.data);
           break;
@@ -951,6 +955,47 @@ export class NetworkServer {
     }
   }
 
+  private handleManualAttack(socket: Socket, data: any): void {
+    const characterId = this.findCharacterBySocket(socket.id);
+    if (!characterId) return;
+
+    const session = this.state.players.get(characterId);
+    if (!session || session.isDead) return;
+
+    const results = this.combat.processManualAttack(
+      session,
+      data.facingAngle,
+      this.spawnMgr.getAllEnemies(),
+      this.state.players
+    );
+
+    for (const info of results) {
+      this.broadcastInZone(session.zoneId, {
+        type: PacketType.DAMAGE,
+        timestamp: Date.now(),
+        data: info
+      });
+
+      const enemy = this.spawnMgr.getEnemy(info.targetId);
+      if (enemy) {
+        this.broadcastInZone(session.zoneId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { entityId: info.targetId, health: enemy.health, maxHealth: enemy.maxHealth }
+        });
+      }
+
+      const player = this.state.players.get(info.targetId);
+      if (player) {
+        this.sendToPlayer(info.targetId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { health: player.stats.health, maxHealth: player.stats.maxHealth, mana: player.stats.mana, maxMana: player.stats.maxMana }
+        });
+      }
+    }
+  }
+
   private handleSkillUse(socket: Socket, data: any): void {
     const characterId = this.findCharacterBySocket(socket.id);
     if (!characterId) return;
@@ -1079,7 +1124,11 @@ export class NetworkServer {
     });
 
     if (result.damage) {
-      this.applyAOEDamageToTargets(session, skillName, aoePosition, aoeRadius, result);
+      if (aoePosition) {
+        this.applyAOEDamageToTargets(session, skillName, aoePosition, aoeRadius, result);
+      } else if (firstTargetId) {
+        this.applySingleTargetSkillDamage(session, skillName, firstTargetId, result);
+      }
     }
 
     this.registerAOEPulse(session, skillName, aoePosition, aoeRadius, 1000, 1000);
@@ -3015,6 +3064,177 @@ export class NetworkServer {
         type: PacketType.CHAT_MESSAGE,
         timestamp: Date.now(),
         data: { sender: 'Damage', message: result.debugCalc, channel: 'system' }
+      });
+    }
+  }
+
+  private applySingleTargetSkillDamage(
+    session: PlayerSession,
+    skillName: string,
+    targetId: string,
+    result: { damage?: number; isCritical?: boolean; damageType?: string; elementalDamage?: Array<{ element: string; damage: number }>; hits?: Array<{ damage: number; isCritical: boolean; elementalDamage?: Array<{ element: string; damage: number }> }> }
+  ): void {
+    const characterId = session.characterId;
+    const hits = result.hits;
+
+    if (hits && hits.length > 1) {
+      let enemyDied = false;
+      const enemy = this.spawnMgr.getEnemy(targetId);
+      if (enemy) {
+        for (const hit of hits) {
+          if (hit.damage > 0) {
+            const { died } = this.damageEnemy(enemy, hit.damage);
+            if (died) enemyDied = true;
+          }
+          if (hit.elementalDamage) {
+            for (const el of hit.elementalDamage) {
+              this.damageEnemy(enemy, el.damage);
+            }
+          }
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.DAMAGE,
+            timestamp: Date.now(),
+            data: {
+              attackerId: characterId,
+              targetId,
+              damage: hit.damage,
+              isCritical: hit.isCritical,
+              damageType: result.damageType || 'physical',
+              skillName,
+              elementalDamage: hit.elementalDamage,
+            }
+          });
+        }
+        this.broadcastInZone(session.zoneId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { entityId: targetId, health: enemy.health, maxHealth: enemy.maxHealth }
+        });
+        if (enemyDied) {
+          enemy.state = 'dead';
+          enemy.deathTime = Date.now();
+          const enemyDef = getEnemyDefinition(enemy.enemyType);
+          if (enemyDef) {
+            this.playerSys.grantExperience(session, enemyDef.experience);
+            this.sendToPlayer(characterId, {
+              type: PacketType.EXPERIENCE_GAIN,
+              timestamp: Date.now(),
+              data: { experience: enemyDef.experience, totalExperience: session.stats.experience, level: session.stats.level }
+            });
+            this.sendToPlayer(characterId, {
+              type: PacketType.STATS_UPDATE,
+              timestamp: Date.now(),
+              data: { characterId, stats: session.stats }
+            });
+          }
+        }
+        return;
+      }
+
+      const playerTarget = this.state.players.get(targetId);
+      if (playerTarget && targetId !== characterId) {
+        for (const hit of hits) {
+          playerTarget.stats.health = Math.max(0, playerTarget.stats.health - hit.damage);
+          if (hit.elementalDamage) {
+            for (const el of hit.elementalDamage) {
+              playerTarget.stats.health = Math.max(0, playerTarget.stats.health - el.damage);
+            }
+          }
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.DAMAGE,
+            timestamp: Date.now(),
+            data: {
+              attackerId: characterId,
+              targetId,
+              damage: hit.damage,
+              isCritical: hit.isCritical,
+              damageType: result.damageType || 'physical',
+              skillName,
+              elementalDamage: hit.elementalDamage,
+            }
+          });
+        }
+        this.sendToPlayer(targetId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { health: playerTarget.stats.health, maxHealth: playerTarget.stats.maxHealth, mana: playerTarget.stats.mana, maxMana: playerTarget.stats.maxMana }
+        });
+      }
+      return;
+    }
+
+    const enemy = this.spawnMgr.getEnemy(targetId);
+    if (enemy) {
+      const { died } = this.damageEnemy(enemy, result.damage!);
+      if (result.elementalDamage) {
+        for (const el of result.elementalDamage) {
+          this.damageEnemy(enemy, el.damage);
+        }
+      }
+      this.broadcastInZone(session.zoneId, {
+        type: PacketType.DAMAGE,
+        timestamp: Date.now(),
+        data: {
+          attackerId: characterId,
+          targetId,
+          damage: result.damage,
+          isCritical: result.isCritical || false,
+          damageType: result.damageType || 'physical',
+          skillName,
+          elementalDamage: result.elementalDamage,
+        }
+      });
+      this.broadcastInZone(session.zoneId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { entityId: targetId, health: enemy.health, maxHealth: enemy.maxHealth }
+      });
+      if (died) {
+        enemy.state = 'dead';
+        enemy.deathTime = Date.now();
+        const enemyDef = getEnemyDefinition(enemy.enemyType);
+        if (enemyDef) {
+          this.playerSys.grantExperience(session, enemyDef.experience);
+          this.sendToPlayer(characterId, {
+            type: PacketType.EXPERIENCE_GAIN,
+            timestamp: Date.now(),
+            data: { experience: enemyDef.experience, totalExperience: session.stats.experience, level: session.stats.level }
+          });
+          this.sendToPlayer(characterId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId, stats: session.stats }
+          });
+        }
+      }
+      return;
+    }
+
+    const playerTarget = this.state.players.get(targetId);
+    if (playerTarget && targetId !== characterId) {
+      playerTarget.stats.health = Math.max(0, playerTarget.stats.health - (result.damage || 0));
+      if (result.elementalDamage) {
+        for (const el of result.elementalDamage) {
+          playerTarget.stats.health = Math.max(0, playerTarget.stats.health - el.damage);
+        }
+      }
+      this.broadcastInZone(session.zoneId, {
+        type: PacketType.DAMAGE,
+        timestamp: Date.now(),
+        data: {
+          attackerId: characterId,
+          targetId,
+          damage: result.damage,
+          isCritical: result.isCritical || false,
+          damageType: result.damageType || 'physical',
+          skillName,
+          elementalDamage: result.elementalDamage,
+        }
+      });
+      this.sendToPlayer(targetId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { health: playerTarget.stats.health, maxHealth: playerTarget.stats.maxHealth, mana: playerTarget.stats.mana, maxMana: playerTarget.stats.maxMana }
       });
     }
   }

@@ -51,6 +51,11 @@ export interface SkillUseResult {
   error?: string;
   debugCalc?: string;
   elementalDamage?: Array<{ element: string; damage: number }>;
+  hits?: Array<{
+    damage: number;
+    isCritical: boolean;
+    elementalDamage?: Array<{ element: string; damage: number }>;
+  }>;
 }
 
 interface SkillClassification {
@@ -369,11 +374,8 @@ export class SkillSystem {
     damageType: 'physical' | 'magical'
   ): SkillUseResult {
     const isMagical = damageType === 'magical';
-
+    const numHits = skill.baseHits || 1;
     const hitChance = this.calculateAccuracy(session, target);
-    if (Math.random() > hitChance) {
-      return { success: true, damage: 0, missed: true, damageType };
-    }
 
     const basePower = skill.basePower ?? 1;
     const baseStats = session.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
@@ -391,14 +393,12 @@ export class SkillSystem {
       attackMultiplier = attackBuff.potency;
     }
 
-    let damage = Math.floor(
+    const baseDamage = Math.floor(
       basePower * (primaryStat + secondaryStat * 0.3) * attackMultiplier
       - defenseStat * 0.5
     );
-    const steps: string[] = [];
-    steps.push(`basePower=${basePower} ${isMagical ? 'INT' : 'STR'}=${primaryStat}(base${isMagical ? baseStats.INT : baseStats.STR}+alloc${isMagical ? session.statPoints.INT : session.statPoints.STR}) ${isMagical ? 'SPI' : 'DEX'}=${secondaryStat}`);
-    steps.push(`raw=${basePower}×(${primaryStat}+${secondaryStat}×0.3)×${attackMultiplier}-${defenseStat}×0.5=${damage}`);
 
+    let elementalResistMultiplier = 1;
     if (isMagical && skill.damageSubType) {
       const resistMap: Record<string, number | undefined> = {
         fire: target.fireResist,
@@ -409,55 +409,28 @@ export class SkillSystem {
       };
       const resist = resistMap[skill.damageSubType] || 0;
       if (resist !== 0) {
-        const multiplier = resist > 0
+        elementalResistMultiplier = resist > 0
           ? 1 - Math.min(0.75, resist / 100)
           : 1 + Math.min(1.0, Math.abs(resist) / 100);
-        damage = Math.floor(damage * multiplier);
-        if (resist > 0) {
-          steps.push(`${skill.damageSubType}Res(${resist}%)→${((1 - multiplier) * 100).toFixed(0)}% reduction=${damage}`);
-        } else {
-          steps.push(`${skill.damageSubType}Vuln(${resist}%)→+${((multiplier - 1) * 100).toFixed(0)}% bonus=${damage}`);
-        }
       }
     }
 
+    let physReduction = 0;
     if (!isMagical && target.physicalDamageReduction && target.physicalDamageReduction > 0) {
-      damage = Math.floor(damage * (1 - Math.min(0.9, target.physicalDamageReduction)));
-      steps.push(`physReduction=${damage}`);
+      physReduction = Math.min(0.9, target.physicalDamageReduction);
     }
 
-    let isCritical = false;
-    if (!isMagical) {
-      const totalDex = (session.statPoints.DEX || 0) + (session.baseStats?.DEX || 0);
-      const critChance = COMBAT_CONFIG.CRITICAL_CHANCE + totalDex * 0.002;
-      isCritical = Math.random() < critChance;
-    }
-    if (isCritical) {
-      damage = Math.floor(damage * COMBAT_CONFIG.CRITICAL_MULTIPLIER);
-      steps.push(`crit=${damage}`);
-    }
+    const totalDex = (session.statPoints.DEX || 0) + (session.baseStats?.DEX || 0);
+    const critChance = COMBAT_CONFIG.CRITICAL_CHANCE + totalDex * 0.002;
 
     const levelDiff = session.stats.level - target.level;
+    let levelMultiplier = 1;
     if (levelDiff > 0) {
-      damage = Math.floor(damage * (1 + levelDiff * 0.03));
-      steps.push(`lvlDiff(+${levelDiff})=${damage}`);
+      levelMultiplier = 1 + levelDiff * 0.03;
     } else if (levelDiff < 0) {
       const penalty = 1 - 0.5 * (1 - Math.exp(levelDiff * 0.03));
-      damage = Math.floor(damage * Math.max(0.25, penalty));
-      steps.push(`lvlDiff(${levelDiff})=${damage}`);
+      levelMultiplier = Math.max(0.25, penalty);
     }
-
-    const varianceRoll = 0.9 + Math.random() * 0.2;
-    damage = Math.floor(damage * varianceRoll);
-    steps.push(`variance(${varianceRoll.toFixed(2)})=${damage}`);
-    damage = Math.max(COMBAT_CONFIG.MIN_DAMAGE, damage);
-
-    if (target.damageTakenMultiplier && target.damageTakenMultiplier > 1) {
-      damage = Math.floor(damage * target.damageTakenMultiplier);
-      steps.push(`dmgTaken×${target.damageTakenMultiplier}=${damage}`);
-    }
-
-    const statusEffects = this.buildStatusEffects(session, skill, damage);
 
     const totalSPI = (session.statPoints.SPI || 0) + (baseStats.SPI || 0);
     const totalINT = (session.statPoints.INT || 0) + (baseStats.INT || 0);
@@ -469,24 +442,91 @@ export class SkillSystem {
       holyResist: target.holyResist,
       poisonResist: target.poisonResist,
     };
-    const elementalDamage = calculateWeaponElementalDamage(
-      session.equipment?.weapon?.itemId,
-      session.statusEffects || [],
-      totalSPI,
-      totalINT,
-      session.stats.level,
-      targetResists
-    );
 
-    return {
+    const steps: string[] = [];
+    steps.push(`basePower=${basePower} ${isMagical ? 'INT' : 'STR'}=${primaryStat}(base${isMagical ? baseStats.INT : baseStats.STR}+alloc${isMagical ? session.statPoints.INT : session.statPoints.STR}) ${isMagical ? 'SPI' : 'DEX'}=${secondaryStat}`);
+    steps.push(`raw=${basePower}×(${primaryStat}+${secondaryStat}×0.3)×${attackMultiplier}-${defenseStat}×0.5=${baseDamage}`);
+
+    const hits: Array<{ damage: number; isCritical: boolean; elementalDamage?: Array<{ element: string; damage: number }> }> = [];
+    let totalDamage = 0;
+    let anyCritical = false;
+
+    for (let h = 0; h < numHits; h++) {
+      if (Math.random() > hitChance) {
+        hits.push({ damage: 0, isCritical: false });
+        if (numHits > 1) steps.push(`hit${h + 1}: miss`);
+        continue;
+      }
+
+      let damage = baseDamage;
+
+      if (elementalResistMultiplier !== 1) {
+        damage = Math.floor(damage * elementalResistMultiplier);
+      }
+
+      if (physReduction > 0) {
+        damage = Math.floor(damage * (1 - physReduction));
+      }
+
+      const isCrit = !isMagical && Math.random() < critChance;
+      if (isCrit) {
+        damage = Math.floor(damage * COMBAT_CONFIG.CRITICAL_MULTIPLIER);
+        anyCritical = true;
+      }
+
+      damage = Math.floor(damage * levelMultiplier);
+
+      const varianceRoll = 0.9 + Math.random() * 0.2;
+      damage = Math.floor(damage * varianceRoll);
+      damage = Math.max(COMBAT_CONFIG.MIN_DAMAGE, damage);
+
+      if (target.damageTakenMultiplier && target.damageTakenMultiplier > 1) {
+        damage = Math.floor(damage * target.damageTakenMultiplier);
+      }
+
+      const elementalDamage = calculateWeaponElementalDamage(
+        session.equipment?.weapon?.itemId,
+        session.statusEffects || [],
+        totalSPI,
+        totalINT,
+        session.stats.level,
+        targetResists
+      );
+
+      hits.push({
+        damage,
+        isCritical: isCrit,
+        elementalDamage: elementalDamage.length > 0 ? elementalDamage : undefined,
+      });
+
+      totalDamage += damage;
+      if (numHits === 1) {
+        if (isCrit) steps.push(`crit=${damage}`);
+      } else {
+        steps.push(`hit${h + 1}=${damage}${isCrit ? '(crit)' : ''}`);
+      }
+    }
+
+    steps.push(`total=${totalDamage}`);
+
+    const statusEffects = this.buildStatusEffects(session, skill, totalDamage);
+
+    const result: SkillUseResult = {
       success: true,
-      damage,
-      isCritical,
+      damage: totalDamage,
+      isCritical: anyCritical,
       damageType,
       statusEffects: statusEffects.length > 0 ? statusEffects : undefined,
-      debugCalc: `[${skill.name}] ${steps.join(' → ')} → final=${damage}`,
-      elementalDamage: elementalDamage.length > 0 ? elementalDamage : undefined,
+      debugCalc: `[${skill.name}] ${steps.join(' → ')} → final=${totalDamage}`,
     };
+
+    if (numHits > 1) {
+      result.hits = hits;
+    } else if (hits.length > 0 && hits[0].elementalDamage) {
+      result.elementalDamage = hits[0].elementalDamage;
+    }
+
+    return result;
   }
 
   private buildStatusEffects(session: PlayerSession, skill: SkillDefinition, damage: number): StatusEffect[] {

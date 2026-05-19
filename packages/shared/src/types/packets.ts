@@ -18,6 +18,7 @@ export enum PacketType {
   WORLD_STATE = 23,
 
   ATTACK = 30,
+  MANUAL_ATTACK = 36,
   DAMAGE = 31,
   HEAL = 32,
   DEATH = 33,

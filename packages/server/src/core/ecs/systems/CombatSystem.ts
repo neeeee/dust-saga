@@ -1,6 +1,15 @@
 import { EntityManager, System } from '../EntityManager';
 import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats, calculateWeaponElementalDamage } from '@dust-saga/shared';
 
+interface ConeTarget {
+  id: string;
+  position: { x: number; y: number; z: number };
+  defense: number;
+  isEnemy: boolean;
+  enemyRef: EnemyInstance | null;
+  playerRef: PlayerSession | null;
+}
+
 export class CombatSystem extends System {
   private damageCallbacks: Array<(info: DamageInfo) => void> = [];
   private deathCallbacks: Array<(entityId: string, killerId: string) => void> = [];
@@ -17,6 +26,81 @@ export class CombatSystem extends System {
     this.deathCallbacks.push(callback);
   }
 
+  private computePhysicalDamage(
+    attackPower: number,
+    targetDefense: number,
+    attackerRace: string
+  ): { damage: number; isCritical: boolean } {
+    const isCritical = Math.random() < applyRacialCritChance(attackerRace, COMBAT_CONFIG.CRITICAL_CHANCE);
+    let damage = Math.max(
+      COMBAT_CONFIG.MIN_DAMAGE,
+      attackPower - targetDefense * COMBAT_CONFIG.DAMAGE_REDUCTION_PER_DEFENSE * 10
+    );
+    if (isCritical) {
+      damage = Math.floor(damage * COMBAT_CONFIG.CRITICAL_MULTIPLIER);
+    }
+    damage = Math.floor(damage * (0.9 + Math.random() * 0.2));
+    return { damage, isCritical };
+  }
+
+  private getTargetResists(
+    isEnemy: boolean,
+    enemyRef: EnemyInstance | null,
+    playerRef: PlayerSession | null,
+    players: Map<string, PlayerSession>
+  ): Record<string, number | undefined> {
+    if (isEnemy && enemyRef) {
+      const def = getEnemyDefinition(enemyRef.enemyType);
+      return {
+        fireResist: def?.fireResist,
+        iceResist: def?.iceResist,
+        lightningResist: def?.lightningResist,
+        darkResist: def?.darkResist,
+        holyResist: def?.holyResist,
+        poisonResist: def?.poisonResist,
+      };
+    } else if (!isEnemy && playerRef) {
+      return {
+        fireResist: (playerRef.statBreakdown?.gearCombat?.fireResist ?? 0),
+        iceResist: (playerRef.statBreakdown?.gearCombat?.iceResist ?? 0),
+        lightningResist: (playerRef.statBreakdown?.gearCombat?.lightningResist ?? 0),
+        darkResist: (playerRef.statBreakdown?.gearCombat?.darkResist ?? 0),
+        holyResist: (playerRef.statBreakdown?.gearCombat?.holyResist ?? 0),
+        poisonResist: (playerRef.statBreakdown?.gearCombat?.poisonResist ?? 0),
+      };
+    }
+    return {};
+  }
+
+  private applyDamageToTarget(
+    targetId: string,
+    damage: number,
+    elementalDamage: Array<{ element: string; damage: number }>,
+    isEnemy: boolean,
+    enemyRef: EnemyInstance | null,
+    playerRef: PlayerSession | null,
+    attackerId: string
+  ): void {
+    if (isEnemy && enemyRef) {
+      enemyRef.health = Math.max(0, enemyRef.health - damage);
+      for (const el of elementalDamage) {
+        enemyRef.health = Math.max(0, enemyRef.health - el.damage);
+      }
+      if (enemyRef.invulnerable) {
+        enemyRef.health = enemyRef.maxHealth;
+      } else if (enemyRef.health <= 0 && enemyRef.state !== 'dead') {
+        enemyRef.state = 'dead';
+        enemyRef.deathTime = Date.now();
+        this.deathCallbacks.forEach(cb => cb(targetId, attackerId));
+      }
+    } else if (!isEnemy && playerRef) {
+      playerRef.stats.health = Math.max(0, playerRef.stats.health - damage);
+      for (const el of elementalDamage) {
+        playerRef.stats.health = Math.max(0, playerRef.stats.health - el.damage);
+      }
+    }
+  }
+
   processPlayerAttack(
     attacker: PlayerSession,
     targetId: string,
@@ -27,18 +111,15 @@ export class CombatSystem extends System {
     const cooldown = GAME_CONFIG.ATTACK_COOLDOWN;
     if (now - attacker.lastAttackTime < cooldown) return null;
 
-    let targetHealth: number;
-    let targetMaxHealth: number;
-    let targetDefense: number;
     let targetPosition: { x: number; y: number; z: number };
+    let targetDefense: number;
     let isEnemy = false;
     let enemyRef: EnemyInstance | null = null;
+    let playerRef: PlayerSession | null = null;
 
     const enemy = enemies.get(targetId);
     if (enemy && enemy.state !== 'dead') {
       const def = getEnemyDefinition(enemy.enemyType);
-      targetHealth = enemy.health;
-      targetMaxHealth = enemy.maxHealth;
       targetDefense = def?.defense || 0;
       targetPosition = enemy.position;
       isEnemy = true;
@@ -46,15 +127,10 @@ export class CombatSystem extends System {
     } else {
       const player = players.get(targetId);
       if (player) {
-        targetHealth = player.stats.health;
-        targetMaxHealth = player.stats.maxHealth;
-        const playerEffective = getEffectiveStats(
-          player.stats,
-          player.statPoints,
-          player.statusEffects || []
-        );
+        const playerEffective = getEffectiveStats(player.stats, player.statPoints, player.statusEffects || []);
         targetDefense = playerEffective.defense;
         targetPosition = player.position;
+        playerRef = player;
       } else {
         return null;
       }
@@ -65,91 +141,23 @@ export class CombatSystem extends System {
     const dist = Math.sqrt(dx * dx + dz * dz);
     if (dist > COMBAT_CONFIG.ATTACK_RANGE) return null;
 
-    const effective = getEffectiveStats(
-      attacker.stats,
-      attacker.statPoints,
-      attacker.statusEffects || []
-    );
-    const attackPower = effective.attack;
-
-    const isCritical = Math.random() < applyRacialCritChance(attacker.race, COMBAT_CONFIG.CRITICAL_CHANCE);
-    let damage = Math.max(
-      COMBAT_CONFIG.MIN_DAMAGE,
-      attackPower - targetDefense * COMBAT_CONFIG.DAMAGE_REDUCTION_PER_DEFENSE * 10
-    );
+    const effective = getEffectiveStats(attacker.stats, attacker.statPoints, attacker.statusEffects || []);
+    const { damage, isCritical } = this.computePhysicalDamage(effective.attack, targetDefense, attacker.race);
 
     if (effective.physicalDamageReduction > 0 && isEnemy && enemyRef) {
-      damage = Math.floor(damage * (1 - Math.min(0.9, effective.physicalDamageReduction)));
-    }
-
-    if (isCritical) {
-      damage = Math.floor(damage * COMBAT_CONFIG.CRITICAL_MULTIPLIER);
-    }
-
-    damage = Math.floor(damage * (0.9 + Math.random() * 0.2));
-
-    if (isEnemy && enemyRef) {
-      enemyRef.health = Math.max(0, enemyRef.health - damage);
-      if (enemyRef.invulnerable) {
-        enemyRef.health = enemyRef.maxHealth;
-      } else if (enemyRef.health <= 0) {
-        enemyRef.state = 'dead';
-        enemyRef.deathTime = Date.now();
-        this.deathCallbacks.forEach(cb => cb(targetId, attacker.characterId));
-      }
+      // not applicable for player attacks
     }
 
     const baseStats = attacker.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
     const totalSPI = (attacker.statPoints.SPI || 0) + (baseStats.SPI || 0);
     const totalINT = (attacker.statPoints.INT || 0) + (baseStats.INT || 0);
-
-    let targetResists: Record<string, number | undefined> = {};
-    if (isEnemy && enemyRef) {
-      const def = getEnemyDefinition(enemyRef.enemyType);
-      targetResists = {
-        fireResist: def?.fireResist,
-        iceResist: def?.iceResist,
-        lightningResist: def?.lightningResist,
-        darkResist: def?.darkResist,
-        holyResist: def?.holyResist,
-        poisonResist: def?.poisonResist,
-      };
-    } else if (!isEnemy) {
-      const targetPlayer = players.get(targetId);
-      if (targetPlayer) {
-        const te = getEffectiveStats(targetPlayer.stats, targetPlayer.statPoints, targetPlayer.statusEffects || []);
-        targetResists = {
-          fireResist: (targetPlayer.statBreakdown?.gearCombat?.fireResist ?? 0),
-          iceResist: (targetPlayer.statBreakdown?.gearCombat?.iceResist ?? 0),
-          lightningResist: (targetPlayer.statBreakdown?.gearCombat?.lightningResist ?? 0),
-          darkResist: (targetPlayer.statBreakdown?.gearCombat?.darkResist ?? 0),
-          holyResist: (targetPlayer.statBreakdown?.gearCombat?.holyResist ?? 0),
-          poisonResist: (targetPlayer.statBreakdown?.gearCombat?.poisonResist ?? 0),
-        };
-      }
-    }
-
+    const targetResists = this.getTargetResists(isEnemy, enemyRef, playerRef, players);
     const elementalDamage = calculateWeaponElementalDamage(
-      attacker.equipment?.weapon?.itemId,
-      attacker.statusEffects || [],
-      totalSPI,
-      totalINT,
-      attacker.stats.level,
-      targetResists
+      attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
+      totalSPI, totalINT, attacker.stats.level, targetResists
     );
 
-    if (elementalDamage.length > 0 && isEnemy && enemyRef) {
-      for (const el of elementalDamage) {
-        enemyRef.health = Math.max(0, enemyRef.health - el.damage);
-      }
-      if (enemyRef.invulnerable) {
-        enemyRef.health = enemyRef.maxHealth;
-      } else if (enemyRef.health <= 0 && enemyRef.state !== 'dead') {
-        enemyRef.state = 'dead';
-        enemyRef.deathTime = Date.now();
-        this.deathCallbacks.forEach(cb => cb(targetId, attacker.characterId));
-      }
-    }
+    this.applyDamageToTarget(targetId, damage, elementalDamage, isEnemy, enemyRef, playerRef, attacker.characterId);
 
     const info: DamageInfo = {
       attackerId: attacker.characterId,
@@ -162,6 +170,95 @@ export class CombatSystem extends System {
 
     this.damageCallbacks.forEach(cb => cb(info));
     return info;
+  }
+
+  processManualAttack(
+    attacker: PlayerSession,
+    facingAngle: number,
+    enemies: Map<string, EnemyInstance>,
+    players: Map<string, PlayerSession>
+  ): DamageInfo[] {
+    const now = Date.now();
+    if (now - attacker.lastManualAttackTime < GAME_CONFIG.MANUAL_ATTACK_COOLDOWN) return [];
+    attacker.lastManualAttackTime = now;
+
+    const range = COMBAT_CONFIG.MANUAL_ATTACK_RANGE;
+    const halfCone = COMBAT_CONFIG.MANUAL_ATTACK_CONE_ANGLE / 2;
+    const facingX = Math.sin(facingAngle);
+    const facingZ = Math.cos(facingAngle);
+
+    const candidates: ConeTarget[] = [];
+
+    for (const [id, enemy] of enemies) {
+      if (enemy.state === 'dead') continue;
+      const dx = enemy.position.x - attacker.position.x;
+      const dz = enemy.position.z - attacker.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist > range) continue;
+      const dot = (dx * facingX + dz * facingZ) / dist;
+      if (dot < Math.cos(halfCone)) continue;
+      const def = getEnemyDefinition(enemy.enemyType);
+      candidates.push({ id, position: enemy.position, defense: def?.defense || 0, isEnemy: true, enemyRef: enemy, playerRef: null });
+    }
+
+    for (const [id, player] of players) {
+      if (id === attacker.characterId || player.isDead) continue;
+      const dx = player.position.x - attacker.position.x;
+      const dz = player.position.z - attacker.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist > range) continue;
+      const dot = (dx * facingX + dz * facingZ) / dist;
+      if (dot < Math.cos(halfCone)) continue;
+      const pe = getEffectiveStats(player.stats, player.statPoints, player.statusEffects || []);
+      candidates.push({ id, position: player.position, defense: pe.defense, isEnemy: false, enemyRef: null, playerRef: player });
+    }
+
+    candidates.sort((a, b) => {
+      const da = Math.sqrt((a.position.x - attacker.position.x) ** 2 + (a.position.z - attacker.position.z) ** 2);
+      const db = Math.sqrt((b.position.x - attacker.position.x) ** 2 + (b.position.z - attacker.position.z) ** 2);
+      return da - db;
+    });
+
+    const hitTargets = candidates.slice(0, COMBAT_CONFIG.MANUAL_ATTACK_MAX_TARGETS);
+
+    const effective = getEffectiveStats(attacker.stats, attacker.statPoints, attacker.statusEffects || []);
+    const baseStats = attacker.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+    const totalSPI = (attacker.statPoints.SPI || 0) + (baseStats.SPI || 0);
+    const totalINT = (attacker.statPoints.INT || 0) + (baseStats.INT || 0);
+
+    const results: DamageInfo[] = [];
+
+    for (let i = 0; i < hitTargets.length; i++) {
+      const target = hitTargets[i];
+      const falloff = Math.pow(COMBAT_CONFIG.MANUAL_ATTACK_FALLOFF, i);
+      const { damage: baseDamage, isCritical } = this.computePhysicalDamage(effective.attack, target.defense, attacker.race);
+      const damage = Math.max(COMBAT_CONFIG.MIN_DAMAGE, Math.floor(baseDamage * falloff));
+
+      const targetResists = this.getTargetResists(target.isEnemy, target.enemyRef, target.playerRef, players);
+      const elementalDamage = calculateWeaponElementalDamage(
+        attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
+        totalSPI, totalINT, attacker.stats.level, targetResists
+      );
+      const scaledElemental = elementalDamage.map(el => ({
+        element: el.element,
+        damage: Math.max(1, Math.floor(el.damage * falloff))
+      }));
+
+      this.applyDamageToTarget(target.id, damage, scaledElemental, target.isEnemy, target.enemyRef, target.playerRef, attacker.characterId);
+
+      const info: DamageInfo = {
+        attackerId: attacker.characterId,
+        targetId: target.id,
+        damage,
+        isCritical,
+        damageType: 'physical',
+        elementalDamage: scaledElemental.length > 0 ? scaledElemental : undefined,
+      };
+      this.damageCallbacks.forEach(cb => cb(info));
+      results.push(info);
+    }
+
+    return results;
   }
 
   processEnemyAttack(

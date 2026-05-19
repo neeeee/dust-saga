@@ -68,6 +68,7 @@ export interface SkillDefinition {
   debuffEffectTable?: DebuffEffectTable;
   debuffDuration?: number;
   basePower?: number;
+  baseHits?: number;
   pulseCount?: number;
   pulseInterval?: number;
 }

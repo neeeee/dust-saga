@@ -170,6 +170,14 @@ export class NetworkClient {
     });
   }
 
+  sendManualAttack(facingAngle: number): void {
+    this.sendPacket({
+      type: PacketType.MANUAL_ATTACK,
+      timestamp: Date.now(),
+      data: { facingAngle }
+    });
+  }
+
   useSkill(skillName: string, targetId: string | null = null, aoePosition?: { x: number; y: number; z: number }): void {
     const data: any = { skillName, targetId };
     if (aoePosition) {

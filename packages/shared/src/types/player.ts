@@ -40,6 +40,7 @@ export interface PlayerSession {
   zoneId: string;
   targetId: string | null;
   lastAttackTime: number;
+  lastManualAttackTime: number;
   lastRegenTick: number;
   invulnerableUntil: number;
   isDead: boolean;

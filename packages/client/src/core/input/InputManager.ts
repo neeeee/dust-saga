@@ -5,7 +5,7 @@ export interface InputState {
   backward: boolean;
   left: boolean;
   right: boolean;
-  jump: boolean;
+  manualAttack: boolean;
   sprint: boolean;
   attack: boolean;
   interact: boolean;
@@ -100,7 +100,7 @@ export class InputManager {
       backward: this.keys.get('KeyS') || false,
       left: this.keys.get('KeyA') || false,
       right: this.keys.get('KeyD') || false,
-      jump: this.keys.get('Space') || false,
+      manualAttack: this.keys.get('Space') || false,
       sprint: false,
       attack: this.keys.get('KeyF') || false,
       interact: this.keys.get('KeyE') || false

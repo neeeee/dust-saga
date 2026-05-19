@@ -124,6 +124,7 @@ export class PlayerSystem extends System {
       zoneId: 'starter_zone',
       targetId: null,
       lastAttackTime: 0,
+      lastManualAttackTime: 0,
       lastRegenTick: Date.now(),
       invulnerableUntil: Date.now() + 3000,
       isDead: false,

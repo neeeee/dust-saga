@@ -88,6 +88,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 1,
+            baseHits: 2,
           },
           "Whirling Strike": {
             name: "Whirling Strike",
@@ -173,6 +174,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 1,
+            baseHits: 3,
           },
           "Maximum Shoot": {
             name: "Maximum Shoot",
@@ -241,6 +243,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.THRUST,
             basePower: 1,
+            baseHits: 3,
           },
           "Dismounting Stab": {
             name: "Dismounting Stab",
@@ -277,6 +280,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.THRUST,
             basePower: 2,
+            baseHits: 4,
           },
           "Sonic Sting": {
             name: "Sonic Sting",

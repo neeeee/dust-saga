@@ -65,6 +65,7 @@ export class GameClient {
   private lastMoveSend: number = 0;
   private autoAttacking: boolean = false;
   private lastAutoAttackTime: number = 0;
+  private lastManualAttackTime: number = 0;
   private enemies: Map<string, any> = new Map();
   private lootBeacons: Map<string, any> = new Map();
   private knownEntities: Map<string, { type: string; data: any }> = new Map();
@@ -728,9 +729,24 @@ export class GameClient {
 
     if (this.autoAttacking && this.targetId) {
       const now = Date.now();
-      if (now - this.lastAutoAttackTime >= 1000) {
+      const attackSpeedMult = (this.statBreakdown as any)?.gearCombat?.attackSpeed ?? 0;
+      const attackSpeedMultiplier = 1 + attackSpeedMult;
+      const autoCooldown = Math.max(
+        GAME_CONFIG.AUTO_ATTACK_MIN_COOLDOWN,
+        GAME_CONFIG.AUTO_ATTACK_BASE_COOLDOWN / attackSpeedMultiplier
+      );
+      if (now - this.lastAutoAttackTime >= autoCooldown) {
         this.network.sendAttack(this.targetId);
         this.lastAutoAttackTime = now;
+      }
+    }
+
+    if (input.manualAttack && !input.attack) {
+      const now = Date.now();
+      if (now - this.lastManualAttackTime >= GAME_CONFIG.MANUAL_ATTACK_COOLDOWN) {
+        const facingAngle = Math.atan2(camForward.x, camForward.z);
+        this.network.sendManualAttack(facingAngle);
+        this.lastManualAttackTime = now;
       }
     }
 
