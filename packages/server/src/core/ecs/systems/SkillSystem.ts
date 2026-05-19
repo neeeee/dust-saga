@@ -955,6 +955,10 @@ export class SkillSystem {
     return null;
   }
 
+  getSubCategoryForSkill(skillName: string): string | null {
+    return SKILL_TO_SUBCATEGORY[skillName] || null;
+  }
+
   getAvailableSkills(session: PlayerSession): string[] {
     const available: string[] = [];
     const proficiencies = session.skillProficiencies || {};

@@ -6,8 +6,20 @@ export function computeDisorderResist(totalSPI: number, gearBonus: number = 0): 
   return Math.floor(totalSPI / 28) * 7 + gearBonus;
 }
 
-export function rollAgainstResist(resistPercent: number): boolean {
-  if (resistPercent >= 100) return false;
-  if (resistPercent <= 0) return true;
-  return Math.random() * 100 >= resistPercent;
+export function computeDebuffAccuracy(
+  casterSPI: number,
+  proficiencyAdeptness: number,
+  category: 'ailment' | 'disorder'
+): number {
+  const BASE_HIT_CHANCE = 65;
+  const SPI_BONUS_PER_POINT = 0.35;
+  const PROFICIENCY_BONUS_PER_POINT = category === 'disorder' ? 0.5 : 0.3;
+  const accuracy = BASE_HIT_CHANCE + casterSPI * SPI_BONUS_PER_POINT + proficiencyAdeptness * PROFICIENCY_BONUS_PER_POINT;
+  return Math.min(95, accuracy);
+}
+
+export function rollDebuffApplication(accuracy: number, resistPercent: number): { applied: boolean; roll: number } {
+  const finalChance = Math.max(0, accuracy - resistPercent);
+  const roll = Math.random() * 100;
+  return { applied: roll < finalChance, roll };
 }

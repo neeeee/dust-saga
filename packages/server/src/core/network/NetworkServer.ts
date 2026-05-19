@@ -12,7 +12,7 @@ import {
   GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
   StatusEffectType, StatusEffect, EnemyInstance,
   getEffectiveStats,
-  computeAilmentResist, computeDisorderResist, rollAgainstResist,
+  computeAilmentResist, computeDisorderResist, computeDebuffAccuracy, rollDebuffApplication,
   NATION_ZONE_MAP,
   ZoneType,
 } from '@dust-saga/shared';
@@ -1135,25 +1135,28 @@ export class NetworkServer {
     this.registerAOEPulse(session, skillName, aoePosition, aoeRadius, 1000, 1000);
 
     if (result.statusEffects && result.statusEffects.length > 0) {
-      const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
-      for (const target of targets) {
-        const enemy = this.spawnMgr.getEnemy(target.id);
-        if (enemy && enemy.state !== 'dead') {
-          for (const effect of result.statusEffects) {
-            if (!this.shouldApplyDebuff(effect, target.id)) continue;
-            const cloned = { ...effect, targetId: target.id };
-            enemy.statusEffects.push(cloned);
+      if (aoePosition) {
+        const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
+        for (const target of targets) {
+          const enemy = this.spawnMgr.getEnemy(target.id);
+          if (enemy && enemy.state !== 'dead') {
+            for (const effect of result.statusEffects) {
+              if (!this.shouldApplyDebuff(effect, target.id, characterId)) continue;
+              if (this.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
+              const cloned = { ...effect, targetId: target.id };
+              enemy.statusEffects.push(cloned);
+            }
+            this.broadcastInZone(session.zoneId, {
+              type: PacketType.ENTITY_STATUS_EFFECTS,
+              timestamp: Date.now(),
+              data: { entityId: target.id, effects: enemy.statusEffects }
+            });
           }
-          this.broadcastInZone(session.zoneId, {
-            type: PacketType.ENTITY_STATUS_EFFECTS,
-            timestamp: Date.now(),
-            data: { entityId: target.id, effects: enemy.statusEffects }
-          });
-        } else {
           const playerTarget = this.state.players.get(target.id);
           if (playerTarget && target.id !== characterId) {
             for (const effect of result.statusEffects) {
-              if (!this.shouldApplyDebuff(effect, target.id)) continue;
+              if (!this.shouldApplyDebuff(effect, target.id, characterId)) continue;
+              if (this.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
               const cloned = { ...effect, targetId: target.id };
               playerTarget.statusEffects.push(cloned);
             }
@@ -1170,6 +1173,42 @@ export class NetworkServer {
             });
             this.broadcastEntityEffects(playerTarget);
           }
+        }
+      } else if (firstTargetId) {
+        const enemy = this.spawnMgr.getEnemy(firstTargetId);
+        if (enemy && enemy.state !== 'dead') {
+          for (const effect of result.statusEffects) {
+            if (!this.shouldApplyDebuff(effect, firstTargetId, characterId)) continue;
+            if (this.hasActiveDebuff(firstTargetId, effect.type, effect.skillName)) continue;
+            const cloned = { ...effect, targetId: firstTargetId };
+            enemy.statusEffects.push(cloned);
+          }
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.ENTITY_STATUS_EFFECTS,
+            timestamp: Date.now(),
+            data: { entityId: firstTargetId, effects: enemy.statusEffects }
+          });
+        }
+        const playerTarget = this.state.players.get(firstTargetId);
+        if (playerTarget && firstTargetId !== characterId) {
+          for (const effect of result.statusEffects) {
+            if (!this.shouldApplyDebuff(effect, firstTargetId, characterId)) continue;
+            if (this.hasActiveDebuff(firstTargetId, effect.type, effect.skillName)) continue;
+            const cloned = { ...effect, targetId: firstTargetId };
+            playerTarget.statusEffects.push(cloned);
+          }
+          this.playerSys.recalcStats(playerTarget);
+          this.sendToPlayer(firstTargetId, {
+            type: PacketType.STATUS_EFFECT_UPDATE,
+            timestamp: Date.now(),
+            data: { effects: playerTarget.statusEffects }
+          });
+          this.sendToPlayer(firstTargetId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: firstTargetId, stats: playerTarget.stats }
+          });
+          this.broadcastEntityEffects(playerTarget);
         }
       }
     }
@@ -1231,10 +1270,27 @@ export class NetworkServer {
     return defense;
   }
 
-  private shouldApplyDebuff(effect: StatusEffect, targetId: string): boolean {
+  private shouldApplyDebuff(effect: StatusEffect, targetId: string, casterId?: string): boolean {
     if (!effect.debuffCategory) return true;
+    const casterSession = casterId ? this.state.players.get(casterId) : null;
+    let accuracy = 65;
+    if (casterSession) {
+      const baseStats = casterSession.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+      const totalSPI = (casterSession.statPoints.SPI || 0) + baseStats.SPI;
+      const subCategory = effect.skillName ? this.skillSys.getSubCategoryForSkill(effect.skillName) : null;
+      const prof = subCategory ? (casterSession.skillAdeptness[subCategory] || 0) : 0;
+      accuracy = computeDebuffAccuracy(totalSPI, prof, effect.debuffCategory);
+    }
     const resistPercent = this.getDebuffResist(targetId, effect.debuffCategory);
-    return rollAgainstResist(resistPercent);
+    const { applied, roll } = rollDebuffApplication(accuracy, resistPercent);
+    if (casterId) {
+      this.sendToPlayer(casterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'Debug', message: `Debuff: ${accuracy.toFixed(0)}% acc - ${resistPercent.toFixed(0)}% ${effect.debuffCategory} resist = ${Math.max(0, accuracy - resistPercent).toFixed(0)}% final (roll ${roll.toFixed(0)}) → ${applied ? 'applied' : 'resisted'}`, channel: 'system' }
+      });
+    }
+    return applied;
   }
 
   private getDebuffResist(targetId: string, category: 'ailment' | 'disorder'): number {
@@ -1256,6 +1312,18 @@ export class NetworkServer {
       return category === 'ailment' ? (enemy as any).ailmentResist || 0 : (enemy as any).disorderResist || 0;
     }
     return 0;
+  }
+
+  private hasActiveDebuff(targetId: string, effectType: StatusEffectType, skillName?: string): boolean {
+    const player = this.state.players.get(targetId);
+    if (player) {
+      return player.statusEffects.some(e => e.type === effectType && (!skillName || e.skillName === skillName) && e.duration > 0);
+    }
+    const enemy = this.spawnMgr.getEnemy(targetId);
+    if (enemy) {
+      return enemy.statusEffects.some(e => e.type === effectType && (!skillName || e.skillName === skillName) && e.duration > 0);
+    }
+    return false;
   }
 
   private damageEnemy(enemy: EnemyInstance, damage: number): { died: boolean; actualDamage: number } {
@@ -2788,7 +2856,8 @@ export class NetworkServer {
           const debuffTarget = this.state.players.get(castResult.targetId);
           if (debuffTarget) {
             for (const effect of result.statusEffects) {
-              if (!this.shouldApplyDebuff(effect, castResult.targetId)) continue;
+              if (!this.shouldApplyDebuff(effect, castResult.targetId, session.characterId)) continue;
+              if (this.hasActiveDebuff(castResult.targetId, effect.type, effect.skillName)) continue;
               effect.targetId = castResult.targetId;
               debuffTarget.statusEffects.push(effect);
             }
@@ -2807,11 +2876,12 @@ export class NetworkServer {
           } else {
             const debuffEnemy = this.spawnMgr.getEnemy(castResult.targetId);
             if (debuffEnemy && debuffEnemy.state !== 'dead') {
-              for (const effect of result.statusEffects) {
-                if (!this.shouldApplyDebuff(effect, castResult.targetId)) continue;
-                effect.targetId = castResult.targetId;
-                debuffEnemy.statusEffects.push(effect);
-              }
+               for (const effect of result.statusEffects) {
+                 if (!this.shouldApplyDebuff(effect, castResult.targetId, session.characterId)) continue;
+                 if (this.hasActiveDebuff(castResult.targetId, effect.type, effect.skillName)) continue;
+                 effect.targetId = castResult.targetId;
+                 debuffEnemy.statusEffects.push(effect);
+               }
               this.broadcastInZone(session.zoneId, {
                 type: PacketType.ENTITY_STATUS_EFFECTS,
                 timestamp: Date.now(),
@@ -3667,7 +3737,8 @@ export class NetworkServer {
         const enemy = this.spawnMgr.getEnemy(target.id);
         if (enemy && enemy.state !== 'dead') {
           for (const effect of result.statusEffects) {
-            if (!this.shouldApplyDebuff(effect, target.id)) continue;
+            if (!this.shouldApplyDebuff(effect, target.id, session.characterId)) continue;
+            if (this.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
             const cloned = { ...effect, targetId: target.id };
             enemy.statusEffects.push(cloned);
           }
@@ -3796,7 +3867,8 @@ export class NetworkServer {
         const enemy = this.spawnMgr.getEnemy(target.id);
         if (enemy && enemy.state !== 'dead') {
           for (const effect of result.statusEffects) {
-            if (!this.shouldApplyDebuff(effect, target.id)) continue;
+            if (!this.shouldApplyDebuff(effect, target.id, session.characterId)) continue;
+            if (this.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
             const cloned = { ...effect, targetId: target.id };
             enemy.statusEffects.push(cloned);
           }

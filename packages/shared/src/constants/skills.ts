@@ -2213,6 +2213,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Reduce target's attack",
             isDebuff: true,
             debuffEffectTable: {
+              debuffCategory: 'disorder',
               attackDown: 0.15,
             },
           },
@@ -2246,6 +2247,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Reduce target's defense",
             isDebuff: true,
             debuffEffectTable: {
+              debuffCategory: 'disorder',
               defenseDown: 0.15,
             },
           },
