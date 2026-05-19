@@ -1,6 +1,7 @@
 export type DebuffDOTType = 'poison' | 'severe_poison' | 'bleed' | 'mp_drain';
 
 export interface DebuffEffectTable {
+  debuffCategory?: 'ailment' | 'disorder';
   dot?: DebuffDOTType;
   dotPotency?: number;
   dotHPPercent?: number;

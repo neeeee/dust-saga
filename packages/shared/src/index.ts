@@ -36,3 +36,4 @@ export * from './utils/math';
 export * from './utils/validator';
 export * from './utils/racialPassives';
 export * from './utils/elementalDamage';
+export * from './utils/statusResistance';

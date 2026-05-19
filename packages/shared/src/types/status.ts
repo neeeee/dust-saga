@@ -95,6 +95,7 @@ export interface StatusEffect {
   dotMpDrain?: number;
   dotHPPercent?: number;
   consumable?: boolean;
+  debuffCategory?: 'ailment' | 'disorder';
 }
 
 export interface StatusEffectDefinition {
@@ -285,6 +286,8 @@ export interface StatBonusBreakdown {
     poisonResist: number;
     darkResist: number;
     holyResist: number;
+    ailmentResist: number;
+    disorderResist: number;
   };
 }
 
@@ -292,7 +295,7 @@ export function computeStatBreakdown(
   statPoints: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number },
   statusEffects: StatusEffect[],
   gearBonuses: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number },
-  gearCombat?: { accuracy: number; dodge: number; attackSpeed: number; fireResist: number; iceResist: number; lightningResist: number; poisonResist: number; darkResist: number; holyResist: number }
+  gearCombat?: { accuracy: number; dodge: number; attackSpeed: number; fireResist: number; iceResist: number; lightningResist: number; poisonResist: number; darkResist: number; holyResist: number; ailmentResist: number; disorderResist: number }
 ): StatBonusBreakdown {
   const buffs = { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
 

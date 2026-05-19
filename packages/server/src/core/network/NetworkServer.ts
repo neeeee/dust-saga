@@ -10,8 +10,9 @@ import {
   REGEN_CONFIG, SKILL_TARGET_RULES, SkillTargetType,
   PartyVisibility, LootRule, MAX_LOOT_POOL,
   GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
-  StatusEffectType, EnemyInstance,
+  StatusEffectType, StatusEffect, EnemyInstance,
   getEffectiveStats,
+  computeAilmentResist, computeDisorderResist, rollAgainstResist,
   NATION_ZONE_MAP,
   ZoneType,
 } from '@dust-saga/shared';
@@ -1139,6 +1140,7 @@ export class NetworkServer {
         const enemy = this.spawnMgr.getEnemy(target.id);
         if (enemy && enemy.state !== 'dead') {
           for (const effect of result.statusEffects) {
+            if (!this.shouldApplyDebuff(effect, target.id)) continue;
             const cloned = { ...effect, targetId: target.id };
             enemy.statusEffects.push(cloned);
           }
@@ -1151,6 +1153,7 @@ export class NetworkServer {
           const playerTarget = this.state.players.get(target.id);
           if (playerTarget && target.id !== characterId) {
             for (const effect of result.statusEffects) {
+              if (!this.shouldApplyDebuff(effect, target.id)) continue;
               const cloned = { ...effect, targetId: target.id };
               playerTarget.statusEffects.push(cloned);
             }
@@ -1226,6 +1229,33 @@ export class NetworkServer {
       }
     }
     return defense;
+  }
+
+  private shouldApplyDebuff(effect: StatusEffect, targetId: string): boolean {
+    if (!effect.debuffCategory) return true;
+    const resistPercent = this.getDebuffResist(targetId, effect.debuffCategory);
+    return rollAgainstResist(resistPercent);
+  }
+
+  private getDebuffResist(targetId: string, category: 'ailment' | 'disorder'): number {
+    const player = this.state.players.get(targetId);
+    if (player) {
+      const baseStats = player.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+      const totalSTA = (player.statPoints.STA || 0) + baseStats.STA;
+      const totalSPI = (player.statPoints.SPI || 0) + baseStats.SPI;
+      if (category === 'ailment') {
+        const gearBonus = player.statBreakdown?.gearCombat?.ailmentResist || 0;
+        return computeAilmentResist(totalSTA, gearBonus);
+      } else {
+        const gearBonus = player.statBreakdown?.gearCombat?.disorderResist || 0;
+        return computeDisorderResist(totalSPI, gearBonus);
+      }
+    }
+    const enemy = this.spawnMgr.getEnemy(targetId);
+    if (enemy) {
+      return category === 'ailment' ? (enemy as any).ailmentResist || 0 : (enemy as any).disorderResist || 0;
+    }
+    return 0;
   }
 
   private damageEnemy(enemy: EnemyInstance, damage: number): { died: boolean; actualDamage: number } {
@@ -2758,6 +2788,7 @@ export class NetworkServer {
           const debuffTarget = this.state.players.get(castResult.targetId);
           if (debuffTarget) {
             for (const effect of result.statusEffects) {
+              if (!this.shouldApplyDebuff(effect, castResult.targetId)) continue;
               effect.targetId = castResult.targetId;
               debuffTarget.statusEffects.push(effect);
             }
@@ -2777,6 +2808,7 @@ export class NetworkServer {
             const debuffEnemy = this.spawnMgr.getEnemy(castResult.targetId);
             if (debuffEnemy && debuffEnemy.state !== 'dead') {
               for (const effect of result.statusEffects) {
+                if (!this.shouldApplyDebuff(effect, castResult.targetId)) continue;
                 effect.targetId = castResult.targetId;
                 debuffEnemy.statusEffects.push(effect);
               }
@@ -3635,6 +3667,7 @@ export class NetworkServer {
         const enemy = this.spawnMgr.getEnemy(target.id);
         if (enemy && enemy.state !== 'dead') {
           for (const effect of result.statusEffects) {
+            if (!this.shouldApplyDebuff(effect, target.id)) continue;
             const cloned = { ...effect, targetId: target.id };
             enemy.statusEffects.push(cloned);
           }
@@ -3763,6 +3796,7 @@ export class NetworkServer {
         const enemy = this.spawnMgr.getEnemy(target.id);
         if (enemy && enemy.state !== 'dead') {
           for (const effect of result.statusEffects) {
+            if (!this.shouldApplyDebuff(effect, target.id)) continue;
             const cloned = { ...effect, targetId: target.id };
             enemy.statusEffects.push(cloned);
           }

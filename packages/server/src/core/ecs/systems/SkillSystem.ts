@@ -570,6 +570,7 @@ export class SkillSystem {
     const effects: StatusEffect[] = [];
     const now = Date.now();
     const duration = (skill.debuffDuration || skill.duration || 30) * 1000;
+    const category = dt.debuffCategory;
 
     const addEffect = (type: StatusEffectType, potency: number, extra?: Partial<StatusEffect>) => {
       const def = STATUS_EFFECT_DEFS[type];
@@ -586,6 +587,7 @@ export class SkillSystem {
           lastTickAt: now,
           stacks: 1,
           skillName: skill.name,
+          debuffCategory: category,
           ...extra,
         });
       }

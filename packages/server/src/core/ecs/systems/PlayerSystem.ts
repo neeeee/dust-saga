@@ -26,7 +26,7 @@ export class PlayerSystem extends System {
   private levelUpCallbacks: Array<(playerId: string, newLevel: number) => void> = [];
 
   private getGearBonuses(session: PlayerSession) {
-    const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0, accuracy: 0, dodge: 0, attackSpeed: 0, fireResist: 0, iceResist: 0, lightningResist: 0, poisonResist: 0, darkResist: 0, holyResist: 0, magicAttackPercent: 0 };
+    const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0, accuracy: 0, dodge: 0, attackSpeed: 0, fireResist: 0, iceResist: 0, lightningResist: 0, poisonResist: 0, darkResist: 0, holyResist: 0, magicAttackPercent: 0, ailmentResist: 0, disorderResist: 0 };
     for (const slot of Object.values(session.equipment)) {
       if (!slot) continue;
       const def = ITEM_DATABASE[slot.itemId];
@@ -53,6 +53,8 @@ export class PlayerSystem extends System {
       if (s.darkResist) bonuses.darkResist += s.darkResist;
       if (s.holyResist) bonuses.holyResist += s.holyResist;
       if (s.magicAttack) bonuses.magicAttackPercent += s.magicAttack;
+      if (s.ailmentResist) bonuses.ailmentResist += s.ailmentResist;
+      if (s.disorderResist) bonuses.disorderResist += s.disorderResist;
     }
     return bonuses;
   }
@@ -263,8 +265,8 @@ export class PlayerSystem extends System {
     session.stats.health = Math.floor(effective.maxHealth * healthRatio);
     session.stats.mana = Math.floor(effective.maxMana * manaRatio);
 
-    const { STA, STR, AGI, DEX, SPI, INT, accuracy, dodge, attackSpeed, fireResist, iceResist, lightningResist, poisonResist, darkResist, holyResist, ...flatGear } = gear;
-    session.statBreakdown = computeStatBreakdown(session.statPoints, session.statusEffects || [], { STA, STR, AGI, DEX, SPI, INT }, { accuracy, dodge, attackSpeed, fireResist, iceResist, lightningResist, poisonResist, darkResist, holyResist });
+    const { STA, STR, AGI, DEX, SPI, INT, accuracy, dodge, attackSpeed, fireResist, iceResist, lightningResist, poisonResist, darkResist, holyResist, ailmentResist, disorderResist, ...flatGear } = gear;
+    session.statBreakdown = computeStatBreakdown(session.statPoints, session.statusEffects || [], { STA, STR, AGI, DEX, SPI, INT }, { accuracy, dodge, attackSpeed, fireResist, iceResist, lightningResist, poisonResist, darkResist, holyResist, ailmentResist, disorderResist });
   }
 
   healPlayer(session: PlayerSession): void {

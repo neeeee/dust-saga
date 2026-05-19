@@ -48,6 +48,8 @@ export interface ItemStats {
   poisonResist?: number;
   darkResist?: number;
   holyResist?: number;
+  ailmentResist?: number;
+  disorderResist?: number;
   weaponElement?: 'fire' | 'ice' | 'lightning' | 'holy' | 'dark' | 'poison';
   weaponElementPower?: number;
 }
