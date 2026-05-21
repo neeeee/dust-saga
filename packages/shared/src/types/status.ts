@@ -99,6 +99,7 @@ export interface StatusEffect {
   dotHPPercent?: number;
   consumable?: boolean;
   debuffCategory?: 'ailment' | 'disorder';
+  exclusiveGroup?: string;
 }
 
 export interface StatusEffectDefinition {

@@ -13,6 +13,7 @@ import {
   StatusEffectType, StatusEffect, EnemyInstance,
   getEffectiveStats,
   computeAilmentResist, computeDisorderResist, computeDebuffAccuracy, rollDebuffApplication,
+  calculateWeaponElementalDamage,
   NATION_ZONE_MAP,
   ZoneType,
 } from '@dust-saga/shared';
@@ -947,6 +948,11 @@ export class NetworkServer {
 
       const enemy = this.spawnMgr.getEnemy(data.targetId);
       if (enemy) {
+        if (damageInfo.elementalDamage) {
+          for (const el of damageInfo.elementalDamage) {
+            this.damageEnemy(enemy, el.damage);
+          }
+        }
         this.broadcastInZone(session.zoneId, {
           type: PacketType.STATS_UPDATE,
           timestamp: Date.now(),
@@ -1095,14 +1101,14 @@ export class NetworkServer {
     this.sendDamageDebug(session, result);
     this.playerSys.recalcStats(session);
 
+    this.sendToPlayer(characterId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+    });
 
     if (this.skillSys.lastProficiencyGain) {
       const pg = this.skillSys.lastProficiencyGain;
-      this.sendToPlayer(characterId, {
-        type: PacketType.STATS_UPDATE,
-        timestamp: Date.now(),
-        data: { characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
-      });
       this.sendToPlayer(characterId, {
         type: PacketType.CHAT_MESSAGE,
         timestamp: Date.now(),
@@ -1559,7 +1565,7 @@ export class NetworkServer {
           this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: 'Invalid value.', channel: 'system' } });
           return;
         }
-        const statKey: Record<string, string> = { defense: 'defense', level: 'level', maxhealth: 'maxHealth', health: 'health', fireresist: 'fireResist', iceresist: 'iceResist', lightningresist: 'lightningResist', darkresist: 'darkResist', holyresist: 'holyResist', poisonresist: 'poisonResist', magicresist: 'magicResist' };
+        const statKey: Record<string, string> = { defense: 'defense', level: 'level', maxhealth: 'maxHealth', health: 'health', fireresist: 'fireResist', iceresist: 'iceResist', lightningresist: 'lightningResist', darkresist: 'darkResist', holyresist: 'holyResist', poisonresist: 'poisonResist', ailmentresist: 'ailmentResist', disorderresist: 'disorderResist', magicresist: 'magicResist' };
         const resolvedStat = statKey[stat] || null;
         if (!resolvedStat) {
           this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: `Unknown stat "${stat}". Valid: defense, level, maxHealth, health, fireResist, iceResist, lightningResist, darkResist, holyResist, magicResist`, channel: 'system' } });
@@ -1583,10 +1589,12 @@ export class NetworkServer {
             case 'darkResist': def.darkResist = value; break;
             case 'holyResist': def.holyResist = value; break;
             case 'poisonResist': def.poisonResist = value; break;
+            case 'ailmentResist': (enemy as any).ailmentResist = value; break;
+            case 'disorderResist': (enemy as any).disorderResist = value; break;
             case 'magicResist':
               def.fireResist = value; def.iceResist = value; def.lightningResist = value;
               def.darkResist = value; def.holyResist = value; def.poisonResist = value; break;
-            default:           this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: `Unknown stat "${stat}". Valid: defense, level, maxHealth, health, fireResist, iceResist, lightningResist, darkResist, holyResist, poisonResist, magicResist`, channel: 'system' } }); return;
+            default:           this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: `Unknown stat "${stat}". Valid: defense, level, maxHealth, health, fireResist, iceResist, lightningResist, darkResist, holyResist, poisonResist, ailmentResist, disorderResist, magicResist`, channel: 'system' } }); return;
           }
           this.broadcastInZone(session.zoneId, { type: PacketType.STATS_UPDATE, timestamp: Date.now(), data: { entityId: enemyId, health: enemy.health, maxHealth: enemy.maxHealth } });
         }
@@ -1596,7 +1604,7 @@ export class NetworkServer {
           this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: 'No striking dummy in this zone.', channel: 'system' } });
         }
       } else {
-        this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: 'Usage: /dummy set <stat> <value>  —  Stats: defense, level, maxHealth, health', channel: 'system' } });
+        this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'System', message: 'Usage: /dummy set <stat> <value>  —  Stats: defense, level, maxHealth, health, fireResist, iceResist, lightningResist, darkResist, holyResist, poisonResist, ailmentResist, disorderResist, magicResist', channel: 'system' } });
       }
     } else if (cmd === '/resetskills') {
       const categoryKeys = new Set(['melee', 'technique', 'prayer', 'magic', 'special']);
@@ -2534,13 +2542,14 @@ export class NetworkServer {
         this.sendDamageDebug(session, result);
         this.playerSys.recalcStats(session);
 
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+        });
+
         if (this.skillSys.lastProficiencyGain) {
           const pg = this.skillSys.lastProficiencyGain;
-          this.sendToPlayer(session.characterId, {
-            type: PacketType.STATS_UPDATE,
-            timestamp: Date.now(),
-            data: { characterId: session.characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
-          });
           this.sendToPlayer(session.characterId, {
             type: PacketType.CHAT_MESSAGE,
             timestamp: Date.now(),
@@ -2614,7 +2623,7 @@ export class NetworkServer {
                 this.sendToPlayer(session.characterId, {
                   type: PacketType.STATS_UPDATE,
                   timestamp: Date.now(),
-                  data: { characterId: session.characterId, stats: session.stats }
+            data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown }
                 });
               }
 
@@ -2918,7 +2927,7 @@ export class NetworkServer {
           this.sendToPlayer(session.characterId, {
             type: PacketType.STATS_UPDATE,
             timestamp: Date.now(),
-            data: { characterId: session.characterId, stats: session.stats }
+            data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown }
           });
           this.sendToPlayer(session.characterId, {
             type: PacketType.STATUS_EFFECT_UPDATE,
@@ -3683,13 +3692,14 @@ export class NetworkServer {
     this.sendDamageDebug(session, result);
     this.playerSys.recalcStats(session);
 
+    this.sendToPlayer(characterId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+    });
+
     if (this.skillSys.lastProficiencyGain) {
       const pg = this.skillSys.lastProficiencyGain;
-      this.sendToPlayer(characterId, {
-        type: PacketType.STATS_UPDATE,
-        timestamp: Date.now(),
-        data: { characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
-      });
       this.sendToPlayer(characterId, {
         type: PacketType.CHAT_MESSAGE,
         timestamp: Date.now(),
@@ -3714,7 +3724,7 @@ export class NetworkServer {
     this.sendToPlayer(characterId, {
       type: PacketType.STATS_UPDATE,
       timestamp: Date.now(),
-      data: { characterId, stats: session.stats }
+      data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown }
     });
 
     if (session.statusEffects.length > 0) {
@@ -3813,13 +3823,14 @@ export class NetworkServer {
     this.sendDamageDebug(session, result);
     this.playerSys.recalcStats(session);
 
+    this.sendToPlayer(characterId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+    });
+
     if (this.skillSys.lastProficiencyGain) {
       const pg = this.skillSys.lastProficiencyGain;
-      this.sendToPlayer(characterId, {
-        type: PacketType.STATS_UPDATE,
-        timestamp: Date.now(),
-        data: { characterId, stats: session.stats, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
-      });
       this.sendToPlayer(characterId, {
         type: PacketType.CHAT_MESSAGE,
         timestamp: Date.now(),
@@ -3844,7 +3855,7 @@ export class NetworkServer {
     this.sendToPlayer(characterId, {
       type: PacketType.STATS_UPDATE,
       timestamp: Date.now(),
-      data: { characterId, stats: session.stats }
+      data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown }
     });
 
     if (session.statusEffects.length > 0) {

@@ -1759,7 +1759,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Reduce fire damage taken, increase ice and lightning damage taken",
             basePower: 0,
             buffEffectTable: {
-              resistMods: { fire: 25, ice: -50, lightning: -50 },
+              resistMods: { fire: 50, ice: -25, lightning: -25 },
             },
           },
           "Resist Ice": {
@@ -1772,7 +1772,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Reduce ice damage taken, increase fire and lightning damage taken",
             basePower: 0,
             buffEffectTable: {
-              resistMods: { ice: 25, fire: -50, lightning: -50 },
+              resistMods: { ice: 50, fire: -25, lightning: -25 },
             },
           },
           "Resist Lightning": {
@@ -1785,7 +1785,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Reduce lightning damage taken, increase fire and ice damage taken",
             basePower: 0,
             buffEffectTable: {
-              resistMods: { lightning: 25, fire: -50, ice: -50 },
+              resistMods: { lightning: 50, fire: -25, ice: -25 },
             },
           },
           "Ice Storm": {

@@ -745,7 +745,7 @@ export class SkillSystem {
     const bt = skill.buffEffectTable;
 
     const effects: StatusEffect[] = [];
-    const pushEffect = (type: StatusEffectType, potency: number, buffData?: BuffData) => {
+    const pushEffect = (type: StatusEffectType, potency: number, buffData?: BuffData, extra?: Partial<StatusEffect>) => {
       target.statusEffects = target.statusEffects.filter(e => !(e.skillName === skill.name && e.type === type));
       effects.push({
         id: `buff_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_${type}`,
@@ -760,6 +760,7 @@ export class SkillSystem {
         stacks: 1,
         skillName: skill.name,
         buffData,
+        ...extra,
       });
     };
 
@@ -875,7 +876,8 @@ export class SkillSystem {
     }
 
     if (bt.resistMods) {
-      pushEffect(StatusEffectType.BUFF_RESIST, 0, { resistMods: bt.resistMods });
+      target.statusEffects = target.statusEffects.filter(e => e.exclusiveGroup !== 'resist_element');
+      pushEffect(StatusEffectType.BUFF_RESIST, 0, { resistMods: bt.resistMods }, { exclusiveGroup: 'resist_element' });
     }
 
     if (bt.spiValues) {

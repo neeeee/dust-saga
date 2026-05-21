@@ -162,13 +162,13 @@ export function calculateProficiencyGain(
     gain *= PROFICIENCY_CONFIG.INSTANT_CAST_MULTIPLIER;
   }
 
-  gain = Math.round(gain * 100) / 100;
-  const newAdeptness = Math.min(currentAdeptness + gain, maxProficiency);
+  gain = Math.round(gain * 10) / 10;
+  const newAdeptness = Math.round(Math.min(currentAdeptness + gain, maxProficiency) * 10) / 10;
 
   return {
     gained: true,
     subCategory: '',
-    amount: Math.round((newAdeptness - currentAdeptness) * 100) / 100,
+    amount: Math.round((newAdeptness - currentAdeptness) * 10) / 10,
     newAdeptness,
     cap: maxProficiency,
   };
