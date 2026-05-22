@@ -1,23 +1,28 @@
 <template>
-  <div class="dialog-overlay" v-if="visible" @click.self="$emit('close')">
-    <div class="dialog-box">
+  <div v-if="visible" class="dialog-wrapper" @click="handleClick">
+    <div
+      class="dialog-float"
+      :style="floatStyle"
+      @click.stop
+    >
       <div class="npc-name">{{ npcName }}</div>
       <div class="dialog-text">{{ dialog?.text }}</div>
-      <div class="dialog-options">
+      <div v-if="dialog?.options?.length" class="dialog-options">
         <button
-          v-for="(opt, i) in dialog?.options || []"
+          v-for="(opt, i) in dialog.options"
           :key="i"
           class="dialog-option"
-          @click="handleOption(opt)"
+          @click.stop="handleOption(opt)"
         >
           {{ opt.text }}
         </button>
       </div>
+      <div v-else class="dialog-hint">Click anywhere to continue</div>
 
       <div v-if="shopItems && shopItems.length > 0" class="shop-section">
         <h4>Shop</h4>
         <div class="shop-items">
-          <div v-for="item in shopItems" :key="item.id" class="shop-item" @click="$emit('buy', item.id)">
+          <div v-for="item in shopItems" :key="item.id" class="shop-item" @click.stop="$emit('buy', item.id)">
             <span class="item-name">{{ item.name }}</span>
             <span class="item-price">{{ item.sellPrice }}g</span>
             <span class="item-stats">{{ formatStats(item.stats) }}</span>
@@ -31,7 +36,7 @@
           v-for="q in availableQuests"
           :key="q"
           class="quest-offer-btn"
-          @click="$emit('accept-quest', q)"
+          @click.stop="$emit('accept-quest', q)"
         >
           {{ getQuestTitle(q) }}
         </button>
@@ -41,14 +46,16 @@
 </template>
 
 <script setup lang="ts">
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { QUEST_DATABASE } from '@dust-saga/shared';
 
-defineProps<{
+const props = defineProps<{
   visible: boolean;
   npcName: string;
   dialog: any;
   shopItems: any[];
   availableQuests: string[];
+  npcScreenPos: { x: number; y: number } | null;
 }>();
 
 const emit = defineEmits<{
@@ -56,7 +63,31 @@ const emit = defineEmits<{
   'select-option': [option: any];
   'buy': [itemId: string];
   'accept-quest': [questId: string];
+  'progress': [];
 }>();
+
+const panelWidth = 380;
+const panelHeight = 200;
+
+const floatStyle = computed(() => {
+  if (!props.npcScreenPos) return { display: 'none' };
+
+  let x = props.npcScreenPos.x - panelWidth / 2;
+  let y = props.npcScreenPos.y - panelHeight - 10;
+
+  x = Math.max(8, Math.min(x, window.innerWidth - panelWidth - 8));
+  y = Math.max(8, y);
+
+  return {
+    left: `${x}px`,
+    top: `${y}px`,
+  };
+});
+
+function handleClick() {
+  if (props.dialog?.options?.length) return;
+  emit('progress');
+}
 
 function handleOption(opt: any) {
   if (opt.action === 'close') {
@@ -79,65 +110,80 @@ function formatStats(stats: any): string {
   if (stats.mana) parts.push(`+${stats.mana} MP`);
   return parts.join(' ');
 }
+
+function handleKeyDown(e: KeyboardEvent) {
+  if (!props.visible) return;
+  if (e.code === 'Escape') {
+    e.preventDefault();
+    emit('close');
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown);
+});
 </script>
 
 <style scoped>
-.dialog-overlay {
-  position: absolute;
+.dialog-wrapper {
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  justify-content: center;
-  align-items: center;
   z-index: 60;
+  cursor: pointer;
 }
 
-.dialog-box {
+.dialog-float {
+  position: fixed;
   background: rgba(15, 15, 30, 0.97);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 10px;
-  padding: 20px;
-  width: 450px;
-  max-height: 80vh;
-  overflow-y: auto;
+  padding: 16px 18px;
+  width: 380px;
   color: white;
+  cursor: default;
+  pointer-events: auto;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 
 .npc-name {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: bold;
   color: #ffd700;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .dialog-text {
   background: rgba(255, 255, 255, 0.05);
-  padding: 12px;
+  padding: 10px 12px;
   border-radius: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   line-height: 1.5;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 
 .dialog-options {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 5px;
+  margin-bottom: 8px;
 }
 
 .dialog-option {
   text-align: left;
-  padding: 8px 12px;
+  padding: 7px 12px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   color: #ddd;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
 }
 
 .dialog-option:hover {
@@ -145,33 +191,40 @@ function formatStats(stats: any): string {
   border-color: #667eea;
 }
 
+.dialog-hint {
+  text-align: center;
+  color: #666;
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
 .shop-section, .quest-offers {
-  margin-top: 12px;
+  margin-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding-top: 12px;
+  padding-top: 10px;
 }
 
 .shop-section h4, .quest-offers h4 {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   color: #888;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
 }
 
 .shop-items {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .shop-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 10px;
+  padding: 5px 8px;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
 }
 
 .shop-item:hover {
@@ -188,21 +241,21 @@ function formatStats(stats: any): string {
 
 .shop-item .item-stats {
   color: #888;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
 }
 
 .quest-offer-btn {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 8px 12px;
+  padding: 7px 12px;
   background: rgba(76, 175, 80, 0.15);
   border: 1px solid rgba(76, 175, 80, 0.3);
   border-radius: 6px;
   color: #4CAF50;
   cursor: pointer;
-  font-size: 0.85rem;
-  margin-bottom: 4px;
+  font-size: 0.82rem;
+  margin-bottom: 3px;
 }
 
 .quest-offer-btn:hover {

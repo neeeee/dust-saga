@@ -72,6 +72,8 @@ export interface InventoryItem {
   itemId: string;
   quantity: number;
   slot: number;
+  enhancementLevel?: number;
+  enhancementElement?: 'fire' | 'ice' | 'lightning' | 'holy' | 'dark' | 'poison';
 }
 
 export interface Equipment {

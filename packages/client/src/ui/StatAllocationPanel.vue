@@ -261,8 +261,8 @@ const currentDerived = computed(() => {
       maxMana: props.stats.maxMana,
       attack: props.stats.attack,
       defense: props.stats.defense,
-      speed: props.stats.speed,
       magicAttack: props.stats.magicAttack,
+      critChance: props.stats.critChance,
     };
   }
   return calculateDerivedStats(props.race as Race, props.jobId as JobId, 1, props.statPoints || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 });
@@ -281,7 +281,7 @@ const derivedList = computed(() => [
   { label: 'MP', current: currentDerived.value.maxMana, preview: previewDerived.value.maxMana },
   { label: 'ATK', current: currentDerived.value.attack, preview: previewDerived.value.attack },
   { label: 'DEF', current: currentDerived.value.defense, preview: previewDerived.value.defense },
-  { label: 'SPD', current: currentDerived.value.speed, preview: previewDerived.value.speed },
+  { label: 'CRIT', current: currentDerived.value.critChance + '%', preview: previewDerived.value.critChance + '%' },
   { label: 'MATK', current: currentDerived.value.magicAttack, preview: previewDerived.value.magicAttack },
 ]);
 
@@ -313,8 +313,8 @@ const racialPassive = computed(() => {
 const combatStats = computed(() => {
   const gc = props.statBreakdown?.gearCombat;
   return {
-    accuracy: gc?.accuracy || 0,
-    dodge: gc?.dodge || 0,
+    accuracy: props.statBreakdown?.totalAccuracy ?? gc?.accuracy ?? 0,
+    dodge: props.statBreakdown?.totalDodge ?? gc?.dodge ?? 0,
     attackSpeed: gc?.attackSpeed || 0,
   };
 });

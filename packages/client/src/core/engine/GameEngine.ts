@@ -521,11 +521,11 @@ export class GameEngine {
     this.assetManager.updateHealthBar(entityId, current, max, group.healthBarBg, group.healthBarFg);
   }
 
-  showDamageNumber(entityId: string, damage: number, isCritical: boolean, element?: string): void {
+  showDamageNumber(entityId: string, damage: number, isCritical: boolean, element?: string, miss?: boolean): void {
     const group = this.meshes.get(entityId);
     if (!group?.root || !this.assetManager) return;
 
-    this.assetManager.createDamageNumber(damage, group.root.position, isCritical, element);
+    this.assetManager.createDamageNumber(damage, group.root.position, isCritical, element, miss);
   }
 
   createLootBeacon(position: V3): void {
@@ -656,6 +656,30 @@ export class GameEngine {
 
   getScene(): Scene | null {
     return this.scene;
+  }
+
+  getScreenPosition(worldPos: V3): { x: number; y: number } | null {
+    if (!this.scene || !this.camera || !this.engine) return null;
+
+    const viewportWidth = this.engine.getRenderWidth();
+    const viewportHeight = this.engine.getRenderHeight();
+
+    const projected = V3.Project(
+      worldPos,
+      this.camera.getViewMatrix(),
+      this.scene.getTransformMatrix(),
+      this.camera.viewport.toGlobal(viewportWidth, viewportHeight)
+    );
+
+    if (projected.z < 0 || projected.z > 1) return null;
+
+    const canvasRect = this.canvas?.getBoundingClientRect();
+    if (!canvasRect) return null;
+
+    return {
+      x: canvasRect.left + projected.x,
+      y: canvasRect.top + projected.y
+    };
   }
 
   getEngine(): Engine | null {

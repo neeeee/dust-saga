@@ -17,6 +17,7 @@ export interface DebuffEffectTable {
   castSpeedDown?: number;
   damageTakenUp?: number;
   moveSpeedDown?: number;
+  dodgeDown?: number;
   hasFreeze?: { duration: number };
   hasSleep?: { duration: number };
   hasStun?: { duration: number };

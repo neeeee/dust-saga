@@ -1,5 +1,5 @@
 import { EntityManager, System } from '../EntityManager';
-import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats, calculateWeaponElementalDamage } from '@dust-saga/shared';
+import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats, calculateWeaponElementalDamage, calculateAccuracy, calculateHitChance } from '@dust-saga/shared';
 
 interface ConeTarget {
   id: string;
@@ -144,6 +144,29 @@ export class CombatSystem extends System {
     const effective = getEffectiveStats(attacker.stats, attacker.statPoints, attacker.statusEffects || []);
     const { damage, isCritical } = this.computePhysicalDamage(effective.attack, targetDefense, attacker.race);
 
+    const attackerBaseStats = attacker.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+    const attackerTotalDex = (attacker.statPoints.DEX || 0) + (attackerBaseStats.DEX || 0);
+    const attackerAcc = calculateAccuracy(attacker.stats.level, attackerTotalDex, effective.accuracyBonus);
+    let targetDodge = 0;
+    if (isEnemy && enemyRef) {
+      targetDodge = Math.floor(enemyRef.level * 0.5);
+    } else if (playerRef) {
+      targetDodge = playerRef.statBreakdown?.totalDodge ?? 0;
+    }
+    const hitChance = Math.min(0.99, Math.max(0.01, calculateHitChance(attackerAcc, targetDodge)));
+    if (Math.random() > hitChance) {
+      const missInfo: DamageInfo = {
+        attackerId: attacker.characterId,
+        targetId,
+        damage: 0,
+        isCritical: false,
+        damageType: 'physical',
+        missed: true,
+      };
+      this.damageCallbacks.forEach(cb => cb(missInfo));
+      return missInfo;
+    }
+
     if (effective.physicalDamageReduction > 0 && isEnemy && enemyRef) {
       // not applicable for player attacks
     }
@@ -225,6 +248,8 @@ export class CombatSystem extends System {
     const baseStats = attacker.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
     const totalSPI = (attacker.statPoints.SPI || 0) + (baseStats.SPI || 0);
     const totalINT = (attacker.statPoints.INT || 0) + (baseStats.INT || 0);
+    const attackerTotalDex = (attacker.statPoints.DEX || 0) + (baseStats.DEX || 0);
+    const attackerAcc = calculateAccuracy(attacker.stats.level, attackerTotalDex, effective.accuracyBonus);
 
     const results: DamageInfo[] = [];
 
@@ -233,6 +258,27 @@ export class CombatSystem extends System {
       const falloff = Math.pow(COMBAT_CONFIG.MANUAL_ATTACK_FALLOFF, i);
       const { damage: baseDamage, isCritical } = this.computePhysicalDamage(effective.attack, target.defense, attacker.race);
       const damage = Math.max(COMBAT_CONFIG.MIN_DAMAGE, Math.floor(baseDamage * falloff));
+
+      let targetDodge = 0;
+      if (target.isEnemy && target.enemyRef) {
+        targetDodge = Math.floor(target.enemyRef.level * 0.5);
+      } else if (target.playerRef) {
+        targetDodge = target.playerRef.statBreakdown?.totalDodge ?? 0;
+      }
+      const hitChance = Math.min(0.99, Math.max(0.01, calculateHitChance(attackerAcc, targetDodge)));
+      if (Math.random() > hitChance) {
+        const missInfo: DamageInfo = {
+          attackerId: attacker.characterId,
+          targetId: target.id,
+          damage: 0,
+          isCritical: false,
+          damageType: 'physical',
+          missed: true,
+        };
+        this.damageCallbacks.forEach(cb => cb(missInfo));
+        results.push(missInfo);
+        continue;
+      }
 
       const targetResists = this.getTargetResists(target.isEnemy, target.enemyRef, target.playerRef, players);
       const elementalDamage = calculateWeaponElementalDamage(
@@ -277,6 +323,20 @@ export class CombatSystem extends System {
     if (dist > attackRange) return null;
 
     enemy.lastAttackTime = now;
+
+    const targetDodge = target.statBreakdown?.totalDodge ?? 0;
+    const enemyAccuracy = enemy.level + 7;
+    const hitChance = Math.min(0.99, Math.max(0.01, calculateHitChance(enemyAccuracy, targetDodge)));
+    if (Math.random() > hitChance) {
+      return {
+        attackerId: enemy.id,
+        targetId: target.characterId,
+        damage: 0,
+        isCritical: false,
+        damageType: 'physical',
+        missed: true,
+      };
+    }
 
     const attackPower = def?.attack || 5;
     const isCritical = Math.random() < 0.05;

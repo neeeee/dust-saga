@@ -8,6 +8,9 @@ import {
   recalculateCategoryTotals, calculateProficiencyGain, ProficiencyGainResult,
   DebuffEffectTable,
   calculateWeaponElementalDamage,
+  calculateDodge,
+  calculateAccuracy as calcSharedAccuracy,
+  calculateHitChance,
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
 import { CLASS_SPECIFIC_SKILLS, getClassSpecificSkillsForJob } from '@dust-saga/shared';
@@ -642,6 +645,9 @@ export class SkillSystem {
     if (dt.accuracyDown) {
       addEffect(StatusEffectType.DEBUFF_ACCURACY_DOWN, dt.accuracyDown);
     }
+    if (dt.dodgeDown) {
+      addEffect(StatusEffectType.DEBUFF_DODGE_DOWN, dt.dodgeDown);
+    }
     if (dt.castSpeedDown) {
       addEffect(StatusEffectType.DEBUFF_CAST_SPEED_DOWN, dt.castSpeedDown);
     }
@@ -670,12 +676,12 @@ export class SkillSystem {
   }
 
   private calculateAccuracy(session: PlayerSession, target: TargetStats): number {
-    const base = 0.85;
-    const totalDex = (session.statPoints.DEX || 0) + (session.baseStats?.DEX || 0);
-    const dexBonus = totalDex * 0.003;
-    const levelBonus = (session.stats.level - target.level) * 0.015;
-    const dodgePenalty = target.dodge * 0.002;
-    return Math.min(0.99, Math.max(0.2, base + dexBonus + levelBonus - dodgePenalty));
+    if (target.dodge === 0) return 0.99;
+    const baseStats = session.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+    const totalDex = (session.statPoints.DEX || 0) + (baseStats.DEX || 0);
+    const attackerAccuracy = calcSharedAccuracy(session.stats.level, totalDex, 0);
+    const hitChance = calculateHitChance(attackerAccuracy, target.dodge);
+    return Math.min(0.99, Math.max(0.01, hitChance));
   }
 
   private calculateHealing(session: PlayerSession, skill: SkillDefinition): number {
@@ -894,7 +900,7 @@ export class SkillSystem {
           pushEffect(StatusEffectType.BUFF_DEFENSE, 0, { flatDefense: result.def });
           this.lastBuffDebug = `[Lapis Mediow] SPI=${totalSpi} (${casterSession?.baseStats?.SPI || 0} base + ${casterSession?.statPoints?.SPI || 0} alloc) Blessing=${casterBlessing}/${casterSession?.skillProficiencies?.['Blessing'] || 0} baseDef=${target.stats.defense} +${result.def} def`;
         }
-      } else if (skillName === 'green song') {
+      } else if (skillName === 'green song' || skillName === 'speedy gale') {
         const result = resolveGreenSongBuff(bt.spiValues, totalSpi, casterBlessing);
         if (result) {
           pushEffect(StatusEffectType.BUFF_DODGE, result.dodgeChance);

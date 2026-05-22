@@ -25,6 +25,7 @@ export class InputManager {
   private pointerLocked: boolean = false;
   private chatFocused: boolean = false;
   private skillBarHandler: SkillBarKeyHandler | null = null;
+  private dialogActive: boolean = false;
 
   constructor() {
     this.setupEventListeners();
@@ -32,6 +33,14 @@ export class InputManager {
 
   setChatFocused(focused: boolean): void {
     this.chatFocused = focused;
+  }
+
+  setDialogActive(active: boolean): void {
+    this.dialogActive = active;
+  }
+
+  isDialogActive(): boolean {
+    return this.dialogActive;
   }
 
   setSkillBarHandler(handler: SkillBarKeyHandler): void {
@@ -95,6 +104,18 @@ export class InputManager {
   }
 
   getInputState(): InputState {
+    if (this.dialogActive) {
+      return {
+        forward: false,
+        backward: false,
+        left: false,
+        right: false,
+        manualAttack: false,
+        sprint: false,
+        attack: false,
+        interact: false
+      };
+    }
     return {
       forward: this.keys.get('KeyW') || false,
       backward: this.keys.get('KeyS') || false,
@@ -108,6 +129,7 @@ export class InputManager {
   }
 
   getMovementVector(): Vector3 {
+    if (this.dialogActive) return new Vector3(0, 0, 0);
     const input = this.getInputState();
     const movement = new Vector3(0, 0, 0);
 

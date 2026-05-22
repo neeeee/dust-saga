@@ -100,10 +100,18 @@ export class GameClient {
     this.setupAOETargeting(canvas);
   }
 
+  private lastClickEntityId: string | null = null;
+  private lastClickTime: number = 0;
+
   private setupClickHandler(): void {
     this.engine.onClickEntity((entityId) => {
       if (this.aoeTargetingActive) return;
       const entity = this.knownEntities.get(entityId);
+      const now = Date.now();
+      const isDoubleClick = this.lastClickEntityId === entityId && (now - this.lastClickTime) < 400;
+      this.lastClickEntityId = entityId;
+      this.lastClickTime = now;
+
       if (entity?.type === 'enemy') {
         this.targetId = entityId;
         this.engine.setTargetIndicator(entityId);
@@ -113,6 +121,9 @@ export class GameClient {
         this.targetId = entityId;
         this.engine.setTargetIndicator(entityId);
         this.callbacks.onTargetChange?.(entityId, { name: entity.data.name || 'NPC', level: 0, health: 0, maxHealth: 0, type: 'npc' });
+        if (isDoubleClick) {
+          this.network.interactNPC(entityId);
+        }
       } else if (entity?.type === 'player') {
         this.targetId = entityId;
         this.engine.setTargetIndicator(entityId);
@@ -385,8 +396,12 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.DAMAGE, (packet: any) => {
-      const { targetId, damage, isCritical, elementalDamage } = packet.data;
-      this.engine.showDamageNumber(targetId, damage, isCritical);
+      const { targetId, damage, isCritical, elementalDamage, missed } = packet.data;
+      if (missed) {
+        this.engine.showDamageNumber(targetId, 0, false, undefined, true);
+      } else {
+        this.engine.showDamageNumber(targetId, damage, isCritical);
+      }
 
       if (elementalDamage && Array.isArray(elementalDamage)) {
         for (const el of elementalDamage) {
@@ -583,6 +598,14 @@ export class GameClient {
         `Quest completed! +${rewards.experience} XP, +${rewards.gold} gold`,
         'success'
       );
+    });
+
+    this.network.onPacket(PacketType.ENHANCEMENT_RESULT, (packet: any) => {
+      if (packet.data.success) {
+        this.callbacks.onNotification?.(`Enhancement successful! +${packet.data.enhancementLevel}`, 'success');
+      } else {
+        this.callbacks.onNotification?.('Enhancement failed.', 'error');
+      }
     });
 
     this.network.onPacket(PacketType.NPC_DIALOG, (packet: any) => {
@@ -855,8 +878,30 @@ export class GameClient {
     this.network.interactNPC(npcId, dialogId);
   }
 
+  setDialogActive(active: boolean): void {
+    this.input?.setDialogActive(active);
+  }
+
+  getEntityWorldPosition(entityId: string): { x: number; y: number; z: number } | null {
+    const group = this.engine.getMeshGroup(entityId);
+    if (!group?.root) return null;
+    return { x: group.root.position.x, y: group.root.position.y + 3.5, z: group.root.position.z };
+  }
+
+  projectToScreen(worldPos: { x: number; y: number; z: number }): { x: number; y: number } | null {
+    return this.engine.getScreenPosition(new BabylonVector3(worldPos.x, worldPos.y, worldPos.z));
+  }
+
   buyFromShop(itemId: string, quantity: number = 1): void {
     this.network.buyFromShop(itemId, quantity);
+  }
+
+  sendEnhance(data: any): void {
+    this.network.sendPacket({
+      type: PacketType.WEAPON_ENHANCE,
+      timestamp: Date.now(),
+      data
+    });
   }
 
   changeZone(zoneId: string): void {

@@ -163,9 +163,9 @@ export class AssetManager {
     poison: '#44ff66',
   };
 
-  createDamageNumber(value: number, position: Vector3, isCritical: boolean, element?: string): void {
+  createDamageNumber(value: number, position: Vector3, isCritical: boolean, element?: string, miss?: boolean): void {
     const plane = MeshBuilder.CreatePlane(`dmg_${Date.now()}`, { width: 1, height: 0.5 }, this.scene);
-    const yOff = element ? 2.4 : 2;
+    const yOff = miss ? 2.2 : (element ? 2.4 : 2);
     plane.position = position.add(new Vector3((Math.random() - 0.5) * 0.5, yOff, (Math.random() - 0.5) * 0.5));
     plane.billboardMode = 7;
 
@@ -175,7 +175,10 @@ export class AssetManager {
     ctx.clearRect(0, 0, 128, 64);
 
     let color: string;
-    if (element) {
+    if (miss) {
+      color = '#888888';
+      ctx.font = 'bold 22px Arial';
+    } else if (element) {
       color = AssetManager.ELEMENT_COLORS[element] || '#ffcc00';
       ctx.font = 'bold 24px Arial';
     } else if (isCritical) {
@@ -189,7 +192,7 @@ export class AssetManager {
     ctx.fillStyle = color;
     ctx.strokeStyle = 'black';
     ctx.lineWidth = 3;
-    const text = (!element && isCritical) ? `${value}!` : `${value}`;
+    const text = miss ? 'MISS' : ((!element && isCritical) ? `${value}!` : `${value}`);
     ctx.strokeText(text, 64, 44);
     ctx.fillText(text, 64, 44);
     texture.update();

@@ -82,6 +82,9 @@ export enum PacketType {
   PARTY_LOOT_ROLL = 119,
   PARTY_LOOT_RESULT = 120,
   PARTY_PROMOTE = 121,
+
+  WEAPON_ENHANCE = 140,
+  ENHANCEMENT_RESULT = 141,
 }
 
 export interface Packet {

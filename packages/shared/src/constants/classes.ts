@@ -99,12 +99,13 @@ export function calculateDerivedStats(
   defense: number;
   speed: number;
   magicAttack: number;
+  critChance: number;
   baseStats: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number };
 } {
   const job = JOB_DEFINITIONS[jobId];
   const raceData = RACE_DATA[race];
   if (!job || !raceData) {
-    return { maxHealth: 100, maxMana: 50, attack: 10, defense: 5, speed: 4, magicAttack: 8, baseStats: { STA: 5, STR: 5, AGI: 5, DEX: 5, SPI: 5, INT: 5 } };
+    return { maxHealth: 100, maxMana: 50, attack: 10, defense: 5, speed: 4, magicAttack: 8, critChance: 1, baseStats: { STA: 5, STR: 5, AGI: 5, DEX: 5, SPI: 5, INT: 5 } };
   }
 
   const baseClassId = job.baseClass === BaseClass.WARRIOR ? 0 : job.baseClass === BaseClass.SCOUT ? 1 : job.baseClass === BaseClass.ACOLYTE ? 2 : 3;
@@ -132,8 +133,9 @@ export function calculateDerivedStats(
   const defense = Math.floor(3 + totalSTA * 0.8 + totalSTR * 0.3);
   const speed = Math.floor(30 + totalAGI * 0.5);
   const magicAttack = Math.floor(5 + totalINT * 1.5 + totalSPI * 0.3);
+  const critChance = 1 + Math.floor(totalDEX / 10);
 
-  return { maxHealth, maxMana, attack, defense, speed, magicAttack, baseStats };
+  return { maxHealth, maxMana, attack, defense, speed, magicAttack, critChance, baseStats };
 }
 
 export function getStatPointsGainedAtLevel(level: number): number {

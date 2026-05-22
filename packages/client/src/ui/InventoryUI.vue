@@ -36,6 +36,8 @@
             :key="item.slot"
             class="item-slot"
             :class="getItemRarity(item.itemId)"
+            draggable="true"
+            @dragstart="onItemDragStart($event, item)"
             @click="handleItemClick(item)"
             @mouseenter="showTooltip($event, item.itemId)"
             @mouseleave="hideTooltip"
@@ -365,6 +367,11 @@ function handleItemClick(item: { itemId: string; quantity: number }) {
     emit('use-item', item.itemId);
   }
 }
+
+ function onItemDragStart(e: DragEvent, item: { itemId: string; quantity: number; slot: number; enhancementLevel?: number; enhancementElement?: string }) {
+   e.dataTransfer?.setData('text/plain', JSON.stringify({ itemId: item.itemId, slot: item.slot, enhancementLevel: item.enhancementLevel, enhancementElement: item.enhancementElement }));
+   e.dataTransfer!.effectAllowed = 'move';
+ }
 
 function handleEquipClick(slot: string) {
   emit('unequip-item', slot);

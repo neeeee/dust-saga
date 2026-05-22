@@ -95,10 +95,20 @@
         :dialog="dialogData.dialog"
         :shop-items="dialogData.shopItems"
         :available-quests="dialogData.availableQuests"
-        @close="showDialog = false"
+        :npc-screen-pos="npcScreenPos"
+        @close="closeDialog"
         @select-option="handleDialogOption"
+        @progress="handleDialogProgress"
         @buy="handleBuyItem"
         @accept-quest="handleAcceptQuest"
+      />
+
+      <EnhancementWindow
+        :visible="showEnhancement"
+        :inventory="inventory"
+        :equipment="equipment"
+        @close="showEnhancement = false"
+        @enhance="handleEnhance"
       />
 
       <NotificationPopup
@@ -192,6 +202,7 @@ import PartyPanel from './ui/PartyPanel.vue';
 import PartyCreateDialog from './ui/PartyCreateDialog.vue';
 import PartyInviteDialog from './ui/PartyInviteDialog.vue';
 import DeathPopup from './ui/DeathPopup.vue';
+import EnhancementWindow from './ui/EnhancementWindow.vue';
 import { useSkillStore } from './composables/useSkillStore';
 
 type GameState = 'auth' | 'character-select' | 'loading' | 'playing';
@@ -237,6 +248,9 @@ const dialogData = ref<any>({
   availableQuests: []
 });
 const currentNPCId = ref('');
+const npcScreenPos = ref<{ x: number; y: number } | null>(null);
+const showEnhancement = ref(false);
+let dialogTrackRAF: number | null = null;
 
 const notification = ref({ message: '', type: 'info', visible: false });
 const showStatPanel = ref(false);
@@ -357,19 +371,53 @@ function handleDialogOption(option: any) {
   if (!gameClient) return;
   if (option.action === 'accept_quest') {
     gameClient.acceptQuest(option.actionData.questId);
-    showDialog.value = false;
+    closeDialog();
   } else if (option.action === 'complete_quest') {
     gameClient.completeQuest(option.actionData.questId);
-    showDialog.value = false;
+    closeDialog();
   } else if (option.action === 'open_shop') {
   } else if (option.action === 'heal') {
     gameClient.interactNPC(currentDialogNPCId);
-    showDialog.value = false;
+    closeDialog();
   } else if (option.action === 'join_nation') {
     gameClient.interactNPC(currentDialogNPCId, 'join_nation');
-    showDialog.value = false;
+    closeDialog();
+  } else if (option.action === 'open_enhancement') {
+    closeDialog();
+    showEnhancement.value = true;
   } else if (option.nextDialogId) {
     gameClient.interactNPC(currentDialogNPCId, option.nextDialogId);
+  }
+}
+
+function closeDialog() {
+  showDialog.value = false;
+  npcScreenPos.value = null;
+  gameClient?.setDialogActive(false);
+  stopDialogTracking();
+}
+
+function handleDialogProgress() {
+  closeDialog();
+}
+
+function startDialogTracking() {
+  stopDialogTracking();
+  function track() {
+    if (!showDialog.value || !currentNPCId.value) return;
+    const worldPos = gameClient?.getEntityWorldPosition(currentNPCId.value);
+    if (worldPos) {
+      npcScreenPos.value = gameClient?.projectToScreen(worldPos) || null;
+    }
+    dialogTrackRAF = requestAnimationFrame(track);
+  }
+  track();
+}
+
+function stopDialogTracking() {
+  if (dialogTrackRAF !== null) {
+    cancelAnimationFrame(dialogTrackRAF);
+    dialogTrackRAF = null;
   }
 }
 
@@ -454,10 +502,16 @@ function handleRespawn() {
   revivedBy.value = undefined;
 }
 
+function handleEnhance(data: { weaponSlot: { slotIndex: number; itemId: string }; materialSlots: Array<{ slotIndex: number; itemId: string }> }) {
+  if (!gameClient) return;
+  gameClient.sendEnhance(data);
+  showEnhancement.value = false;
+}
+
 function handleAcceptQuest(questId: string) {
   if (!gameClient) return;
   gameClient.acceptQuest(questId);
-  showDialog.value = false;
+  closeDialog();
 }
 
 function showNotification(message: string, type: string) {
@@ -518,8 +572,11 @@ onMounted(async () => {
     },
     onNPCDialog: (data) => {
       currentDialogNPCId = data.npcId;
+      currentNPCId.value = data.npcId;
       dialogData.value = data;
       showDialog.value = true;
+      gameClient?.setDialogActive(true);
+      startDialogTracking();
     },
     onTargetChange: (id, data) => {
       targetId.value = id;
@@ -726,7 +783,10 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
   } else if (e.code === 'Escape') {
     showInventory.value = false;
     showQuests.value = false;
-    showDialog.value = false;
+    if (showDialog.value) {
+      closeDialog();
+    }
+    showEnhancement.value = false;
     showStatPanel.value = false;
     showSkillWindow.value = false;
     if (gameClient) {
@@ -739,6 +799,7 @@ onUnmounted(() => {
   if (gameClient) {
     gameClient.dispose();
   }
+  stopDialogTracking();
   window.removeEventListener('keydown', handleGlobalKeyDown);
 });
 </script>

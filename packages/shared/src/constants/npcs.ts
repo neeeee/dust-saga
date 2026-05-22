@@ -54,10 +54,10 @@ export const NPC_DATABASE: Record<string, NPCDefinition> = {
     dialogs: [
       {
         id: 'greeting',
-        text: 'Ah, another adventurer! I forge the finest weapons and armor. Care to see my wares?',
+        text: 'Something need work?',
         options: [
-          { text: 'Show me your shop.', action: 'open_shop', actionData: { shopId: 'garn_shop' } },
-          { text: 'Just browsing.', action: 'close' }
+          { text: 'Enhance weapon', action: 'open_enhancement' },
+          { text: 'No thanks.', action: 'close' }
         ]
       }
     ],

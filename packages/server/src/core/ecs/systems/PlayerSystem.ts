@@ -20,6 +20,9 @@ import {
   createDefaultSkillAdeptness,
   getEffectiveStats,
   computeStatBreakdown,
+  calculateDodge,
+  calculateAccuracy,
+  getDodgeAgiBonus,
 } from '@dust-saga/shared';
 
 export class PlayerSystem extends System {
@@ -111,6 +114,7 @@ export class PlayerSystem extends System {
         speed: stats.speed,
         speedMultiplier: 1,
         magicAttack: stats.magicAttack,
+        critChance: stats.critChance,
         level,
         experience: typeof experience === 'string' ? parseInt(experience, 10) : (experience || 0),
         experienceToNext: xpToNext
@@ -252,6 +256,7 @@ export class PlayerSystem extends System {
     session.stats.speed = derived.speed + gear.speed;
     session.stats.speedMultiplier = 1 + gear.speed;
     session.stats.magicAttack = Math.floor(derived.magicAttack * (1 + gear.magicAttackPercent));
+    session.stats.critChance = derived.critChance;
 
     const effective = getEffectiveStats(
       session.stats,
@@ -288,6 +293,12 @@ export class PlayerSystem extends System {
     }
 
     session.statBreakdown = computeStatBreakdown(session.statPoints, session.statusEffects || [], { STA, STR, AGI, DEX, SPI, INT }, { accuracy, dodge, attackSpeed, fireResist: fireResist + buffFireResist, iceResist: iceResist + buffIceResist, lightningResist: lightningResist + buffLightningResist, poisonResist: poisonResist + buffPoisonResist, darkResist: darkResist + buffDarkResist, holyResist: holyResist + buffHolyResist, ailmentResist, disorderResist });
+
+    const baseStats = session.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+    const totalAgi = (session.statPoints.AGI || 0) + baseStats.AGI + AGI + (session.statBreakdown.buffs?.AGI || 0);
+    const totalDex = (session.statPoints.DEX || 0) + baseStats.DEX + DEX + (session.statBreakdown.buffs?.DEX || 0);
+    session.statBreakdown.totalDodge = calculateDodge(session.stats.level, totalAgi, effective.dodgeBonus + dodge);
+    session.statBreakdown.totalAccuracy = calculateAccuracy(session.stats.level, totalDex, effective.accuracyBonus + accuracy);
   }
 
   healPlayer(session: PlayerSession): void {

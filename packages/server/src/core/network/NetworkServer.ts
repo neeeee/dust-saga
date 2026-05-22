@@ -14,6 +14,8 @@ import {
   getEffectiveStats,
   computeAilmentResist, computeDisorderResist, computeDebuffAccuracy, rollDebuffApplication,
   calculateWeaponElementalDamage,
+  calculateDodge,
+  calculateHitChance,
   NATION_ZONE_MAP,
   ZoneType,
 } from '@dust-saga/shared';
@@ -216,6 +218,23 @@ export class NetworkServer {
       if (dist > (enemyDef?.attackRange || 2) * 2) {
         enemy.state = 'return';
         enemy.targetId = null;
+        return;
+      }
+
+      const targetDodge = target.statBreakdown?.totalDodge ?? 0;
+      const enemyAccuracy = enemy.level + 7;
+      const hitChance = Math.min(0.99, Math.max(0.01, calculateHitChance(enemyAccuracy, targetDodge)));
+      if (Math.random() > hitChance) {
+        this.sendToPlayer(targetId, {
+          type: PacketType.DAMAGE,
+          timestamp: Date.now(),
+          data: { attackerId: enemyId, targetId, damage: 0, isCritical: false, damageType: 'physical', missed: true }
+        });
+        this.broadcastInZone(target.zoneId, {
+          type: PacketType.DAMAGE,
+          timestamp: Date.now(),
+          data: { attackerId: enemyId, targetId, damage: 0, isCritical: false, damageType: 'physical', missed: true }
+        }, targetId);
         return;
       }
 
@@ -674,6 +693,10 @@ export class NetworkServer {
           this.handlePartyPromote(socket, packet.data);
           break;
 
+        case PacketType.WEAPON_ENHANCE:
+          this.handleWeaponEnhance(socket, packet.data);
+          break;
+
         default:
           break;
       }
@@ -834,6 +857,8 @@ export class NetworkServer {
       const parsed = typeof char.equipment === 'string' ? JSON.parse(char.equipment) : char.equipment;
       if (parsed && typeof parsed === 'object') session.equipment = parsed;
     }
+
+    this.playerSys.recalcStats(session);
 
     const zoneDef = getZoneDefinition(session.zoneId);
     if (char.position_x === 0 && char.position_y === 0 && char.position_z === 0) {
@@ -1074,7 +1099,7 @@ export class NetworkServer {
           magicDefense: Math.floor(eff.defense * 0.3),
           health: player.stats.health,
           level: player.stats.level,
-          dodge: player.statPoints.AGI + eff.dodgeBonus,
+          dodge: calculateDodge(player.stats.level, (player.statPoints.AGI || 0) + ((player.baseStats || { AGI: 0 }).AGI || 0), eff.dodgeBonus),
           damageTakenMultiplier: eff.damageTakenMultiplier,
           physicalDamageReduction: eff.physicalDamageReduction,
           fireResist: player.statBreakdown?.gearCombat?.fireResist || 0,
@@ -1902,6 +1927,93 @@ export class NetworkServer {
     }
   }
 
+  private handleWeaponEnhance(socket: Socket, data: any): void {
+    const characterId = this.findCharacterBySocket(socket.id);
+    if (!characterId) return;
+
+    const session = this.state.players.get(characterId);
+    if (!session) return;
+
+    const { weaponSlot, materialSlots } = data;
+    if (!weaponSlot?.slotIndex && weaponSlot?.slotIndex !== 0) return;
+
+    const weaponItem = session.inventory[weaponSlot.slotIndex];
+    if (!weaponItem) return;
+
+    const weaponDef = getItem(weaponItem.itemId);
+    if (!weaponDef) return;
+
+    const enhancableTypes: string[] = ['weapon', 'armor', 'helmet', 'boots'];
+    if (!enhancableTypes.includes(weaponDef.type) && !weaponDef.equipmentSlot) return;
+
+    const currentLevel = weaponItem.enhancementLevel || 0;
+    if (currentLevel >= 10) return;
+
+    const GEM_ELEMENT_MAP: Record<string, string> = {
+      fire_gem: 'fire', ice_gem: 'ice', lightning_gem: 'lightning',
+      holy_gem: 'holy', dark_gem: 'dark', poison_gem: 'poison',
+    };
+
+    let element: string | null = null;
+    const materialSlotArr: Array<{ slotIndex: number } | null> = materialSlots || [];
+    const consumedSlots: number[] = [];
+
+    for (const mat of materialSlotArr) {
+      if (!mat?.slotIndex && mat?.slotIndex !== 0) continue;
+      const matItem = session.inventory[mat.slotIndex];
+      if (!matItem) continue;
+      const matDef = getItem(matItem.itemId);
+      if (!matDef) continue;
+
+      const gemElement = GEM_ELEMENT_MAP[matItem.itemId];
+      if (gemElement) {
+        if (!element) {
+          element = gemElement;
+        } else if (element !== gemElement) {
+          return;
+        }
+        consumedSlots.push(mat.slotIndex);
+      }
+    }
+
+    if (!element) return;
+
+    const newLevel = currentLevel + 1;
+    weaponItem.enhancementLevel = newLevel;
+    weaponItem.enhancementElement = element as any;
+
+    for (const slotIdx of consumedSlots) {
+      const matItem = session.inventory[slotIdx];
+      if (matItem) {
+        matItem.quantity -= 1;
+        if (matItem.quantity <= 0) {
+          session.inventory.splice(slotIdx, 1);
+          for (let i = 0; i < session.inventory.length; i++) {
+            session.inventory[i].slot = i;
+          }
+        }
+      }
+    }
+
+    this.playerSys.recalcStats(session);
+
+    this.sendToPlayer(characterId, {
+      type: PacketType.INVENTORY_UPDATE,
+      timestamp: Date.now(),
+      data: { inventory: session.inventory, equipment: session.equipment }
+    });
+    this.sendToPlayer(characterId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown }
+    });
+    this.sendToPlayer(characterId, {
+      type: PacketType.ENHANCEMENT_RESULT,
+      timestamp: Date.now(),
+      data: { success: true, weaponSlotIndex: weaponSlot.slotIndex, enhancementLevel: newLevel, enhancementElement: element }
+    });
+  }
+
   private handleStatAllocate(socket: Socket, data: any): void {
     const characterId = this.findCharacterBySocket(socket.id);
     if (!characterId) return;
@@ -1932,7 +2044,8 @@ export class NetworkServer {
         stats: session.stats,
         statPoints: session.statPoints,
         unspentStatPoints: session.unspentStatPoints,
-        unspentSkillPoints: session.unspentSkillPoints
+        unspentSkillPoints: session.unspentSkillPoints,
+        statBreakdown: session.statBreakdown,
       }
     });
   }
@@ -2524,7 +2637,7 @@ export class NetworkServer {
               magicDefense: Math.floor(eff.defense * 0.3),
               health: player.stats.health,
               level: player.stats.level,
-              dodge: player.statPoints.AGI + eff.dodgeBonus,
+              dodge: calculateDodge(player.stats.level, (player.statPoints.AGI || 0) + ((player.baseStats || { AGI: 0 }).AGI || 0), eff.dodgeBonus),
               damageTakenMultiplier: eff.damageTakenMultiplier,
               physicalDamageReduction: eff.physicalDamageReduction,
               fireResist: player.statBreakdown?.gearCombat?.fireResist || 0,
@@ -3003,7 +3116,7 @@ export class NetworkServer {
       if (!enemy.statusEffects || enemy.statusEffects.length === 0) return;
 
       const tick = this.skillSys.tickStatusEffects(
-        { ...enemy, stats: { health: enemy.health, maxHealth: enemy.maxHealth, mana: 0, maxMana: 0, attack: 0, defense: 0, speed: 0, magicAttack: 0, level: enemy.level, experience: 0, experienceToNext: 0 }, statPoints: { STR: 0, AGI: 0, INT: 0, SPI: 0, DEX: 0, STA: 0 }, statusEffects: enemy.statusEffects, skillCooldowns: [], activeCast: null } as any,
+         { ...enemy, stats: { health: enemy.health, maxHealth: enemy.maxHealth, mana: 0, maxMana: 0, attack: 0, defense: 0, speed: 0, magicAttack: 0, critChance: 0, level: enemy.level, experience: 0, experienceToNext: 0 }, statPoints: { STR: 0, AGI: 0, INT: 0, SPI: 0, DEX: 0, STA: 0 }, statusEffects: enemy.statusEffects, skillCooldowns: [], activeCast: null } as any,
         now
       );
 
@@ -3388,7 +3501,7 @@ export class NetworkServer {
           magicDefense: Math.floor(eff.defense * 0.3),
           health: player.stats.health,
           level: player.stats.level,
-          dodge: player.statPoints.AGI + eff.dodgeBonus,
+          dodge: calculateDodge(player.stats.level, (player.statPoints.AGI || 0) + ((player.baseStats || { AGI: 0 }).AGI || 0), eff.dodgeBonus),
           damageTakenMultiplier: eff.damageTakenMultiplier,
           physicalDamageReduction: eff.physicalDamageReduction,
           fireResist: player.statBreakdown?.gearCombat?.fireResist || 0,
@@ -3667,7 +3780,7 @@ export class NetworkServer {
           magicDefense: Math.floor(eff.defense * 0.3),
           health: player.stats.health,
           level: player.stats.level,
-          dodge: player.statPoints.AGI + eff.dodgeBonus,
+          dodge: calculateDodge(player.stats.level, (player.statPoints.AGI || 0) + ((player.baseStats || { AGI: 0 }).AGI || 0), eff.dodgeBonus),
           damageTakenMultiplier: eff.damageTakenMultiplier,
           physicalDamageReduction: eff.physicalDamageReduction,
           fireResist: player.statBreakdown?.gearCombat?.fireResist || 0,
@@ -3800,7 +3913,7 @@ export class NetworkServer {
           magicDefense: Math.floor(eff.defense * 0.3),
           health: player.stats.health,
           level: player.stats.level,
-          dodge: player.statPoints.AGI + eff.dodgeBonus,
+          dodge: calculateDodge(player.stats.level, (player.statPoints.AGI || 0) + ((player.baseStats || { AGI: 0 }).AGI || 0), eff.dodgeBonus),
           damageTakenMultiplier: eff.damageTakenMultiplier,
           physicalDamageReduction: eff.physicalDamageReduction,
           fireResist: player.statBreakdown?.gearCombat?.fireResist || 0,

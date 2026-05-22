@@ -29,6 +29,7 @@ export enum StatusEffectType {
   DEBUFF_DEFENSE_DOWN = 'debuff_defense_down',
   DEBUFF_SPEED_DOWN = 'debuff_speed_down',
   DEBUFF_ACCURACY_DOWN = 'debuff_accuracy_down',
+  DEBUFF_DODGE_DOWN = 'debuff_dodge_down',
   DEBUFF_CAST_SPEED_DOWN = 'debuff_cast_speed_down',
   DEBUFF_DAMAGE_TAKEN_UP = 'debuff_damage_taken_up',
   WEAPON_AURA = 'weapon_aura',
@@ -141,6 +142,7 @@ export const STATUS_EFFECT_DEFS: Partial<Record<StatusEffectType, StatusEffectDe
   [StatusEffectType.DEBUFF_DEFENSE_DOWN]: { type: StatusEffectType.DEBUFF_DEFENSE_DOWN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.DEBUFF_SPEED_DOWN]: { type: StatusEffectType.DEBUFF_SPEED_DOWN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.DEBUFF_ACCURACY_DOWN]: { type: StatusEffectType.DEBUFF_ACCURACY_DOWN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.DEBUFF_DODGE_DOWN]: { type: StatusEffectType.DEBUFF_DODGE_DOWN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.DEBUFF_CAST_SPEED_DOWN]: { type: StatusEffectType.DEBUFF_CAST_SPEED_DOWN, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP]: { type: StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.WEAPON_AURA]: { type: StatusEffectType.WEAPON_AURA, duration: 480000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
@@ -265,6 +267,10 @@ export function getEffectiveStats(
       const reduction = effect.potency || 0;
       accuracyBonus -= Math.floor(100 * reduction);
     }
+    if (effect.type === StatusEffectType.DEBUFF_DODGE_DOWN) {
+      const reduction = effect.potency || 0;
+      dodgeBonus = Math.floor(dodgeBonus * (1 - reduction));
+    }
     if (effect.type === StatusEffectType.DEBUFF_CAST_SPEED_DOWN) {
       const penalty = effect.potency || 0;
       castSpeedPenalty += penalty;
@@ -294,6 +300,8 @@ export interface StatBonusBreakdown {
     ailmentResist: number;
     disorderResist: number;
   };
+  totalAccuracy?: number;
+  totalDodge?: number;
 }
 
 export function computeStatBreakdown(

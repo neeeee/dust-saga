@@ -1024,6 +1024,55 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1,
       duration: 480,
       description: "Increase dodge rate",
+      isAOE: true,
+      buffEffectTable: {
+        spiValues: [
+          {
+            value: 33,
+            Blessing: [
+              { value: 8, dodgeChance: 13 },
+              { value: 16, dodgeChance: 18 },
+              { value: 24, dodgeChance: 24 },
+              { value: 31, dodgeChance: 30 },
+              { value: 39, dodgeChance: 37 },
+              { value: 47, dodgeChance: 43 },
+            ],
+          },
+          {
+            value: 50,
+            Blessing: [
+              { value: 8, dodgeChance: 16 },
+              { value: 16, dodgeChance: 22 },
+              { value: 24, dodgeChance: 28 },
+              { value: 31, dodgeChance: 35 },
+              { value: 39, dodgeChance: 41 },
+              { value: 47, dodgeChance: 48 },
+            ],
+          },
+          {
+            value: 67,
+            Blessing: [
+              { value: 8, dodgeChance: 20 },
+              { value: 16, dodgeChance: 26 },
+              { value: 24, dodgeChance: 33 },
+              { value: 31, dodgeChance: 40 },
+              { value: 39, dodgeChance: 46 },
+              { value: 47, dodgeChance: 53 },
+            ],
+          },
+          {
+            value: 100,
+            Blessing: [
+              { value: 8, dodgeChance: 24 },
+              { value: 16, dodgeChance: 30 },
+              { value: 24, dodgeChance: 37 },
+              { value: 31, dodgeChance: 44 },
+              { value: 39, dodgeChance: 51 },
+              { value: 47, dodgeChance: 58 },
+            ],
+          },
+        ],
+      },
     },
   },
   19: {
@@ -1061,15 +1110,64 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 210,
       description: "Restore MP over time",
     },
-    "Speedy Gale": {
-      reqLevel: 28,
-      mpCost: 55,
-      castTime: 0,
-      cooldown: 1,
-      duration: 480,
-      description: "Increase dodge rate",
-    },
-    "Sound Mind (Passive)": {
+     "Speedy Gale": {
+       reqLevel: 28,
+       mpCost: 55,
+       castTime: 0,
+       cooldown: 1,
+       duration: 480,
+       description: "Increase dodge rate",
+       isAOE: true,
+       buffEffectTable: {
+         spiValues: [
+           {
+             value: 33,
+             Blessing: [
+               { value: 8, dodgeChance: 13 },
+               { value: 16, dodgeChance: 18 },
+               { value: 24, dodgeChance: 24 },
+               { value: 31, dodgeChance: 30 },
+               { value: 39, dodgeChance: 37 },
+               { value: 47, dodgeChance: 43 },
+             ],
+           },
+           {
+             value: 50,
+             Blessing: [
+               { value: 8, dodgeChance: 16 },
+               { value: 16, dodgeChance: 22 },
+               { value: 24, dodgeChance: 28 },
+               { value: 31, dodgeChance: 35 },
+               { value: 39, dodgeChance: 41 },
+               { value: 47, dodgeChance: 48 },
+             ],
+           },
+           {
+             value: 67,
+             Blessing: [
+               { value: 8, dodgeChance: 20 },
+               { value: 16, dodgeChance: 26 },
+               { value: 24, dodgeChance: 33 },
+               { value: 31, dodgeChance: 40 },
+               { value: 39, dodgeChance: 46 },
+               { value: 47, dodgeChance: 53 },
+             ],
+           },
+           {
+             value: 100,
+             Blessing: [
+               { value: 8, dodgeChance: 24 },
+               { value: 16, dodgeChance: 30 },
+               { value: 24, dodgeChance: 37 },
+               { value: 31, dodgeChance: 44 },
+               { value: 39, dodgeChance: 51 },
+               { value: 47, dodgeChance: 58 },
+             ],
+           },
+         ],
+       },
+     },
+     "Sound Mind (Passive)": {
       reqLevel: 45,
       mpCost: 0,
       castTime: 0,
@@ -1122,15 +1220,64 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 210,
       description: "Restore MP over time",
     },
-    "Speedy Gale": {
-      reqLevel: 28,
-      mpCost: 55,
-      castTime: 0,
-      cooldown: 1,
-      duration: 480,
-      description: "Increase dodge rate",
-    },
-    "Mana Swap": {
+     "Speedy Gale": {
+       reqLevel: 28,
+       mpCost: 55,
+       castTime: 0,
+       cooldown: 1,
+       duration: 480,
+       description: "Increase dodge rate",
+       isAOE: true,
+       buffEffectTable: {
+         spiValues: [
+           {
+             value: 33,
+             Blessing: [
+               { value: 8, dodgeChance: 13 },
+               { value: 16, dodgeChance: 18 },
+               { value: 24, dodgeChance: 24 },
+               { value: 31, dodgeChance: 30 },
+               { value: 39, dodgeChance: 37 },
+               { value: 47, dodgeChance: 43 },
+             ],
+           },
+           {
+             value: 50,
+             Blessing: [
+               { value: 8, dodgeChance: 16 },
+               { value: 16, dodgeChance: 22 },
+               { value: 24, dodgeChance: 28 },
+               { value: 31, dodgeChance: 35 },
+               { value: 39, dodgeChance: 41 },
+               { value: 47, dodgeChance: 48 },
+             ],
+           },
+           {
+             value: 67,
+             Blessing: [
+               { value: 8, dodgeChance: 20 },
+               { value: 16, dodgeChance: 26 },
+               { value: 24, dodgeChance: 33 },
+               { value: 31, dodgeChance: 40 },
+               { value: 39, dodgeChance: 46 },
+               { value: 47, dodgeChance: 53 },
+             ],
+           },
+           {
+             value: 100,
+             Blessing: [
+               { value: 8, dodgeChance: 24 },
+               { value: 16, dodgeChance: 30 },
+               { value: 24, dodgeChance: 37 },
+               { value: 31, dodgeChance: 44 },
+               { value: 39, dodgeChance: 51 },
+               { value: 47, dodgeChance: 58 },
+             ],
+           },
+         ],
+       },
+     },
+     "Mana Swap": {
       reqLevel: 45,
       mpCost: 16,
       castTime: 2,

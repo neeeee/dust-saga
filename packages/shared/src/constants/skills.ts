@@ -1135,6 +1135,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 1,
             description: "Step back and increase dodge by 100 for 1 second",
             isBuff: true,
+            buffEffectTable: {
+              dodgeChance: 100,
+            }
           },
           "Dash": {
             name: "Dash",
@@ -1153,6 +1156,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 90,
             duration: 60,
             description: "Increased dodge",
+            buffEffectTable: {
+              dodgeChance: 13,
+            },
           },
           "Tangled Fingers": {
             name: "Tangled Fingers",
@@ -2276,6 +2282,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Reduce target's dodge",
             debuffEffectTable: {
               debuffCategory: 'ailment',
+              dodgeDown: 0.5,
             }
           },
           "Resist Charm": {

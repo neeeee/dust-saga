@@ -3,6 +3,7 @@ import { JobId, SkillProficiencies, createDefaultSkillProficiencies, BaseClass }
 import { BuffData, StatBonusBreakdown } from './status';
 import { SkillCooldownEntry, ActiveCast } from './skills';
 import { StatusEffect } from './status';
+import { InventoryItem } from './items';
 
 export interface PlayerStats {
   health: number;
@@ -14,6 +15,7 @@ export interface PlayerStats {
   speed: number;
   speedMultiplier: number;
   magicAttack: number;
+  critChance: number;
   level: number;
   experience: number;
   experienceToNext: number;
@@ -51,11 +53,7 @@ export interface PlayerSession {
   activeCast: ActiveCast | null;
   statusEffects: StatusEffect[];
   statBreakdown: StatBonusBreakdown | null;
-  inventory: Array<{
-    itemId: string;
-    quantity: number;
-    slot: number;
-  }>;
+  inventory: InventoryItem[];
   equipment: {
     weapon: any | null;
     armor: any | null;
@@ -104,4 +102,5 @@ export interface DamageInfo {
   isCritical: boolean;
   damageType: 'physical' | 'magical';
   elementalDamage?: Array<{ element: string; damage: number }>;
+  missed?: boolean;
 }
