@@ -56,6 +56,10 @@ export class LootSystem extends System {
     return loot;
   }
 
+  getLootById(lootId: string): LootInstance | null {
+    return this.activeLoot.get(lootId) || null;
+  }
+
   pickupLoot(lootId: string, playerId: string): { itemId: string; quantity: number } | null {
     const loot = this.activeLoot.get(lootId);
     if (!loot) return null;

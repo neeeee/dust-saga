@@ -85,6 +85,8 @@ export enum PacketType {
 
   WEAPON_ENHANCE = 140,
   ENHANCEMENT_RESULT = 141,
+  AOE_ENTITY = 150,
+  AOE_DESPAWN = 151,
 }
 
 export interface Packet {
@@ -126,7 +128,7 @@ export interface PlayerData {
 
 export interface EntityData {
   id: string;
-  type: 'player' | 'npc' | 'enemy' | 'item' | 'loot';
+  type: 'player' | 'npc' | 'enemy' | 'item' | 'loot' | 'aoe';
   position: PositionData;
   rotation: RotationData;
   data: any;

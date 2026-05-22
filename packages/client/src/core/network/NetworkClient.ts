@@ -222,6 +222,14 @@ export class NetworkClient {
     });
   }
 
+  dropItem(itemId: string, quantity: number): void {
+    this.sendPacket({
+      type: PacketType.ITEM_DROP,
+      timestamp: Date.now(),
+      data: { itemId, quantity }
+    });
+  }
+
   acceptQuest(questId: string): void {
     this.sendPacket({
       type: PacketType.QUEST_ACCEPT,

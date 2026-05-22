@@ -5,6 +5,12 @@ const ELEMENT_PREFIXES: Record<string, string> = {
   holy: 'Blessed',
   dark: 'Darkened',
   poison: 'Poisonous',
+  magic_fire: 'Arcane Fire',
+  magic_ice: 'Arcane Ice',
+  magic_lightning: 'Arcane Storm',
+  magic_holy: 'Arcane Holy',
+  magic_dark: 'Arcane Shadow',
+  magic_poison: 'Arcane Venom',
 };
 
 export function getEnhancedItemName(

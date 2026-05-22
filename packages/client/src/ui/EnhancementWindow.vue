@@ -70,7 +70,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, onUnmounted } from 'vue';
+import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue';
 import { ITEM_DATABASE, getEnhancedItemName } from '@dust-saga/shared';
 import { useDraggable } from '../composables/useDraggable';
 
@@ -95,6 +95,8 @@ const resultItem = ref<string | null>(null);
 const GEM_ELEMENTS: Record<string, string> = {
   fire_gem: 'fire', ice_gem: 'ice', lightning_gem: 'lightning',
   holy_gem: 'holy', dark_gem: 'dark', poison_gem: 'poison',
+  fire_magic_gem: 'magic_fire', ice_magic_gem: 'magic_ice', lightning_magic_gem: 'magic_lightning',
+  holy_magic_gem: 'magic_holy', dark_magic_gem: 'magic_dark', poison_magic_gem: 'magic_poison',
 };
 
 function getItemName(itemId: string): string {
@@ -190,6 +192,16 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (panelRef.value) detach(panelRef.value);
+});
+
+watch(() => props.visible, (v) => {
+  if (!v) {
+    weaponSlot.value = null;
+    materialSlots[0] = null;
+    materialSlots[1] = null;
+    materialSlots[2] = null;
+    resultItem.value = null;
+  }
 });
 </script>
 

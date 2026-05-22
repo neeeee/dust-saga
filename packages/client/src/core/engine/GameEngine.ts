@@ -48,6 +48,7 @@ export class GameEngine {
   private aoeValid: boolean = true;
   private aoeTargetingActive: boolean = false;
   private isRotating: boolean = false;
+  private aoeZoneMeshes: Map<string, { disc: AbstractMesh; material: StandardMaterial; expiresAt: number }> = new Map();
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -122,6 +123,7 @@ export class GameEngine {
 
     this.engine.runRenderLoop(() => {
       if (this.scene) {
+        this.updateAOEZoneMeshes(Date.now());
         this.scene.render();
       }
     });
@@ -868,12 +870,72 @@ export class GameEngine {
     this.camera.alpha -= e.movementX * 0.003;
   };
 
+  private getAOEZoneColor(skillName: string): { diffuse: Color3; emissive: Color3 } {
+    const name = skillName.toLowerCase();
+    if (name.includes('fire') || name.includes('meteor')) return { diffuse: new Color3(1.0, 0.4, 0.1), emissive: new Color3(0.8, 0.2, 0.0) };
+    if (name.includes('ice') || name.includes('frost') || name.includes('blizzard')) return { diffuse: new Color3(0.3, 0.6, 1.0), emissive: new Color3(0.1, 0.3, 0.8) };
+    if (name.includes('thunder') || name.includes('lightning') || name.includes('storm')) return { diffuse: new Color3(0.9, 0.9, 0.3), emissive: new Color3(0.6, 0.6, 0.1) };
+    if (name.includes('holy')) return { diffuse: new Color3(1.0, 1.0, 0.8), emissive: new Color3(0.7, 0.7, 0.3) };
+    if (name.includes('dark') || name.includes('despair') || name.includes('shadow')) return { diffuse: new Color3(0.6, 0.2, 0.8), emissive: new Color3(0.4, 0.1, 0.6) };
+    if (name.includes('poison') || name.includes('pestilence')) return { diffuse: new Color3(0.3, 0.8, 0.2), emissive: new Color3(0.1, 0.5, 0.1) };
+    if (name.includes('arrow')) return { diffuse: new Color3(0.8, 0.6, 0.3), emissive: new Color3(0.5, 0.3, 0.1) };
+    return { diffuse: new Color3(0.8, 0.3, 0.3), emissive: new Color3(0.5, 0.1, 0.1) };
+  }
+
+  createAOEZoneMesh(id: string, position: { x: number; y: number; z: number }, radius: number, skillName: string, expiresAt: number): void {
+    if (!this.scene) return;
+    this.removeAOEZoneMesh(id);
+
+    const disc = MeshBuilder.CreateDisc(`aoe_zone_${id}`, { radius, tessellation: 64 }, this.scene);
+    const mat = new StandardMaterial(`aoe_zone_mat_${id}`, this.scene);
+    const colors = this.getAOEZoneColor(skillName);
+    mat.diffuseColor = colors.diffuse;
+    mat.emissiveColor = colors.emissive;
+    mat.disableLighting = true;
+    mat.alpha = 0.35;
+    mat.backFaceCulling = false;
+    disc.material = mat;
+    disc.rotation.x = Math.PI / 2;
+    disc.position.set(position.x, position.y + 0.05, position.z);
+    disc.isPickable = false;
+
+    this.aoeZoneMeshes.set(id, { disc, material: mat, expiresAt });
+  }
+
+  removeAOEZoneMesh(id: string): void {
+    const entry = this.aoeZoneMeshes.get(id);
+    if (entry) {
+      entry.disc.dispose();
+      entry.material.dispose();
+      this.aoeZoneMeshes.delete(id);
+    }
+  }
+
+  updateAOEZoneMeshes(now: number): void {
+    for (const [id, entry] of this.aoeZoneMeshes) {
+      const remaining = entry.expiresAt - now;
+      if (remaining <= 0) {
+        this.removeAOEZoneMesh(id);
+        continue;
+      }
+      const fadeThreshold = 2000;
+      if (remaining < fadeThreshold) {
+        entry.material.alpha = 0.35 * (remaining / fadeThreshold);
+      }
+    }
+  }
+
   dispose(): void {
     if (this.isRotating) document.exitPointerLock();
     this.canvas?.removeEventListener('pointerdown', this.handlePointerDown);
     this.canvas?.removeEventListener('pointerup', this.handlePointerUp);
     this.canvas?.removeEventListener('pointermove', this.handlePointerMoveForCamera);
     this.hideAOETargetCircle();
+    this.aoeZoneMeshes.forEach((entry) => {
+      entry.disc.dispose();
+      entry.material.dispose();
+    });
+    this.aoeZoneMeshes.clear();
     this.meshes.forEach(group => {
       group.root.dispose();
       group.healthBarBg?.dispose();

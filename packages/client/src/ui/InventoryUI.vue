@@ -23,7 +23,7 @@
             @mouseleave="hideTooltip"
           >
             <span class="slot-label">{{ slot.label }}</span>
-            <span v-if="equipment[slot.key]" class="slot-item">{{ getItemName(equipment[slot.key]?.itemId) }}</span>
+            <span v-if="equipment[slot.key]" class="slot-item">{{ getEquipSlotName(equipment[slot.key]) }}</span>
           </div>
         </div>
       </div>
@@ -39,11 +39,27 @@
             draggable="true"
             @dragstart="onItemDragStart($event, item)"
             @click="handleItemClick(item)"
+            @contextmenu.prevent="handleItemRightClick($event, item)"
             @mouseenter="showTooltip($event, item.itemId)"
             @mouseleave="hideTooltip"
           >
-            <span class="item-name">{{ getItemName(item.itemId) }}</span>
+            <span class="item-name">{{ getInventoryItemName(item) }}</span>
             <span v-if="item.quantity > 1" class="item-qty">x{{ item.quantity }}</span>
+          </div>
+        </div>
+        <div
+          v-if="trashMenu.visible"
+          class="trash-context-menu"
+          :style="{ left: trashMenu.x + 'px', top: trashMenu.y + 'px' }"
+        >
+          <div class="trash-option" @click="confirmTrash">
+            <span>Trash {{ trashMenu.quantity > 1 ? '1' : getItemName(trashMenu.itemId) }}</span>
+          </div>
+          <div v-if="trashMenu.quantity > 1" class="trash-option" @click="confirmTrashAll">
+            <span>Trash All (x{{ trashMenu.quantity }})</span>
+          </div>
+          <div class="trash-option cancel" @click="trashMenu.visible = false">
+            <span>Cancel</span>
           </div>
         </div>
       </div>
@@ -68,7 +84,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick, reactive } from 'vue';
-import { ITEM_DATABASE } from '@dust-saga/shared';
+import { ITEM_DATABASE, getEnhancedItemName } from '@dust-saga/shared';
 import { useDraggable } from '../composables/useDraggable';
 import { Engine, Scene, ArcRotateCamera, HemisphericLight, DirectionalLight, MeshBuilder, StandardMaterial, Color3, Color4, Vector3, AbstractMesh } from '@babylonjs/core';
 
@@ -85,9 +101,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'close': [];
-  'use-item': [itemId: string];
   'equip-item': [itemId: string];
+  'use-item': [itemId: string];
   'unequip-item': [slot: string];
+  'drop-item': [data: { itemId: string; quantity: number }];
 }>();
 
 const equipmentSlots = [
@@ -120,6 +137,17 @@ const RARITY_COLORS: Record<string, Color3> = {
 
 function getItemName(itemId: string): string {
   return ITEM_DATABASE[itemId]?.name || itemId;
+}
+
+function getEquipSlotName(eq: any): string {
+  if (!eq) return '';
+  const baseName = getItemName(eq.itemId);
+  return getEnhancedItemName(baseName, eq.enhancementLevel, eq.enhancementElement);
+}
+
+function getInventoryItemName(item: any): string {
+  const baseName = getItemName(item.itemId);
+  return getEnhancedItemName(baseName, item.enhancementLevel, item.enhancementElement);
 }
 
 function getItemRarity(itemId: string): string {
@@ -376,6 +404,40 @@ function handleItemClick(item: { itemId: string; quantity: number }) {
 function handleEquipClick(slot: string) {
   emit('unequip-item', slot);
 }
+
+const trashMenu = reactive({ visible: false, x: 0, y: 0, itemId: '', quantity: 0 });
+
+function handleItemRightClick(e: MouseEvent, item: { itemId: string; quantity: number }) {
+  trashMenu.visible = true;
+  trashMenu.x = e.clientX;
+  trashMenu.y = e.clientY;
+  trashMenu.itemId = item.itemId;
+  trashMenu.quantity = item.quantity;
+}
+
+function confirmTrash() {
+  emit('drop-item', { itemId: trashMenu.itemId, quantity: 1 });
+  trashMenu.visible = false;
+}
+
+function confirmTrashAll() {
+  emit('drop-item', { itemId: trashMenu.itemId, quantity: trashMenu.quantity });
+  trashMenu.visible = false;
+}
+
+function handleClickOutside(e: MouseEvent) {
+  if (trashMenu.visible) {
+    trashMenu.visible = false;
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('click', handleClickOutside);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('click', handleClickOutside);
+});
 
 watch(() => props.equipment, () => {
   updateEquipPreview();
@@ -634,5 +696,33 @@ onUnmounted(() => {
 .tooltip-stat {
   color: #66bb6a;
   font-size: 0.65rem;
+}
+
+.trash-context-menu {
+  position: fixed;
+  background: rgba(8, 8, 20, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  z-index: 200;
+  min-width: 140px;
+  padding: 2px 0;
+}
+
+.trash-option {
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: #ccc;
+}
+
+.trash-option:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.trash-option.cancel {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 2px;
+  padding-top: 6px;
+  color: #888;
 }
 </style>

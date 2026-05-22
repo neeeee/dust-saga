@@ -17,7 +17,7 @@ export * from './constants/zones';
 export * from './constants/npcs';
 export * from './constants/quests';
 export { RACE_DATA, getRaceData, LEVEL_UP_BONUSES, STAT_POINT_COSTS, getStatPointCost, getLevelUpBonuses, MAX_LEVEL, MAX_STAT_VALUE, JOB_BASE_STAT_MODIFIERS, getJobBaseStatModifier } from './constants/races';
-export { SKILL_CATEGORIES, CLASS_SKILL_DATA, GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS } from './constants/skills';
+export { SKILL_CATEGORIES, CLASS_SKILL_DATA, GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS, findSkillDefinition } from './constants/skills';
 export type { DebuffEffectTable, DebuffDOTType } from './constants/debuffs';
 export {
   SUB_CATEGORY_TO_CATEGORY,

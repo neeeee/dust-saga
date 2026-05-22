@@ -79,6 +79,7 @@
         @use-item="handleUseItem"
         @equip-item="handleEquipItem"
         @unequip-item="handleUnequipItem"
+        @drop-item="handleDropItem"
       />
 
       <QuestLog
@@ -355,6 +356,11 @@ function handleEquipItem(itemId: string) {
 function handleUnequipItem(slot: string) {
   if (!gameClient) return;
   gameClient.unequipItem(slot);
+}
+
+function handleDropItem(data: { itemId: string; quantity: number }) {
+  if (!gameClient) return;
+  gameClient.dropItem(data.itemId, data.quantity);
 }
 
 function handleCompleteQuest(questId: string) {

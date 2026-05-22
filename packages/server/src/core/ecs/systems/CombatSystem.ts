@@ -177,7 +177,9 @@ export class CombatSystem extends System {
     const targetResists = this.getTargetResists(isEnemy, enemyRef, playerRef, players);
     const elementalDamage = calculateWeaponElementalDamage(
       attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
-      totalSPI, totalINT, attacker.stats.level, targetResists
+      totalSPI, totalINT, attacker.stats.level, targetResists,
+      (attacker.equipment?.weapon as any)?.enhancementElement,
+      (attacker.equipment?.weapon as any)?.enhancementLevel
     );
 
     this.applyDamageToTarget(targetId, damage, elementalDamage, isEnemy, enemyRef, playerRef, attacker.characterId);
@@ -283,7 +285,9 @@ export class CombatSystem extends System {
       const targetResists = this.getTargetResists(target.isEnemy, target.enemyRef, target.playerRef, players);
       const elementalDamage = calculateWeaponElementalDamage(
         attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
-        totalSPI, totalINT, attacker.stats.level, targetResists
+        totalSPI, totalINT, attacker.stats.level, targetResists,
+        (attacker.equipment?.weapon as any)?.enhancementElement,
+        (attacker.equipment?.weapon as any)?.enhancementLevel
       );
       const scaledElemental = elementalDamage.map(el => ({
         element: el.element,

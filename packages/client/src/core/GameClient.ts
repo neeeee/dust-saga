@@ -12,6 +12,7 @@ import {
   StatPoints,
   GROUND_TARGETED_AOE_SKILLS,
   DEFAULT_AOE_RADIUS,
+  findSkillDefinition,
 } from '@dust-saga/shared';
 
 export interface GameCallbacks {
@@ -343,6 +344,7 @@ export class GameClient {
     this.network.onPacket(PacketType.ENTITY_DESPAWN, (packet: any) => {
       const { entityId } = packet.data;
       this.engine.removeEntity(entityId);
+      this.engine.removeAOEZoneMesh(entityId);
       this.entityManager.removeEntity(entityId);
       this.interpolationManager.clearEntity(entityId);
       this.knownEntities.delete(entityId);
@@ -353,6 +355,18 @@ export class GameClient {
         this.autoAttacking = false;
         this.callbacks.onTargetChange?.(null);
       }
+    });
+
+    this.network.onPacket(PacketType.AOE_ENTITY, (packet: any) => {
+      const { id, position, data } = packet.data;
+      this.engine.createAOEZoneMesh(id, position, data.radius, data.skillName, data.expiresAt);
+      this.knownEntities.set(id, { type: 'aoe', data });
+    });
+
+    this.network.onPacket(PacketType.AOE_DESPAWN, (packet: any) => {
+      const { entityId } = packet.data;
+      this.engine.removeAOEZoneMesh(entityId);
+      this.knownEntities.delete(entityId);
     });
 
     this.network.onPacket(PacketType.PLAYER_POSITION_UPDATE, (packet: any) => {
@@ -770,6 +784,8 @@ export class GameClient {
         const facingAngle = Math.atan2(camForward.x, camForward.z);
         this.network.sendManualAttack(facingAngle);
         this.lastManualAttackTime = now;
+        this.autoAttacking = false;
+        this.lastAutoAttackTime = now + GAME_CONFIG.MANUAL_ATTACK_COOLDOWN;
       }
     }
 
@@ -860,6 +876,10 @@ export class GameClient {
 
   unequipItem(slot: string): void {
     this.network.unequipItem(slot);
+  }
+
+  dropItem(itemId: string, quantity: number): void {
+    this.network.dropItem(itemId, quantity);
   }
 
   acceptQuest(questId: string): void {
@@ -980,7 +1000,9 @@ export class GameClient {
       if (this.aoeTargetingActive && this.aoeTargetingSkillName === skillName) {
         return;
       }
-      this.startAOETargeting(skillName, DEFAULT_AOE_RADIUS);
+      const skillDef = findSkillDefinition(skillName);
+      const radius = skillDef?.aoeRadius || DEFAULT_AOE_RADIUS;
+      this.startAOETargeting(skillName, radius);
       return;
     }
     if (this.aoeTargetingActive) {

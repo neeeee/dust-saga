@@ -350,136 +350,70 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     sellPrice: 15,
     requiredLevel: 0
   },
-  'fire_essence': {
-    id: 'fire_essence',
-    name: 'Fire Essence',
+  'fire_magic_gem': {
+    id: 'fire_magic_gem',
+    name: 'Fire Magic Gem',
     type: ItemType.MATERIAL,
     rarity: ItemRarity.RARE,
     stats: {},
-    description: 'Concentrated flame essence. Catalyst for fire weapon enhancement.',
+    description: 'A gem radiating arcane heat. Boosts fire spell damage when imbued.',
     maxStack: 50,
     sellPrice: 30,
     requiredLevel: 0
   },
-  'fire_catalyst': {
-    id: 'fire_catalyst',
-    name: 'Ignition Stone',
+  'ice_magic_gem': {
+    id: 'ice_magic_gem',
+    name: 'Ice Magic Gem',
     type: ItemType.MATERIAL,
     rarity: ItemRarity.RARE,
     stats: {},
-    description: 'A stone that burns eternally. Required for fire weapon enhancement.',
-    maxStack: 50,
-    sellPrice: 25,
-    requiredLevel: 0
-  },
-  'ice_essence': {
-    id: 'ice_essence',
-    name: 'Ice Essence',
-    type: ItemType.MATERIAL,
-    rarity: ItemRarity.RARE,
-    stats: {},
-    description: 'Concentrated frost essence. Catalyst for ice weapon enhancement.',
+    description: 'A gem pulsing with frost magic. Boosts ice spell damage when imbued.',
     maxStack: 50,
     sellPrice: 30,
     requiredLevel: 0
   },
-  'ice_catalyst': {
-    id: 'ice_catalyst',
-    name: 'Permafrost Shard',
+  'lightning_magic_gem': {
+    id: 'lightning_magic_gem',
+    name: 'Lightning Magic Gem',
     type: ItemType.MATERIAL,
     rarity: ItemRarity.RARE,
     stats: {},
-    description: 'A shard that never thaws. Required for ice weapon enhancement.',
-    maxStack: 50,
-    sellPrice: 25,
-    requiredLevel: 0
-  },
-  'lightning_essence': {
-    id: 'lightning_essence',
-    name: 'Lightning Essence',
-    type: ItemType.MATERIAL,
-    rarity: ItemRarity.RARE,
-    stats: {},
-    description: 'Concentrated storm essence. Catalyst for lightning weapon enhancement.',
+    description: 'A gem crackling with storm magic. Boosts lightning spell damage when imbued.',
     maxStack: 50,
     sellPrice: 30,
     requiredLevel: 0
   },
-  'lightning_catalyst': {
-    id: 'lightning_catalyst',
-    name: 'Storm Core',
+  'holy_magic_gem': {
+    id: 'holy_magic_gem',
+    name: 'Holy Magic Gem',
     type: ItemType.MATERIAL,
     rarity: ItemRarity.RARE,
     stats: {},
-    description: 'A core humming with electricity. Required for lightning weapon enhancement.',
-    maxStack: 50,
-    sellPrice: 25,
-    requiredLevel: 0
-  },
-  'holy_essence': {
-    id: 'holy_essence',
-    name: 'Holy Essence',
-    type: ItemType.MATERIAL,
-    rarity: ItemRarity.RARE,
-    stats: {},
-    description: 'Concentrated divine essence. Catalyst for holy weapon enhancement.',
+    description: 'A gem gleaming with divine magic. Boosts holy spell damage when imbued.',
     maxStack: 50,
     sellPrice: 30,
     requiredLevel: 0
   },
-  'holy_catalyst': {
-    id: 'holy_catalyst',
-    name: 'Sacred Relic',
+  'dark_magic_gem': {
+    id: 'dark_magic_gem',
+    name: 'Dark Magic Gem',
     type: ItemType.MATERIAL,
     rarity: ItemRarity.RARE,
     stats: {},
-    description: 'A blessed relic. Required for holy weapon enhancement.',
-    maxStack: 50,
-    sellPrice: 25,
-    requiredLevel: 0
-  },
-  'dark_essence': {
-    id: 'dark_essence',
-    name: 'Dark Essence',
-    type: ItemType.MATERIAL,
-    rarity: ItemRarity.RARE,
-    stats: {},
-    description: 'Concentrated shadow essence. Catalyst for dark weapon enhancement.',
+    description: 'A gem swirling with shadow magic. Boosts dark spell damage when imbued.',
     maxStack: 50,
     sellPrice: 30,
     requiredLevel: 0
   },
-  'dark_catalyst': {
-    id: 'dark_catalyst',
-    name: 'Void Fragment',
+  'poison_magic_gem': {
+    id: 'poison_magic_gem',
+    name: 'Poison Magic Gem',
     type: ItemType.MATERIAL,
     rarity: ItemRarity.RARE,
     stats: {},
-    description: 'A fragment of pure darkness. Required for dark weapon enhancement.',
-    maxStack: 50,
-    sellPrice: 25,
-    requiredLevel: 0
-  },
-  'poison_essence': {
-    id: 'poison_essence',
-    name: 'Poison Essence',
-    type: ItemType.MATERIAL,
-    rarity: ItemRarity.RARE,
-    stats: {},
-    description: 'Concentrated venom essence. Catalyst for poison weapon enhancement.',
+    description: 'A gem dripping with venom magic. Boosts poison spell damage when imbued.',
     maxStack: 50,
     sellPrice: 30,
-    requiredLevel: 0
-  },
-  'poison_catalyst': {
-    id: 'poison_catalyst',
-    name: 'Toxin Crystal',
-    type: ItemType.MATERIAL,
-    rarity: ItemRarity.RARE,
-    stats: {},
-    description: 'A crystal oozing deadly toxin. Required for poison weapon enhancement.',
-    maxStack: 50,
-    sellPrice: 25,
     requiredLevel: 0
   },
   'rod_of_origin': {

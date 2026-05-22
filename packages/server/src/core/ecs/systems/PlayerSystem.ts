@@ -1,5 +1,5 @@
 import { EntityManager, System } from '../EntityManager';
-import { PlayerSession, JobId, BaseClass, StatType } from '@dust-saga/shared';
+import { PlayerSession, JobId, BaseClass, StatType, InventoryItem } from '@dust-saga/shared';
 import {
   calculateDerivedStats,
   getExperienceToNextLevel,
@@ -29,7 +29,7 @@ export class PlayerSystem extends System {
   private levelUpCallbacks: Array<(playerId: string, newLevel: number) => void> = [];
 
   private getGearBonuses(session: PlayerSession) {
-    const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0, accuracy: 0, dodge: 0, attackSpeed: 0, fireResist: 0, iceResist: 0, lightningResist: 0, poisonResist: 0, darkResist: 0, holyResist: 0, magicAttackPercent: 0, ailmentResist: 0, disorderResist: 0 };
+    const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0, accuracy: 0, dodge: 0, attackSpeed: 0, fireResist: 0, iceResist: 0, lightningResist: 0, poisonResist: 0, darkResist: 0, holyResist: 0, magicAttackPercent: 0, ailmentResist: 0, disorderResist: 0, criticalChance: 0 };
     for (const slot of Object.values(session.equipment)) {
       if (!slot) continue;
       const def = ITEM_DATABASE[slot.itemId];
@@ -58,13 +58,19 @@ export class PlayerSystem extends System {
       if (s.magicAttack) bonuses.magicAttackPercent += s.magicAttack;
       if (s.ailmentResist) bonuses.ailmentResist += s.ailmentResist;
       if (s.disorderResist) bonuses.disorderResist += s.disorderResist;
+      if (s.criticalChance) bonuses.criticalChance += s.criticalChance;
 
       const enhanceLevel = slot.enhancementLevel || 0;
       if (enhanceLevel > 0) {
         const eqSlot = def.equipmentSlot;
         if (eqSlot === EquipmentSlot.WEAPON) {
-          bonuses.attack += enhanceLevel * 3;
-          bonuses.magicAttackPercent += enhanceLevel * 2;
+          const isMagicWeapon = (s.magicAttack && s.magicAttack > 0) || (s.INT && s.INT > 0) || (s.SPI && s.SPI > 0);
+          if (!isMagicWeapon) {
+            bonuses.attack += enhanceLevel * 3;
+          }
+          if (isMagicWeapon) {
+            bonuses.magicAttackPercent += enhanceLevel * 0.02;
+          }
         } else if (eqSlot === EquipmentSlot.ARMOR || eqSlot === EquipmentSlot.HELMET) {
           bonuses.defense += enhanceLevel * 3;
           bonuses.health += enhanceLevel * 15;
@@ -157,6 +163,7 @@ export class PlayerSystem extends System {
       statusEffects: [],
       statBreakdown: null,
       inventory: [],
+      gold: 100,
       equipment: {
         weapon: null,
         armor: null,
@@ -249,8 +256,14 @@ export class PlayerSystem extends System {
       if (!def) continue;
       const eqSlot = def.equipmentSlot;
       if (eqSlot === EquipmentSlot.WEAPON) {
-        enh.attack += level * 3;
-        enh.magicAttackPercent += level * 2;
+        const s = def?.stats;
+        const isMagicWeapon = (s?.magicAttack && s.magicAttack > 0) || (s?.INT && s.INT > 0) || (s?.SPI && s.SPI > 0);
+        if (!isMagicWeapon) {
+          enh.attack += level * 3;
+        }
+        if (isMagicWeapon) {
+          enh.magicAttackPercent += level * 0.02;
+        }
       } else if (eqSlot === EquipmentSlot.ARMOR || eqSlot === EquipmentSlot.HELMET) {
         enh.defense += level * 3;
         enh.health += level * 15;
@@ -291,10 +304,10 @@ export class PlayerSystem extends System {
     session.stats.maxMana = derived.maxMana + gear.mana;
     session.stats.attack = derived.attack + gear.attack;
     session.stats.defense = derived.defense + gear.defense;
-    session.stats.speed = derived.speed + gear.speed;
+    session.stats.speed = derived.speed;
     session.stats.speedMultiplier = 1 + gear.speed;
     session.stats.magicAttack = Math.floor(derived.magicAttack * (1 + gear.magicAttackPercent));
-    session.stats.critChance = derived.critChance;
+    session.stats.critChance = derived.critChance + gear.criticalChance;
 
     const effective = getEffectiveStats(
       session.stats,
@@ -374,14 +387,43 @@ export class PlayerSystem extends System {
     return true;
   }
 
-  removeItemFromInventory(session: PlayerSession, itemId: string, quantity: number): boolean {
-    const slot = session.inventory.find(s => s.itemId === itemId);
-    if (!slot || slot.quantity < quantity) return false;
+  addItemToInventoryWithMeta(session: PlayerSession, item: InventoryItem): boolean {
+    if (session.inventory.length >= GAME_CONFIG.MAX_INVENTORY_SLOTS) return false;
 
-    slot.quantity -= quantity;
-    if (slot.quantity <= 0) {
-      session.inventory = session.inventory.filter(s => s.itemId !== itemId);
+    const itemDef = ITEM_DATABASE[item.itemId];
+    if (itemDef && itemDef.maxStack > 1 && !item.enhancementLevel) {
+      const existing = session.inventory.find(s => s.itemId === item.itemId);
+      if (existing && existing.quantity + item.quantity <= itemDef.maxStack) {
+        existing.quantity += item.quantity;
+        return true;
+      }
     }
+
+    let emptySlot = -1;
+    for (let i = 0; i < GAME_CONFIG.MAX_INVENTORY_SLOTS; i++) {
+      if (!session.inventory.find(s => s.slot === i)) {
+        emptySlot = i;
+        break;
+      }
+    }
+
+    if (emptySlot === -1) return false;
+
+    session.inventory.push({ ...item, slot: emptySlot, quantity: item.quantity });
+    return true;
+  }
+
+  removeItemFromInventory(session: PlayerSession, itemId: string, quantity: number): boolean {
+    let remaining = quantity;
+    for (const slot of session.inventory) {
+      if (slot.itemId !== itemId || remaining <= 0) continue;
+      const take = Math.min(remaining, slot.quantity);
+      slot.quantity -= take;
+      remaining -= take;
+    }
+    if (remaining > 0) return false;
+    session.inventory = session.inventory.filter(s => s.quantity > 0);
+    session.inventory.forEach((s, i) => { s.slot = i; });
     return true;
   }
 
@@ -400,7 +442,13 @@ export class PlayerSystem extends System {
       this.unequipItem(session, slot);
     }
 
-    session.equipment[slot] = { itemId, quantity: 1, slot: 0 };
+    session.equipment[slot] = {
+      itemId,
+      quantity: 1,
+      slot: 0,
+      enhancementLevel: invSlot.enhancementLevel,
+      enhancementElement: invSlot.enhancementElement,
+    };
     session.inventory = session.inventory.filter(s => s.itemId !== itemId);
 
     this.recalcStats(session);
@@ -411,7 +459,15 @@ export class PlayerSystem extends System {
     const equipped = session.equipment[slot];
     if (!equipped) return false;
 
-    this.addItemToInventory(session, equipped.itemId, 1);
+    const item: InventoryItem = {
+      itemId: equipped.itemId,
+      quantity: 1,
+      slot: 0,
+      enhancementLevel: equipped.enhancementLevel,
+      enhancementElement: equipped.enhancementElement,
+    };
+    const added = this.addItemToInventoryWithMeta(session, item);
+    if (!added) return false;
     session.equipment[slot] = null;
     this.recalcStats(session);
     return true;

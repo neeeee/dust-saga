@@ -8,6 +8,7 @@ import {
   recalculateCategoryTotals, calculateProficiencyGain, ProficiencyGainResult,
   DebuffEffectTable,
   calculateWeaponElementalDamage,
+  getMagicEnhancementBoost,
   calculateDodge,
   calculateAccuracy as calcSharedAccuracy,
   calculateHitChance,
@@ -295,7 +296,9 @@ export class SkillSystem {
       } else if (targetType === SkillTargetType.PARTY) {
         this.applyBuff(session, skill);
       } else if (targetType === SkillTargetType.SELF_OR_TARGET) {
-        this.applyBuff(session, skill);
+        if (!targetId || targetId === session.characterId) {
+          this.applyBuff(session, skill);
+        }
       }
     }
 
@@ -447,7 +450,11 @@ export class SkillSystem {
     };
 
     const steps: string[] = [];
-    steps.push(`basePower=${basePower} ${isMagical ? 'INT' : 'STR'}=${primaryStat}(base${isMagical ? baseStats.INT : baseStats.STR}+alloc${isMagical ? session.statPoints.INT : session.statPoints.STR}) ${isMagical ? 'SPI' : 'DEX'}=${secondaryStat}`);
+    if (isMagical) {
+      steps.push(`basePower=${basePower} magicAttack=${primaryStat}(INT=${session.statPoints.INT + baseStats.INT}) SPI=${secondaryStat}`);
+    } else {
+      steps.push(`basePower=${basePower} STR=${primaryStat}(base${baseStats.STR}+alloc${session.statPoints.STR}) DEX=${secondaryStat}`);
+    }
     steps.push(`raw=${basePower}×(${primaryStat}+${secondaryStat}×0.3)×${attackMultiplier}-${defenseStat}×0.5=${baseDamage}`);
 
     const hits: Array<{ damage: number; isCritical: boolean; elementalDamage?: Array<{ element: string; damage: number }> }> = [];
@@ -462,6 +469,13 @@ export class SkillSystem {
       }
 
       let damage = baseDamage;
+
+      const weaponEnhElement = (session.equipment?.weapon as any)?.enhancementElement;
+      const weaponEnhLevel = (session.equipment?.weapon as any)?.enhancementLevel;
+      const magicBoost = getMagicEnhancementBoost(weaponEnhElement, weaponEnhLevel, skill.damageSubType);
+      if (magicBoost > 1) {
+        damage = Math.floor(damage * magicBoost);
+      }
 
       if (elementalResistMultiplier !== 1) {
         damage = Math.floor(damage * elementalResistMultiplier);
@@ -493,7 +507,9 @@ export class SkillSystem {
         totalSPI,
         totalINT,
         session.stats.level,
-        targetResists
+        targetResists,
+        (session.equipment?.weapon as any)?.enhancementElement,
+        (session.equipment?.weapon as any)?.enhancementLevel
       );
 
       hits.push({

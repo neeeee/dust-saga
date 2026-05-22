@@ -73,7 +73,7 @@ export interface InventoryItem {
   quantity: number;
   slot: number;
   enhancementLevel?: number;
-  enhancementElement?: 'fire' | 'ice' | 'lightning' | 'holy' | 'dark' | 'poison';
+  enhancementElement?: 'fire' | 'ice' | 'lightning' | 'holy' | 'dark' | 'poison' | 'magic_fire' | 'magic_ice' | 'magic_lightning' | 'magic_holy' | 'magic_dark' | 'magic_poison';
 }
 
 export interface Equipment {

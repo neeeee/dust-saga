@@ -18,6 +18,10 @@ export const GROUND_TARGETED_AOE_SKILLS = new Set([
   'Despair Swamp',
   'Ice Tempest',
   'Wasteland',
+  'Holy Rays',
+  'Pestilence',
+  'Dark Frenzy',
+  'Arrow Rain',
 ]);
 
 export const DEFAULT_AOE_RADIUS = 5;
@@ -728,6 +732,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageType: DamageType.PHYSICAL,
             basePower: 1,
             isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 5,
+            pulseCount: 3,
+            pulseInterval: 800,
           },
           "Multi Shot": {
             name: "Multi Shot",
@@ -779,6 +787,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "AOE attack over target (bow), replaces Arrow Rain",
             basePower: 1,
             isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 5,
+            pulseCount: 3,
+            pulseInterval: 800,
           },
           "Arrow Mastery (Passive)": {
             name: "Arrow Mastery (Passive)",
@@ -1557,9 +1569,13 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 60,
             duration: 0,
             isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 7,
             description: "Rain holy beams from above",
             damageSubType: MagicalDamageSubType.HOLY,
             basePower: 6,
+            pulseCount: 5,
+            pulseInterval: 1000,
           },
           "Banish": {
             name: "Banish",
@@ -1754,6 +1770,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             isAOE: true,
             aoeTargetMode: AOETargetMode.GROUND_TARGETED,
             aoeRadius: 6,
+            pulseCount: 5,
+            pulseInterval: 1000,
           },
           "Resist Fire": {
             name: "Resist Fire",
@@ -2153,7 +2171,11 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Deal poison damage to all enemies in range",
             basePower: 3,
             isAOE: true,
-            hasDebuff: true, // hits 3 times in the area. poisons on any of the 3 attack ticks
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 6,
+            pulseCount: 3,
+            pulseInterval: 1000,
+            hasDebuff: true,
             debuffDuration: 10,
           },
           "Equalize (Passive)": {
@@ -2177,9 +2199,12 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageSubType: MagicalDamageSubType.DARK,
             basePower: 5,
             isAOE: true,
-            hasDebuff: true, // weaken: set all hit target elemental resistances to 0.
-            // 50 lightning res -> 0.
-            debuffDuration: 6, // seconds
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 6,
+            pulseCount: 5,
+            pulseInterval: 1000,
+            hasDebuff: true,
+            debuffDuration: 6,
           },
           "Ramkyado": {
             name: "Ramkyado",
@@ -2418,3 +2443,15 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
     ],
   },
 };
+
+export function findSkillDefinition(skillName: string): import('../types/skills').SkillDefinition | null {
+  for (const category of Object.values(CLASS_SKILL_DATA)) {
+    for (const subSkill of category.skills) {
+      if (subSkill.skills[skillName]) {
+        const def = subSkill.skills[skillName];
+        return { ...def, name: skillName };
+      }
+    }
+  }
+  return null;
+}

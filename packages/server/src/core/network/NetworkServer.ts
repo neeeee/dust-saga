@@ -50,16 +50,19 @@ export class NetworkServer {
   private questSys: QuestSystem;
   private state: ServerGameState;
   private tickRate: number = 30;
-  private activePulses: Map<string, {
+
+  private activeAOEZones: Map<string, {
     id: string;
     casterId: string;
     zoneId: string;
     skillName: string;
     position: { x: number; y: number; z: number };
     radius: number;
-    remainingPulses: number;
-    nextPulseAt: number;
     pulseInterval: number;
+    remainingPulses: number;
+    lastPulseAt: number;
+    expiresAt: number;
+    entitiesInside: Map<string, number>;
   }> = new Map();
 
   constructor(httpServer: any) {
@@ -621,6 +624,10 @@ export class NetworkServer {
           this.handleLootPickup(socket, packet.data);
           break;
 
+        case PacketType.ITEM_DROP:
+          this.handleItemDrop(socket, packet.data);
+          break;
+
         case PacketType.QUEST_ACCEPT:
           this.handleQuestAccept(socket, packet.data);
           break;
@@ -848,6 +855,7 @@ export class NetworkServer {
     session.zoneId = char.zone_id || 'starter_zone';
     session.nation = (char.nation as 'varik' | 'pfelstein' | 'latugan' | null) || null;
     session.lastSafeZoneId = char.last_safe_zone_id || session.zoneId;
+    session.gold = char.gold || 100;
 
     if (char.inventory) {
       const parsed = typeof char.inventory === 'string' ? JSON.parse(char.inventory) : char.inventory;
@@ -886,6 +894,7 @@ export class NetworkServer {
         zoneId: session.zoneId,
         inventory: session.inventory,
         equipment: session.equipment,
+        gold: session.gold,
         quests: session.quests,
         statPoints: session.statPoints,
         unspentStatPoints: session.unspentStatPoints,
@@ -934,6 +943,10 @@ export class NetworkServer {
     session.position = data.position;
     if (data.rotation) {
       session.rotation = data.rotation;
+    }
+
+    if (this.activeAOEZones.size > 0) {
+      this.checkEntityAOEEntries(characterId, session.position);
     }
 
     this.broadcastInZone(session.zoneId, {
@@ -1162,8 +1175,6 @@ export class NetworkServer {
         this.applySingleTargetSkillDamage(session, skillName, firstTargetId, result);
       }
     }
-
-    this.registerAOEPulse(session, skillName, aoePosition, aoeRadius, 1000, 1000);
 
     if (result.statusEffects && result.statusEffects.length > 0) {
       if (aoePosition) {
@@ -1721,6 +1732,33 @@ export class NetworkServer {
     }
   }
 
+  private handleItemDrop(socket: Socket, data: any): void {
+    const characterId = this.findCharacterBySocket(socket.id);
+    if (!characterId) return;
+
+    const session = this.state.players.get(characterId);
+    if (!session) return;
+
+    const { itemId, quantity } = data;
+    if (!itemId || quantity <= 0) return;
+
+    const removed = this.playerSys.removeItemFromInventory(session, itemId, quantity);
+    if (removed) {
+      const itemDef = getItem(itemId);
+      const name = itemDef?.name || itemId;
+      this.sendToPlayer(characterId, {
+        type: PacketType.INVENTORY_UPDATE,
+        timestamp: Date.now(),
+        data: { inventory: session.inventory, equipment: session.equipment }
+      });
+      this.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: `Trashed ${name}${quantity > 1 ? ` x${quantity}` : ''}.`, type: 'info' }
+      });
+    }
+  }
+
   private handleEquipItem(socket: Socket, data: any): void {
     const characterId = this.findCharacterBySocket(socket.id);
     if (!characterId) return;
@@ -1769,6 +1807,14 @@ export class NetworkServer {
 
     const session = this.state.players.get(characterId);
     if (!session) return;
+
+    const lootInstance = this.loot.getLootById(data.lootId);
+    if (!lootInstance) return;
+
+    const dx = session.position.x - lootInstance.position.x;
+    const dz = session.position.z - lootInstance.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    if (dist > 5) return;
 
     const lootResult = this.loot.pickupLoot(data.lootId, characterId);
     if (!lootResult) return;
@@ -1912,17 +1958,30 @@ export class NetworkServer {
     const itemDef = getItem(data.itemId);
     if (!itemDef) return;
 
-    const added = this.playerSys.addItemToInventory(session, data.itemId, data.quantity || 1);
+    const qty = data.quantity || 1;
+    const cost = (itemDef.sellPrice || 0) * 2 * qty;
+    if (cost > 0 && session.gold < cost) {
+      this.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: `Not enough gold. Need ${cost}g, have ${session.gold}g.`, type: 'error' } });
+      return;
+    }
+
+    const added = this.playerSys.addItemToInventory(session, data.itemId, qty);
     if (added) {
+      session.gold -= cost;
       this.sendToPlayer(characterId, {
         type: PacketType.INVENTORY_UPDATE,
         timestamp: Date.now(),
-        data: { inventory: session.inventory, equipment: session.equipment }
+        data: { inventory: session.inventory, equipment: session.equipment, gold: session.gold }
       });
       this.sendToPlayer(characterId, {
         type: PacketType.NOTIFICATION,
         timestamp: Date.now(),
-        data: { message: `Purchased ${itemDef.name}`, type: 'success' }
+        data: { message: `Purchased ${itemDef.name}${qty > 1 ? ` x${qty}` : ''} for ${cost}g`, type: 'success' }
+      });
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId, stats: session.stats }
       });
     }
   }
@@ -1935,65 +1994,113 @@ export class NetworkServer {
     if (!session) return;
 
     const { weaponSlot, materialSlots } = data;
-    if (!weaponSlot?.slotIndex && weaponSlot?.slotIndex !== 0) return;
+    if (!weaponSlot?.slotIndex && weaponSlot?.slotIndex !== 0) {
+      this.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: 'No weapon selected.', type: 'error' } });
+      return;
+    }
 
     const weaponItem = session.inventory[weaponSlot.slotIndex];
-    if (!weaponItem) return;
+    if (!weaponItem) {
+      this.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: 'Weapon not found in inventory.', type: 'error' } });
+      return;
+    }
 
     const weaponDef = getItem(weaponItem.itemId);
-    if (!weaponDef) return;
+    if (!weaponDef) {
+      this.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: 'Invalid weapon.', type: 'error' } });
+      return;
+    }
 
     const enhancableTypes: string[] = ['weapon', 'armor', 'helmet', 'boots'];
-    if (!enhancableTypes.includes(weaponDef.type) && !weaponDef.equipmentSlot) return;
+    if (!enhancableTypes.includes(weaponDef.type) && !weaponDef.equipmentSlot) {
+      this.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: 'This item cannot be enhanced.', type: 'error' } });
+      return;
+    }
 
     const currentLevel = weaponItem.enhancementLevel || 0;
-    if (currentLevel >= 10) return;
+    if (currentLevel >= 10) {
+      this.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: 'Enhancement level is already at maximum.', type: 'error' } });
+      return;
+    }
 
     const GEM_ELEMENT_MAP: Record<string, string> = {
       fire_gem: 'fire', ice_gem: 'ice', lightning_gem: 'lightning',
       holy_gem: 'holy', dark_gem: 'dark', poison_gem: 'poison',
+      fire_magic_gem: 'magic_fire', ice_magic_gem: 'magic_ice', lightning_magic_gem: 'magic_lightning',
+      holy_magic_gem: 'magic_holy', dark_magic_gem: 'magic_dark', poison_magic_gem: 'magic_poison',
     };
 
-    let element: string | null = null;
+    let element: string | null = weaponItem.enhancementElement || null;
     const materialSlotArr: Array<{ slotIndex: number } | null> = materialSlots || [];
     const consumedSlots: number[] = [];
 
     for (const mat of materialSlotArr) {
       if (!mat?.slotIndex && mat?.slotIndex !== 0) continue;
       const matItem = session.inventory[mat.slotIndex];
-      if (!matItem) continue;
+      if (!matItem || matItem.quantity <= 0) continue;
       const matDef = getItem(matItem.itemId);
       if (!matDef) continue;
 
       const gemElement = GEM_ELEMENT_MAP[matItem.itemId];
       if (gemElement) {
-        if (!element) {
+        if (element === null) {
           element = gemElement;
         } else if (element !== gemElement) {
+          this.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: 'Cannot mix different element gems.', type: 'error' } });
           return;
         }
         consumedSlots.push(mat.slotIndex);
       }
     }
 
-    if (!element) return;
+    if (!element) {
+      this.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: 'No element gem provided.', type: 'error' } });
+      return;
+    }
+
+    const ENHANCE_FAILURE_CHANCE: number[] = [0, 0, 0, 5, 10, 15, 20, 30, 40, 50];
+    const failChance = currentLevel < ENHANCE_FAILURE_CHANCE.length ? ENHANCE_FAILURE_CHANCE[currentLevel] : 50;
+    if (Math.random() * 100 < failChance) {
+      const sortedSlots = [...consumedSlots].sort((a, b) => b - a);
+      for (const slotIdx of sortedSlots) {
+        const matItem = session.inventory[slotIdx];
+        if (matItem) {
+          matItem.quantity -= 1;
+          if (matItem.quantity <= 0) {
+            session.inventory.splice(slotIdx, 1);
+          }
+        }
+      }
+      session.inventory.forEach((s, i) => { s.slot = i; });
+      this.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: `Enhancement failed! Level remains at +${currentLevel}.`, type: 'error' } });
+      this.sendToPlayer(characterId, {
+        type: PacketType.ENHANCEMENT_RESULT,
+        timestamp: Date.now(),
+        data: { success: false, weaponSlotIndex: weaponSlot.slotIndex, enhancementLevel: currentLevel, enhancementElement: element }
+      });
+      this.sendToPlayer(characterId, {
+        type: PacketType.INVENTORY_UPDATE,
+        timestamp: Date.now(),
+        data: { inventory: session.inventory, equipment: session.equipment }
+      });
+      return;
+    }
 
     const newLevel = currentLevel + 1;
     weaponItem.enhancementLevel = newLevel;
     weaponItem.enhancementElement = element as any;
 
-    for (const slotIdx of consumedSlots) {
+    const sortedSlots = [...consumedSlots].sort((a, b) => b - a);
+    for (const slotIdx of sortedSlots) {
       const matItem = session.inventory[slotIdx];
       if (matItem) {
         matItem.quantity -= 1;
         if (matItem.quantity <= 0) {
           session.inventory.splice(slotIdx, 1);
-          for (let i = 0; i < session.inventory.length; i++) {
-            session.inventory[i].slot = i;
-          }
         }
       }
     }
+    session.inventory.forEach((s, i) => { s.slot = i; });
 
     this.playerSys.recalcStats(session);
 
@@ -2479,11 +2586,12 @@ export class NetworkServer {
           lastSafeZoneId: session.lastSafeZoneId,
           inventory: session.inventory,
           equipment: session.equipment,
+          gold: session.gold,
         }).catch(err => console.error('Failed to save character on disconnect:', err));
 
-        for (const [pid, pulse] of this.activePulses) {
-          if (pulse.casterId === characterId) {
-            this.activePulses.delete(pid);
+        for (const [zoneId, zone] of this.activeAOEZones) {
+          if (zone.casterId === characterId) {
+            this.removeAOEZone(zoneId, zone.zoneId);
           }
         }
 
@@ -3091,25 +3199,7 @@ export class NetworkServer {
 
     // Tick active pulsing AOEs
     const now2 = Date.now();
-    const pulseEntries = [...this.activePulses.entries()];
-    for (const [pulseId, pulse] of pulseEntries) {
-      if (now2 < pulse.nextPulseAt) continue;
-
-      const caster = this.state.players.get(pulse.casterId);
-      if (!caster || caster.isDead) {
-        this.activePulses.delete(pulseId);
-        continue;
-      }
-
-      pulse.nextPulseAt = now2 + pulse.pulseInterval;
-      pulse.remainingPulses--;
-
-      this.applyAOEDamageToTargets(caster, pulse.skillName, pulse.position, pulse.radius);
-
-      if (pulse.remainingPulses <= 0) {
-        this.activePulses.delete(pulseId);
-      }
-    }
+    this.tickAOEZones(now2);
 
     this.spawnMgr.getAllEnemies().forEach((enemy, enemyId) => {
       if (enemy.state === 'dead') return;
@@ -3174,6 +3264,13 @@ export class NetworkServer {
       });
 
       this.ai.updateEnemies(this.spawnMgr.getEnemiesInZone(zoneId), zonePlayers, 1 / this.tickRate);
+    }
+
+    if (this.activeAOEZones.size > 0) {
+      for (const [enemyId, enemy] of this.spawnMgr.getAllEnemies()) {
+        if (enemy.state === 'dead') continue;
+        this.checkEntityAOEEntries(enemyId, enemy.position);
+      }
     }
 
     const updates: Map<string, any[]> = new Map();
@@ -3276,6 +3373,7 @@ export class NetworkServer {
           lastSafeZoneId: session.lastSafeZoneId,
           inventory: session.inventory,
           equipment: session.equipment,
+          gold: session.gold,
       }));
     });
     await Promise.all(saves);
@@ -3630,31 +3728,6 @@ export class NetworkServer {
     }
   }
 
-  private registerAOEPulse(
-    session: PlayerSession,
-    skillName: string,
-    aoePosition: { x: number; y: number; z: number },
-    aoeRadius: number,
-    pulseInterval: number,
-    defaultPulseInterval: number
-  ): void {
-    const skill = this.skillSys.findSkillDefinition(skillName);
-    if (!skill || !skill.pulseCount || skill.pulseCount <= 1) return;
-
-    const pulseId = uuidv4();
-    this.activePulses.set(pulseId, {
-      id: pulseId,
-      casterId: session.characterId,
-      zoneId: session.zoneId,
-      skillName,
-      position: aoePosition,
-      radius: aoeRadius,
-      remainingPulses: skill.pulseCount - 1,
-      nextPulseAt: Date.now() + (skill.pulseInterval || defaultPulseInterval),
-      pulseInterval: skill.pulseInterval || defaultPulseInterval,
-    });
-  }
-
   private findClosestEntityToPosition(
     session: PlayerSession,
     pos: { x: number; y: number; z: number },
@@ -3717,6 +3790,165 @@ export class NetworkServer {
     }
 
     return results;
+  }
+
+  private spawnAOEZone(session: PlayerSession, skillName: string, position: { x: number; y: number; z: number }, radius: number): void {
+    const skill = this.skillSys.findSkillDefinition(skillName);
+    const totalPulses = skill?.pulseCount || 1;
+    const pulseInterval = skill?.pulseInterval || 1000;
+    const lastPulseTime = Date.now() + pulseInterval * (totalPulses - 1);
+
+    const zoneId = uuidv4();
+    const zone = {
+      id: zoneId,
+      casterId: session.characterId,
+      zoneId: session.zoneId,
+      skillName,
+      position,
+      radius,
+      pulseInterval,
+      remainingPulses: totalPulses,
+      lastPulseAt: 0,
+      expiresAt: lastPulseTime + 1500,
+      entitiesInside: new Map<string, number>(),
+    };
+    this.activeAOEZones.set(zoneId, zone);
+
+    this.broadcastInZone(session.zoneId, {
+      type: PacketType.AOE_ENTITY,
+      timestamp: Date.now(),
+      data: {
+        id: zoneId,
+        type: 'aoe',
+        position,
+        rotation: { x: 0, y: 0, z: 0, w: 1 },
+        data: { skillName, radius, expiresAt: zone.expiresAt },
+      }
+    });
+  }
+
+  private removeAOEZone(zoneId: string, zoneId_value: string): void {
+    const zone = this.activeAOEZones.get(zoneId);
+    if (!zone) return;
+    this.activeAOEZones.delete(zoneId);
+
+    this.broadcastInZone(zone.zoneId, {
+      type: PacketType.AOE_DESPAWN,
+      timestamp: Date.now(),
+      data: { entityId: zoneId }
+    });
+  }
+
+  private tickAOEZones(now: number): void {
+    const entries = [...this.activeAOEZones.entries()];
+    for (const [zoneId, zone] of entries) {
+      if (now >= zone.expiresAt || zone.remainingPulses <= 0) {
+        this.removeAOEZone(zoneId, zone.zoneId);
+        continue;
+      }
+
+      const caster = this.state.players.get(zone.casterId);
+      if (!caster || caster.isDead) {
+        this.removeAOEZone(zoneId, zone.zoneId);
+        continue;
+      }
+
+      if (zone.remainingPulses <= 0) continue;
+
+      const lastPulse = zone.lastPulseAt || 0;
+      if (now - lastPulse < zone.pulseInterval) continue;
+
+      this.applyAOEDamageToTargets(caster, zone.skillName, zone.position, zone.radius);
+      zone.lastPulseAt = now;
+      zone.remainingPulses--;
+    }
+  }
+
+  private checkEntityAOEEntries(entityId: string, position: { x: number; y: number; z: number }): void {
+    for (const [zoneId, zone] of this.activeAOEZones) {
+      const dx = position.x - zone.position.x;
+      const dz = position.z - zone.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      const wasInside = zone.entitiesInside.has(entityId);
+      const isInside = dist <= zone.radius;
+
+      if (isInside && !wasInside) {
+        zone.entitiesInside.set(entityId, Date.now());
+        const caster = this.state.players.get(zone.casterId);
+        if (caster) {
+          this.damageEntityInAOE(caster, zone.skillName, entityId, zone.position, zone.radius);
+        }
+      } else if (!isInside && wasInside) {
+        zone.entitiesInside.delete(entityId);
+      }
+    }
+  }
+
+  private damageEntityInAOE(
+    session: PlayerSession,
+    skillName: string,
+    targetId: string,
+    aoePosition: { x: number; y: number; z: number },
+    aoeRadius: number
+  ): void {
+    const enemy = this.spawnMgr.getEnemy(targetId);
+    if (enemy && enemy.state !== 'dead') {
+      const def = getEnemyDefinition(enemy.enemyType);
+      const targetStats = {
+        defense: this.getEnemyEffectiveDefense(enemy),
+        magicDefense: Math.floor((def?.defense || 0) * 0.3),
+        health: enemy.health,
+        level: enemy.level,
+        dodge: Math.floor(enemy.level * 0.5),
+        fireResist: def?.fireResist || 0,
+        iceResist: def?.iceResist || 0,
+        lightningResist: def?.lightningResist || 0,
+        darkResist: def?.darkResist || 0,
+        holyResist: def?.holyResist || 0,
+        poisonResist: def?.poisonResist || 0,
+      };
+      const result = this.skillSys.calculateAOEDamage(session, skillName, targetId, () => targetStats);
+      if (result?.damage) {
+        const { died } = this.damageEnemy(enemy, result.damage);
+        this.broadcastInZone(session.zoneId, {
+          type: PacketType.DAMAGE,
+          timestamp: Date.now(),
+          data: {
+            attackerId: session.characterId,
+            targetId,
+            damage: result.damage,
+            isCritical: result.isCritical || false,
+            damageType: result.damageType || 'physical',
+            skillName,
+            elementalDamage: result.elementalDamage,
+          }
+        });
+        if (!died) {
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { entityId: targetId, health: enemy.health, maxHealth: enemy.maxHealth }
+          });
+        } else {
+          enemy.state = 'dead';
+          enemy.deathTime = Date.now();
+          const enemyDef = getEnemyDefinition(enemy.enemyType);
+          if (enemyDef) {
+            this.playerSys.grantExperience(session, enemyDef.experience);
+          }
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.DEATH,
+            timestamp: Date.now(),
+            data: { entityId: targetId, killerId: session.characterId }
+          });
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.ENTITY_DESPAWN,
+            timestamp: Date.now(),
+            data: { entityId: targetId }
+          });
+        }
+      }
+    }
   }
 
   private handleGroundAOESkillUse(
@@ -3852,7 +4084,7 @@ export class NetworkServer {
       this.applyAOEDamageToTargets(session, skillName, aoePosition, aoeRadius, result);
     }
 
-    this.registerAOEPulse(session, skillName, aoePosition, aoeRadius, 1000, 1000);
+    this.spawnAOEZone(session, skillName, aoePosition, aoeRadius);
 
     if (result.statusEffects && result.statusEffects.length > 0) {
       const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
@@ -3983,7 +4215,7 @@ export class NetworkServer {
       this.applyAOEDamageToTargets(session, skillName, aoePosition, aoeRadius, result);
     }
 
-    this.registerAOEPulse(session, skillName, aoePosition, aoeRadius, 1000, 1000);
+    this.spawnAOEZone(session, skillName, aoePosition, aoeRadius);
 
     if (result.statusEffects && result.statusEffects.length > 0) {
       const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);

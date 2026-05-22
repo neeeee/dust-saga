@@ -21,23 +21,39 @@ export function calculateWeaponElementalDamage(
   attackerSPI: number,
   attackerINT: number,
   attackerLevel: number,
-  targetResists: Record<string, number | undefined>
+  targetResists: Record<string, number | undefined>,
+  enhancementElement?: string | null,
+  enhancementLevel?: number
 ): ElementalDamageLine[] {
   const lines: ElementalDamageLine[] = [];
 
-  if (weaponItemId) {
-    const weaponDef = ITEM_DATABASE[weaponItemId];
-    if (weaponDef?.stats.weaponElement && weaponDef.stats.weaponElementPower) {
-      const el = weaponDef.stats.weaponElement;
-      const basePower = weaponDef.stats.weaponElementPower;
-      let damage = Math.floor(
-        basePower * (attackerSPI * 0.3 + attackerINT * 0.2 + attackerLevel * 0.2)
-      );
-      damage = applyResistance(damage, el, targetResists);
-      damage = Math.max(1, Math.floor(damage * (0.9 + Math.random() * 0.2)));
-      if (damage > 0) {
-        lines.push({ element: el, damage });
-      }
+  const resolvedElement = enhancementElement || null;
+  const isMagicEnhancement = resolvedElement?.startsWith('magic_') || false;
+  const hasBaseElement = weaponItemId && ITEM_DATABASE[weaponItemId]?.stats.weaponElement && ITEM_DATABASE[weaponItemId]?.stats.weaponElementPower;
+
+  if (hasBaseElement && !isMagicEnhancement) {
+    const weaponDef = ITEM_DATABASE[weaponItemId!];
+    const el = weaponDef.stats.weaponElement!;
+    const basePower = weaponDef.stats.weaponElementPower!;
+    let damage = Math.floor(
+      basePower * (attackerSPI * 0.3 + attackerINT * 0.2 + attackerLevel * 0.2)
+    );
+    damage = applyResistance(damage, el, targetResists);
+    damage = Math.max(1, Math.floor(damage * (0.9 + Math.random() * 0.2)));
+    if (damage > 0) {
+      lines.push({ element: el, damage });
+    }
+  }
+
+  if (resolvedElement && !isMagicEnhancement && (enhancementLevel || 0) > 0) {
+    const basePower = 1 + (enhancementLevel || 0) * 0.5;
+    let damage = Math.floor(
+      basePower * (attackerSPI * 0.3 + attackerINT * 0.2 + attackerLevel * 0.2)
+    );
+    damage = applyResistance(damage, resolvedElement, targetResists);
+    damage = Math.max(1, Math.floor(damage * (0.9 + Math.random() * 0.2)));
+    if (damage > 0) {
+      lines.push({ element: resolvedElement, damage });
     }
   }
 
@@ -53,6 +69,24 @@ export function calculateWeaponElementalDamage(
   }
 
   return lines;
+}
+
+export function getMagicEnhancementElement(enhancementElement?: string | null): string | null {
+  if (!enhancementElement?.startsWith('magic_')) return null;
+  return enhancementElement.slice(6);
+}
+
+export function getMagicEnhancementBoost(
+  enhancementElement: string | null | undefined,
+  enhancementLevel: number | undefined,
+  spellElement: string | null | undefined
+): number {
+  if (!enhancementElement?.startsWith('magic_')) return 0;
+  const enhElement = enhancementElement.slice(6);
+  if (spellElement && enhElement === spellElement) {
+    return 1 + (enhancementLevel || 0) * 0.08;
+  }
+  return 0;
 }
 
 function applyResistance(

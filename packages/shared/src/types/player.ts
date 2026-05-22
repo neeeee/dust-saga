@@ -54,6 +54,7 @@ export interface PlayerSession {
   statusEffects: StatusEffect[];
   statBreakdown: StatBonusBreakdown | null;
   inventory: InventoryItem[];
+  gold: number;
   equipment: {
     weapon: any | null;
     armor: any | null;
