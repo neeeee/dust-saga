@@ -284,6 +284,14 @@ export function getEffectiveStats(
   return { attack, defense, magicAttack, maxHealth, maxMana, speed, physicalDamageReduction, dodgeBonus, accuracyBonus, castTimeReduction, attackSpeedMultiplier, damageTakenMultiplier, castSpeedPenalty };
 }
 
+export interface EnhancementBonus {
+  attack: number;
+  defense: number;
+  health: number;
+  magicAttackPercent: number;
+  dodge: number;
+}
+
 export interface StatBonusBreakdown {
   gear: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number };
   buffs: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number };
@@ -300,6 +308,7 @@ export interface StatBonusBreakdown {
     ailmentResist: number;
     disorderResist: number;
   };
+  enhancement?: EnhancementBonus;
   totalAccuracy?: number;
   totalDodge?: number;
 }

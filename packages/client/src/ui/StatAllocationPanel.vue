@@ -69,6 +69,32 @@
         </div>
       </div>
 
+      <div class="enhancement-stats" v-if="hasEnhancement">
+        <h3>Enhancement Bonuses</h3>
+        <div class="enhance-grid">
+          <div class="enhance-item" v-if="enhBonuses.attack > 0">
+            <span class="enhance-label">ATK</span>
+            <span class="enhance-value">+{{ enhBonuses.attack }}</span>
+          </div>
+          <div class="enhance-item" v-if="enhBonuses.defense > 0">
+            <span class="enhance-label">DEF</span>
+            <span class="enhance-value">+{{ enhBonuses.defense }}</span>
+          </div>
+          <div class="enhance-item" v-if="enhBonuses.health > 0">
+            <span class="enhance-label">HP</span>
+            <span class="enhance-value">+{{ enhBonuses.health }}</span>
+          </div>
+          <div class="enhance-item" v-if="enhBonuses.magicAttackPercent > 0">
+            <span class="enhance-label">MATK</span>
+            <span class="enhance-value">+{{ enhBonuses.magicAttackPercent }}%</span>
+          </div>
+          <div class="enhance-item" v-if="enhBonuses.dodge > 0">
+            <span class="enhance-label">Dodge</span>
+            <span class="enhance-value">+{{ enhBonuses.dodge }}</span>
+          </div>
+        </div>
+      </div>
+
       <div class="resistances">
         <h3>Elemental Resistances</h3>
         <div class="resist-grid">
@@ -317,6 +343,22 @@ const combatStats = computed(() => {
     dodge: props.statBreakdown?.totalDodge ?? gc?.dodge ?? 0,
     attackSpeed: gc?.attackSpeed || 0,
   };
+});
+
+const enhBonuses = computed(() => {
+  const e = props.statBreakdown?.enhancement;
+  return {
+    attack: e?.attack || 0,
+    defense: e?.defense || 0,
+    health: e?.health || 0,
+    magicAttackPercent: e?.magicAttackPercent || 0,
+    dodge: e?.dodge || 0,
+  };
+});
+
+const hasEnhancement = computed(() => {
+  const e = enhBonuses.value;
+  return e.attack > 0 || e.defense > 0 || e.health > 0 || e.magicAttackPercent > 0 || e.dodge > 0;
 });
 
 const resistances = computed(() => {
@@ -653,6 +695,45 @@ onUnmounted(() => {
 }
 
 .combat-value {
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.enhancement-stats {
+  margin-bottom: 1rem;
+}
+
+.enhancement-stats h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.enhance-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+}
+
+.enhance-item {
+  background: rgba(255, 183, 77, 0.1);
+  border: 1px solid rgba(255, 183, 77, 0.2);
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.enhance-label {
+  color: #ffb74d;
+  font-size: 0.75rem;
+}
+
+.enhance-value {
+  color: #ffe0b2;
   font-size: 0.8rem;
   font-weight: bold;
 }

@@ -58,6 +58,21 @@ export class PlayerSystem extends System {
       if (s.magicAttack) bonuses.magicAttackPercent += s.magicAttack;
       if (s.ailmentResist) bonuses.ailmentResist += s.ailmentResist;
       if (s.disorderResist) bonuses.disorderResist += s.disorderResist;
+
+      const enhanceLevel = slot.enhancementLevel || 0;
+      if (enhanceLevel > 0) {
+        const eqSlot = def.equipmentSlot;
+        if (eqSlot === EquipmentSlot.WEAPON) {
+          bonuses.attack += enhanceLevel * 3;
+          bonuses.magicAttackPercent += enhanceLevel * 2;
+        } else if (eqSlot === EquipmentSlot.ARMOR || eqSlot === EquipmentSlot.HELMET) {
+          bonuses.defense += enhanceLevel * 3;
+          bonuses.health += enhanceLevel * 15;
+        } else if (eqSlot === EquipmentSlot.BOOTS) {
+          bonuses.defense += enhanceLevel * 2;
+          bonuses.dodge += enhanceLevel * 1;
+        }
+      }
     }
     return bonuses;
   }
@@ -224,6 +239,29 @@ export class PlayerSystem extends System {
     return true;
   }
 
+  private getEnhancementBonuses(session: PlayerSession) {
+    const enh = { attack: 0, defense: 0, health: 0, magicAttackPercent: 0, dodge: 0 };
+    for (const slot of Object.values(session.equipment)) {
+      if (!slot) continue;
+      const level = slot.enhancementLevel || 0;
+      if (level <= 0) continue;
+      const def = ITEM_DATABASE[slot.itemId];
+      if (!def) continue;
+      const eqSlot = def.equipmentSlot;
+      if (eqSlot === EquipmentSlot.WEAPON) {
+        enh.attack += level * 3;
+        enh.magicAttackPercent += level * 2;
+      } else if (eqSlot === EquipmentSlot.ARMOR || eqSlot === EquipmentSlot.HELMET) {
+        enh.defense += level * 3;
+        enh.health += level * 15;
+      } else if (eqSlot === EquipmentSlot.BOOTS) {
+        enh.defense += level * 2;
+        enh.dodge += level * 1;
+      }
+    }
+    return enh;
+  }
+
   recalcStats(session: PlayerSession): void {
     const gear = this.getGearBonuses(session);
 
@@ -293,6 +331,9 @@ export class PlayerSystem extends System {
     }
 
     session.statBreakdown = computeStatBreakdown(session.statPoints, session.statusEffects || [], { STA, STR, AGI, DEX, SPI, INT }, { accuracy, dodge, attackSpeed, fireResist: fireResist + buffFireResist, iceResist: iceResist + buffIceResist, lightningResist: lightningResist + buffLightningResist, poisonResist: poisonResist + buffPoisonResist, darkResist: darkResist + buffDarkResist, holyResist: holyResist + buffHolyResist, ailmentResist, disorderResist });
+
+    const enhBonuses = this.getEnhancementBonuses(session);
+    session.statBreakdown.enhancement = enhBonuses;
 
     const baseStats = session.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
     const totalAgi = (session.statPoints.AGI || 0) + baseStats.AGI + AGI + (session.statBreakdown.buffs?.AGI || 0);
