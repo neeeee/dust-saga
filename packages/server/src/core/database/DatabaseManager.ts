@@ -175,7 +175,7 @@ export class DatabaseManager {
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS nation VARCHAR(20)`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS last_safe_zone_id VARCHAR(50) DEFAULT 'starter_zone'`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS inventory JSONB DEFAULT '[]'`,
-      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS equipment JSONB DEFAULT '{"weapon":null,"armor":null,"helmet":null,"boots":null,"accessory":null}'`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS equipment JSONB DEFAULT '{"weapon":null,"armor":null,"helmet":null,"boots":null,"gloves":null,"legs":null,"shield":null,"earring_1":null,"earring_2":null,"necklace":null,"belt":null,"ring_1":null,"ring_2":null}'`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS gold INTEGER DEFAULT 100`,
     ];
 

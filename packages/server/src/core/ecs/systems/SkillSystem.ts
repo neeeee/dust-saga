@@ -203,11 +203,7 @@ export class SkillSystem {
 
     const targetType = SKILL_TARGET_RULES[skillName];
     if (targetType) {
-      if (targetType === SkillTargetType.SELF) {
-        if (targetId !== null && targetId !== session.characterId) {
-          return { canUse: false, error: 'self_only' };
-        }
-      } else if (targetType === SkillTargetType.OTHER_ONLY) {
+      if (targetType === SkillTargetType.OTHER_ONLY) {
         if (!targetId) {
           return { canUse: false, error: 'no_target' };
         }
@@ -234,7 +230,7 @@ export class SkillSystem {
       return { started: true, castTime: 0 };
     }
 
-    const castSpd = 100 + Math.floor(session.statPoints.DEX / 10) * 5;
+    const castSpd = session.stats.castSpeed || 100;
 
     const effective = getEffectiveStats(
       session.stats,
@@ -296,9 +292,7 @@ export class SkillSystem {
       } else if (targetType === SkillTargetType.PARTY) {
         this.applyBuff(session, skill);
       } else if (targetType === SkillTargetType.SELF_OR_TARGET) {
-        if (!targetId || targetId === session.characterId) {
-          this.applyBuff(session, skill);
-        }
+        this.applyBuff(session, skill);
       }
     }
 

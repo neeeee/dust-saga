@@ -16,6 +16,7 @@ export interface PlayerStats {
   speedMultiplier: number;
   magicAttack: number;
   critChance: number;
+  castSpeed: number;
   level: number;
   experience: number;
   experienceToNext: number;
@@ -60,7 +61,15 @@ export interface PlayerSession {
     armor: any | null;
     helmet: any | null;
     boots: any | null;
-    accessory: any | null;
+    gloves: any | null;
+    legs: any | null;
+    shield: any | null;
+    earring_1: any | null;
+    earring_2: any | null;
+    necklace: any | null;
+    belt: any | null;
+    ring_1: any | null;
+    ring_2: any | null;
   };
   quests: Array<{
     questId: string;

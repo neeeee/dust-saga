@@ -3,6 +3,13 @@ export enum ItemType {
   ARMOR = 'armor',
   HELMET = 'helmet',
   BOOTS = 'boots',
+  GLOVES = 'gloves',
+  LEGS = 'legs',
+  SHIELD = 'shield',
+  EARRING = 'earring',
+  NECKLACE = 'necklace',
+  BELT = 'belt',
+  RING = 'ring',
   ACCESSORY = 'accessory',
   CONSUMABLE = 'consumable',
   MATERIAL = 'material',
@@ -22,7 +29,15 @@ export enum EquipmentSlot {
   ARMOR = 'armor',
   HELMET = 'helmet',
   BOOTS = 'boots',
-  ACCESSORY = 'accessory'
+  GLOVES = 'gloves',
+  LEGS = 'legs',
+  SHIELD = 'shield',
+  EARRING_1 = 'earring_1',
+  EARRING_2 = 'earring_2',
+  NECKLACE = 'necklace',
+  BELT = 'belt',
+  RING_1 = 'ring_1',
+  RING_2 = 'ring_2'
 }
 
 export interface ItemStats {
@@ -42,6 +57,7 @@ export interface ItemStats {
   accuracy?: number;
   dodge?: number;
   attackSpeed?: number;
+  castSpeed?: number;
   fireResist?: number;
   iceResist?: number;
   lightningResist?: number;
@@ -81,7 +97,42 @@ export interface Equipment {
   armor: InventoryItem | null;
   helmet: InventoryItem | null;
   boots: InventoryItem | null;
-  accessory: InventoryItem | null;
+  gloves: InventoryItem | null;
+  legs: InventoryItem | null;
+  shield: InventoryItem | null;
+  earring_1: InventoryItem | null;
+  earring_2: InventoryItem | null;
+  necklace: InventoryItem | null;
+  belt: InventoryItem | null;
+  ring_1: InventoryItem | null;
+  ring_2: InventoryItem | null;
+}
+
+export const DEFAULT_EQUIPMENT: Equipment = {
+  weapon: null,
+  armor: null,
+  helmet: null,
+  boots: null,
+  gloves: null,
+  legs: null,
+  shield: null,
+  earring_1: null,
+  earring_2: null,
+  necklace: null,
+  belt: null,
+  ring_1: null,
+  ring_2: null,
+};
+
+export function normalizeEquipment(equipment: any): Equipment {
+  if (!equipment) return { ...DEFAULT_EQUIPMENT };
+  const norm = { ...DEFAULT_EQUIPMENT };
+  for (const key of Object.keys(DEFAULT_EQUIPMENT) as (keyof Equipment)[]) {
+    if (equipment[key] !== undefined && equipment[key] !== null) {
+      norm[key] = equipment[key];
+    }
+  }
+  return norm;
 }
 
 export interface LootDrop {

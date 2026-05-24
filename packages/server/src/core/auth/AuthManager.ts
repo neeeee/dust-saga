@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseManager } from '../database/DatabaseManager';
-import { createDefaultStatPoints, createDefaultSkillProficiencies, createDefaultSkillAdeptness, getDesignJobId } from '@dust-saga/shared';
+import { createDefaultStatPoints, createDefaultSkillProficiencies, createDefaultSkillAdeptness, getDesignJobId, DEFAULT_EQUIPMENT } from '@dust-saga/shared';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dust-saga-secret-key-change-in-production';
 const JWT_EXPIRY = '24h';
@@ -321,7 +321,7 @@ export class AuthManager {
           data.nation || null,
           data.lastSafeZoneId || null,
           JSON.stringify(data.inventory || []),
-          JSON.stringify(data.equipment || { weapon: null, armor: null, helmet: null, boots: null, accessory: null }),
+          JSON.stringify(data.equipment || { ...DEFAULT_EQUIPMENT }),
           data.gold ?? 100,
         ]
       );

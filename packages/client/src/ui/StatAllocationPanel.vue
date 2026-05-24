@@ -63,8 +63,12 @@
             <span class="combat-value">{{ combatStats.dodge }}</span>
           </div>
           <div class="combat-item">
-            <span class="combat-label">Atk Speed</span>
+            <span class="combat-label">Atk Spd</span>
             <span class="combat-value">{{ formatPercent(combatStats.attackSpeed) }}</span>
+          </div>
+          <div class="combat-item">
+            <span class="combat-label">Cast Spd</span>
+            <span class="combat-value">{{ formatPercent(combatStats.castSpeed) }}</span>
           </div>
         </div>
       </div>
@@ -302,14 +306,21 @@ const previewDerived = computed(() => {
   return calculateDerivedStats(props.race as Race, props.jobId as JobId, props.stats?.level || 1, previewStatPoints);
 });
 
-const derivedList = computed(() => [
-  { label: 'HP', current: currentDerived.value.maxHealth, preview: previewDerived.value.maxHealth },
-  { label: 'MP', current: currentDerived.value.maxMana, preview: previewDerived.value.maxMana },
-  { label: 'ATK', current: currentDerived.value.attack, preview: previewDerived.value.attack },
-  { label: 'DEF', current: currentDerived.value.defense, preview: previewDerived.value.defense },
-  { label: 'CRIT', current: currentDerived.value.critChance + '%', preview: previewDerived.value.critChance + '%' },
-  { label: 'MATK', current: currentDerived.value.magicAttack, preview: previewDerived.value.magicAttack },
-]);
+const derivedList = computed(() => {
+  const castSpeedCurrent = (props.stats?.castSpeed ?? 100) - 100;
+  const extraDex = Object.values(pendingPoints).reduce((s, v) => s + v, 0);
+  const dexNow = (props.statPoints?.DEX || 0) + getBase('DEX');
+  const castSpeedPreview = 100 + Math.floor((dexNow + extraDex) / 10) * 5 - 100;
+  return [
+    { label: 'HP', current: currentDerived.value.maxHealth, preview: previewDerived.value.maxHealth },
+    { label: 'MP', current: currentDerived.value.maxMana, preview: previewDerived.value.maxMana },
+    { label: 'ATK', current: currentDerived.value.attack, preview: previewDerived.value.attack },
+    { label: 'DEF', current: currentDerived.value.defense, preview: previewDerived.value.defense },
+    { label: 'CRIT', current: currentDerived.value.critChance + '%', preview: previewDerived.value.critChance + '%' },
+    { label: 'MATK', current: currentDerived.value.magicAttack, preview: previewDerived.value.magicAttack },
+    { label: 'CSPD', current: '+' + castSpeedCurrent + '%', preview: '+' + castSpeedPreview + '%' },
+  ];
+});
 
 function handleConfirm(): void {
   if (!hasPending.value) return;
@@ -342,6 +353,7 @@ const combatStats = computed(() => {
     accuracy: props.statBreakdown?.totalAccuracy ?? gc?.accuracy ?? 0,
     dodge: props.statBreakdown?.totalDodge ?? gc?.dodge ?? 0,
     attackSpeed: gc?.attackSpeed || 0,
+    castSpeed: props.stats?.castSpeed ?? 100,
   };
 });
 

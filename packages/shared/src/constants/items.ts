@@ -124,26 +124,38 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
   'copper_ring': {
     id: 'copper_ring',
     name: 'Copper Ring',
-    type: ItemType.ACCESSORY,
+    type: ItemType.RING,
     rarity: ItemRarity.COMMON,
     stats: { health: 5, mana: 5 },
     description: 'A simple copper ring.',
     maxStack: 1,
     sellPrice: 10,
     requiredLevel: 1,
-    equipmentSlot: EquipmentSlot.ACCESSORY
+    equipmentSlot: EquipmentSlot.RING_1
   },
   'flame_amulet': {
     id: 'flame_amulet',
     name: 'Flame Amulet',
-    type: ItemType.ACCESSORY,
+    type: ItemType.NECKLACE,
     rarity: ItemRarity.RARE,
     stats: { INT: 3, fireResist: 15 },
     description: 'An amulet imbued with fire energy. +15 Fire Resist, +3 INT.',
     maxStack: 1,
     sellPrice: 75,
     requiredLevel: 8,
-    equipmentSlot: EquipmentSlot.ACCESSORY
+    equipmentSlot: EquipmentSlot.NECKLACE
+  },
+  'mana_belt': {
+    id: 'mana_belt',
+    name: 'Mana Belt',
+    type: ItemType.BELT,
+    rarity: ItemRarity.RARE,
+    stats: { INT: 1, mana: 100 },
+    description: 'A magician\'s best friend. +1 INT, MP +100.',
+    maxStack: 1,
+    sellPrice: 75,
+    requiredLevel: 8,
+    equipmentSlot: EquipmentSlot.BELT
   },
   'shadow_cloak': {
     id: 'shadow_cloak',
@@ -220,14 +232,14 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
   'dragonscale_ring': {
     id: 'dragonscale_ring',
     name: 'Dragonscale Ring',
-    type: ItemType.ACCESSORY,
+    type: ItemType.RING,
     rarity: ItemRarity.LEGENDARY,
     stats: { health: 30, mana: 20, fireResist: 25, iceResist: 25, lightningResist: 25, darkResist: 25, poisonResist: 25 },
     description: 'A ring forged from dragon scales. +25 All Resistances.',
     maxStack: 1,
     sellPrice: 500,
     requiredLevel: 20,
-    equipmentSlot: EquipmentSlot.ACCESSORY
+    equipmentSlot: EquipmentSlot.RING_1
   },
   'health_potion': {
     id: 'health_potion',
@@ -440,13 +452,49 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     requiredLevel: 25,
     equipmentSlot: EquipmentSlot.ARMOR
   },
+  'example_gloves': {
+    id: 'example_gloves',
+    name: 'Swift Gloves',
+    type: ItemType.GLOVES,
+    rarity: ItemRarity.UNCOMMON,
+    stats: { defense: 3, castSpeed: 0.03 },
+    description: 'Light gloves that quicken the hands. +3% Cast Speed.',
+    maxStack: 1,
+    sellPrice: 20,
+    requiredLevel: 5,
+    equipmentSlot: EquipmentSlot.GLOVES
+  },
+  'eternal_gloves': {
+    id: 'eternal_gloves',
+    name: 'Eternal Gloves',
+    type: ItemType.GLOVES,
+    rarity: ItemRarity.LEGENDARY,
+    stats: { defense: 7, magicAttack: 0.02, speed: 0.10, health: 50, INT: 2, castSpeed: 0.03 },
+    description: 'Gloves forged from eternal flame. +5% MATK, +10% Speed, +3% Cast Speed, +20 Defense, +50 HP, +4 INT.',
+    maxStack: 1,
+    sellPrice: 800,
+    requiredLevel: 25,
+    equipmentSlot: EquipmentSlot.GLOVES
+  },
   'eternal_legs': {
     id: 'eternal_legs',
     name: 'Eternal Legs',
-    type: ItemType.BOOTS,
+    type: ItemType.LEGS,
     rarity: ItemRarity.LEGENDARY,
     stats: { defense: 20, magicAttack: 0.05, speed: 0.10, health: 50, INT: 4 },
     description: 'Leggings forged from eternal flame. +5% MATK, +10% Speed, +20 Defense, +50 HP, +4 INT.',
+    maxStack: 1,
+    sellPrice: 800,
+    requiredLevel: 25,
+    equipmentSlot: EquipmentSlot.LEGS
+  },
+  'eternal_boots': {
+    id: 'eternal_boots',
+    name: 'Eternal Boots',
+    type: ItemType.BOOTS,
+    rarity: ItemRarity.LEGENDARY,
+    stats: { defense: 20, magicAttack: 0.05, speed: 0.10, health: 50, INT: 4 },
+    description: 'Boots forged from eternal flame. +5% MATK, +10% Speed, +20 Defense, +50 HP, +4 INT.',
     maxStack: 1,
     sellPrice: 800,
     requiredLevel: 25,
@@ -455,14 +503,14 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
   'earring_of_power': {
     id: 'earring_of_power',
     name: 'Earring of Power',
-    type: ItemType.ACCESSORY,
+    type: ItemType.EARRING,
     rarity: ItemRarity.EPIC,
     stats: { magicAttack: 0.03, INT: 3, mana: 30 },
     description: 'A glowing earring that amplifies magic. +3% MATK, +3 INT, +30 MP.',
     maxStack: 1,
     sellPrice: 300,
     requiredLevel: 15,
-    equipmentSlot: EquipmentSlot.ACCESSORY
+    equipmentSlot: EquipmentSlot.EARRING_1
   }
 };
 

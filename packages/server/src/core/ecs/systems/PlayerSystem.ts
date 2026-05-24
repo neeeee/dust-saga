@@ -29,7 +29,7 @@ export class PlayerSystem extends System {
   private levelUpCallbacks: Array<(playerId: string, newLevel: number) => void> = [];
 
   private getGearBonuses(session: PlayerSession) {
-    const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0, accuracy: 0, dodge: 0, attackSpeed: 0, fireResist: 0, iceResist: 0, lightningResist: 0, poisonResist: 0, darkResist: 0, holyResist: 0, magicAttackPercent: 0, ailmentResist: 0, disorderResist: 0, criticalChance: 0 };
+    const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0, accuracy: 0, dodge: 0, attackSpeed: 0, castSpeed: 0, fireResist: 0, iceResist: 0, lightningResist: 0, poisonResist: 0, darkResist: 0, holyResist: 0, magicAttackPercent: 0, ailmentResist: 0, disorderResist: 0, criticalChance: 0 };
     for (const slot of Object.values(session.equipment)) {
       if (!slot) continue;
       const def = ITEM_DATABASE[slot.itemId];
@@ -49,6 +49,7 @@ export class PlayerSystem extends System {
       if (s.accuracy) bonuses.accuracy += s.accuracy;
       if (s.dodge) bonuses.dodge += s.dodge;
       if (s.attackSpeed) bonuses.attackSpeed += s.attackSpeed;
+      if (s.castSpeed) bonuses.castSpeed += s.castSpeed;
       if (s.fireResist) bonuses.fireResist += s.fireResist;
       if (s.iceResist) bonuses.iceResist += s.iceResist;
       if (s.lightningResist) bonuses.lightningResist += s.lightningResist;
@@ -71,7 +72,7 @@ export class PlayerSystem extends System {
           if (isMagicWeapon) {
             bonuses.magicAttackPercent += enhanceLevel * 0.02;
           }
-        } else if (eqSlot === EquipmentSlot.ARMOR || eqSlot === EquipmentSlot.HELMET) {
+        } else if (eqSlot === EquipmentSlot.ARMOR || eqSlot === EquipmentSlot.HELMET || eqSlot === EquipmentSlot.GLOVES || eqSlot === EquipmentSlot.LEGS || eqSlot === EquipmentSlot.SHIELD) {
           bonuses.defense += enhanceLevel * 3;
           bonuses.health += enhanceLevel * 15;
         } else if (eqSlot === EquipmentSlot.BOOTS) {
@@ -136,6 +137,7 @@ export class PlayerSystem extends System {
         speedMultiplier: 1,
         magicAttack: stats.magicAttack,
         critChance: stats.critChance,
+        castSpeed: 100,
         level,
         experience: typeof experience === 'string' ? parseInt(experience, 10) : (experience || 0),
         experienceToNext: xpToNext
@@ -169,7 +171,15 @@ export class PlayerSystem extends System {
         armor: null,
         helmet: null,
         boots: null,
-        accessory: null
+        gloves: null,
+        legs: null,
+        shield: null,
+        earring_1: null,
+        earring_2: null,
+        necklace: null,
+        belt: null,
+        ring_1: null,
+        ring_2: null,
       },
       quests: []
     };
@@ -264,7 +274,7 @@ export class PlayerSystem extends System {
         if (isMagicWeapon) {
           enh.magicAttackPercent += level * 0.02;
         }
-      } else if (eqSlot === EquipmentSlot.ARMOR || eqSlot === EquipmentSlot.HELMET) {
+      } else if (eqSlot === EquipmentSlot.ARMOR || eqSlot === EquipmentSlot.HELMET || eqSlot === EquipmentSlot.GLOVES || eqSlot === EquipmentSlot.LEGS || eqSlot === EquipmentSlot.SHIELD) {
         enh.defense += level * 3;
         enh.health += level * 15;
       } else if (eqSlot === EquipmentSlot.BOOTS) {
@@ -308,6 +318,7 @@ export class PlayerSystem extends System {
     session.stats.speedMultiplier = 1 + gear.speed;
     session.stats.magicAttack = Math.floor(derived.magicAttack * (1 + gear.magicAttackPercent));
     session.stats.critChance = derived.critChance + gear.criticalChance;
+    session.stats.castSpeed = 100 + Math.floor((session.statPoints.DEX + gear.DEX) / 10) * 5 + Math.floor(gear.castSpeed * 100);
 
     const effective = getEffectiveStats(
       session.stats,
@@ -435,9 +446,14 @@ export class PlayerSystem extends System {
     if (!itemDef || !itemDef.equipmentSlot) return false;
     if (session.stats.level < itemDef.requiredLevel) return false;
 
-    const slot = itemDef.equipmentSlot as EquipmentSlot;
-    const currentlyEquipped = session.equipment[slot];
+    let slot = itemDef.equipmentSlot as EquipmentSlot;
+    if (slot === EquipmentSlot.RING_1 || slot === EquipmentSlot.RING_2) {
+      slot = session.equipment.ring_1 ? EquipmentSlot.RING_2 : EquipmentSlot.RING_1;
+    } else if (slot === EquipmentSlot.EARRING_1 || slot === EquipmentSlot.EARRING_2) {
+      slot = session.equipment.earring_1 ? EquipmentSlot.EARRING_2 : EquipmentSlot.EARRING_1;
+    }
 
+    const currentlyEquipped = session.equipment[slot];
     if (currentlyEquipped) {
       this.unequipItem(session, slot);
     }

@@ -18,6 +18,7 @@ import {
   calculateHitChance,
   NATION_ZONE_MAP,
   ZoneType,
+  normalizeEquipment,
 } from '@dust-saga/shared';
 import { AuthManager } from '../auth/AuthManager';
 import { CombatSystem } from '../ecs/systems/CombatSystem';
@@ -863,7 +864,7 @@ export class NetworkServer {
     }
     if (char.equipment) {
       const parsed = typeof char.equipment === 'string' ? JSON.parse(char.equipment) : char.equipment;
-      if (parsed && typeof parsed === 'object') session.equipment = parsed;
+      if (parsed && typeof parsed === 'object') session.equipment = normalizeEquipment(parsed);
     }
 
     this.playerSys.recalcStats(session);
@@ -2011,7 +2012,7 @@ export class NetworkServer {
       return;
     }
 
-    const enhancableTypes: string[] = ['weapon', 'armor', 'helmet', 'boots'];
+    const enhancableTypes: string[] = ['weapon', 'armor', 'helmet', 'boots', 'gloves', 'legs', 'shield'];
     if (!enhancableTypes.includes(weaponDef.type) && !weaponDef.equipmentSlot) {
       this.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: 'This item cannot be enhanced.', type: 'error' } });
       return;
