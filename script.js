@@ -2328,7 +2328,6 @@ function calculateDerivedStats(bonuses = {}, uncappedStats = null) {
   // Dodge - base 5
   function calculateDodge() {
     let totalAgi = character.finalStats.agi;
-    console.log(character.finalStats);
     let dodge = character.level + totalAgi;
     let bonus = 0;
     if (totalAgi >= 140) bonus = 98;
