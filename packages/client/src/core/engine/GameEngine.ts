@@ -14,7 +14,10 @@ import {
   FloatArray,
   Scene as SceneType,
   AnimationGroup,
+  Mesh,
 } from '@babylonjs/core';
+import { RecastJSPlugin } from '@babylonjs/core/Navigation/Plugins/recastJSPlugin';
+import { INavMeshParameters } from '@babylonjs/core/Navigation/INavigationEngine';
 import { AssetManager } from './AssetManager';
 import { MapBuilder, MapData } from './MapBuilder';
 import { ZoneDefinition } from '@dust-saga/shared';
@@ -49,6 +52,11 @@ export class GameEngine {
   private aoeTargetingActive: boolean = false;
   private isRotating: boolean = false;
   private aoeZoneMeshes: Map<string, { disc: AbstractMesh; material: StandardMaterial; expiresAt: number }> = new Map();
+  private navigationPlugin: RecastJSPlugin | null = null;
+  private navMeshReady: boolean = false;
+  private moveIndicator: AbstractMesh | null = null;
+  private moveIndicatorMat: StandardMaterial | null = null;
+  private moveIndicatorCallback: ((worldPos: V3) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -112,10 +120,18 @@ export class GameEngine {
     this.scene.onPointerDown = (evt, pickResult) => {
       if (this.aoeTargetingActive) return;
       if (evt.button === 0 && pickResult?.hit && pickResult.pickedMesh) {
+        let clickedEntity = false;
         for (const [id, group] of this.meshes) {
           if (pickResult.pickedMesh === group.root || group.root.getChildMeshes().includes(pickResult.pickedMesh)) {
             this.onClickCallbacks.forEach(cb => cb(id));
+            clickedEntity = true;
             break;
+          }
+        }
+        if (!clickedEntity && pickResult.pickedPoint) {
+          const normal = pickResult.getNormal(true);
+          if (!normal || Math.abs(normal.y) >= 0.85) {
+            this.moveIndicatorCallback?.(V3.FromArray([pickResult.pickedPoint.x, pickResult.pickedPoint.y, pickResult.pickedPoint.z]));
           }
         }
       }
@@ -148,6 +164,9 @@ export class GameEngine {
     this.currentAnimation.clear();
     this.targetedEntityId = null;
     this.mapBuilder.clear();
+    this.navigationPlugin = null;
+    this.navMeshReady = false;
+    this.hideMoveIndicator();
 
     try {
       const resp = await fetch(`/maps/${zoneDef.id}.json`);
@@ -157,6 +176,7 @@ export class GameEngine {
         if (this.minimapCanvas) {
           this.renderMinimap(zoneDef);
         }
+        await this.buildNavMesh();
         return;
       }
     } catch (e) {
@@ -173,6 +193,8 @@ export class GameEngine {
     }
 
     await this.createEnvironmentObjects(zoneDef);
+
+    await this.buildNavMesh();
 
     if (this.minimapCanvas) {
       this.renderMinimap(zoneDef);
@@ -925,6 +947,133 @@ export class GameEngine {
     }
   }
 
+  async buildNavMesh(): Promise<void> {
+    if (!this.scene) return;
+
+    try {
+      const recastFactory = (await import('recastjs')).default || (await import('recastjs'));
+      const recastInstance = typeof recastFactory === 'function' ? await recastFactory() : recastFactory;
+      this.navigationPlugin = new RecastJSPlugin(recastInstance);
+    } catch (e) {
+      console.warn('Failed to initialize RecastJSPlugin:', e);
+      return;
+    }
+
+    const navMeshMeshes: Mesh[] = [];
+    this.scene.meshes.forEach((mesh) => {
+      if (mesh instanceof Mesh) {
+        const n = mesh.name;
+        if (
+          n.startsWith('map_ground') || n.startsWith('zone_ground') ||
+          n.startsWith('map_struct_') || n.startsWith('map_pillar_') ||
+          n.startsWith('map_house_') || n.startsWith('map_rock_') ||
+          n.startsWith('platform_') || n.startsWith('env_rock_')
+        ) {
+          navMeshMeshes.push(mesh);
+        }
+      }
+    });
+
+    if (navMeshMeshes.length === 0) {
+      console.warn('No meshes found for navmesh generation');
+      return;
+    }
+
+    const params: INavMeshParameters = {
+      cs: 0.2,
+      ch: 0.2,
+      walkableSlopeAngle: 45,
+      walkableHeight: 1.0,
+      walkableClimb: 0.5,
+      walkableRadius: 0.3,
+      maxEdgeLen: 12,
+      maxSimplificationError: 1.3,
+      minRegionArea: 8,
+      mergeRegionArea: 20,
+      maxVertsPerPoly: 6,
+      detailSampleDist: 6,
+      detailSampleMaxError: 1.0,
+    };
+
+    try {
+      this.navigationPlugin.createNavMesh(navMeshMeshes, params);
+      this.navMeshReady = true;
+    } catch (e) {
+      console.warn('Navmesh generation failed:', e);
+      this.navigationPlugin = null;
+    }
+  }
+
+  isNavMeshReady(): boolean {
+    return this.navMeshReady;
+  }
+
+  computePath(start: V3, end: V3): V3[] {
+    if (!this.navigationPlugin || !this.navMeshReady) {
+      return [end];
+    }
+    try {
+      const snappedStart = this.navigationPlugin.getClosestPoint(start);
+      const snappedEnd = this.navigationPlugin.getClosestPoint(end);
+      const path = this.navigationPlugin.computePath(snappedStart, snappedEnd);
+      if (path.length === 0) return [];
+      return path;
+    } catch {
+      return [end];
+    }
+  }
+
+  getGroundPoint(screenX: number, screenY: number): V3 | null {
+    if (!this.scene) return null;
+    const pickResult = this.scene.pick(screenX, screenY, (mesh) => {
+      if (mesh.isPickable === false) return false;
+      if (mesh === this.moveIndicator || mesh === this.aoeTargetCircle) return false;
+      const n = mesh.name;
+      return n.startsWith('map_ground') || n.startsWith('zone_ground')
+        || n.startsWith('map_struct_') || n.startsWith('map_pillar_')
+        || n.startsWith('map_rock_') || n.startsWith('platform_')
+        || n.startsWith('heightmap_');
+    });
+    if (!pickResult || !pickResult.hit || !pickResult.pickedPoint) return null;
+    const normal = pickResult.getNormal(true);
+    if (normal && Math.abs(normal.y) < 0.85) return null;
+    return V3.FromArray([pickResult.pickedPoint.x, pickResult.pickedPoint.y, pickResult.pickedPoint.z]);
+  }
+
+  setMoveIndicatorCallback(cb: (worldPos: V3) => void): void {
+    this.moveIndicatorCallback = cb;
+  }
+
+  showMoveIndicator(position: V3): void {
+    if (!this.scene) return;
+    if (!this.moveIndicator) {
+      this.moveIndicator = MeshBuilder.CreateDisc('move_indicator', { radius: 0.3, tessellation: 32 }, this.scene);
+      this.moveIndicatorMat = new StandardMaterial('move_indicator_mat', this.scene);
+      this.moveIndicatorMat.diffuseColor = new Color3(0.3, 0.8, 1.0);
+      this.moveIndicatorMat.emissiveColor = new Color3(0.1, 0.4, 0.6);
+      this.moveIndicatorMat.disableLighting = true;
+      this.moveIndicatorMat.alpha = 0.5;
+      this.moveIndicatorMat.backFaceCulling = false;
+      this.moveIndicator.material = this.moveIndicatorMat;
+      this.moveIndicator.isPickable = false;
+      this.moveIndicator.rotation.x = Math.PI / 2;
+    }
+    this.moveIndicator.position.set(position.x, position.y + 0.05, position.z);
+    this.moveIndicator.setEnabled(true);
+  }
+
+  hideMoveIndicator(): void {
+    if (this.moveIndicator) {
+      this.moveIndicator.setEnabled(false);
+    }
+  }
+
+  updateMoveIndicator(deltaTime: number): void {
+    if (this.moveIndicator && this.moveIndicatorMat && this.moveIndicator.isEnabled()) {
+      this.moveIndicatorMat.alpha = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
+    }
+  }
+
   dispose(): void {
     if (this.isRotating) document.exitPointerLock();
     this.canvas?.removeEventListener('pointerdown', this.handlePointerDown);
@@ -936,6 +1085,11 @@ export class GameEngine {
       entry.material.dispose();
     });
     this.aoeZoneMeshes.clear();
+    this.navigationPlugin = null;
+    this.navMeshReady = false;
+    this.hideMoveIndicator();
+    if (this.moveIndicator) { this.moveIndicator.dispose(); this.moveIndicator = null; }
+    if (this.moveIndicatorMat) { this.moveIndicatorMat.dispose(); this.moveIndicatorMat = null; }
     this.meshes.forEach(group => {
       group.root.dispose();
       group.healthBarBg?.dispose();

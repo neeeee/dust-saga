@@ -810,6 +810,7 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     showSkillWindow.value = false;
     if (gameClient) {
       gameClient.setTarget(null);
+      gameClient.cancelClickToMove();
     }
   }
 }

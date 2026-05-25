@@ -76,6 +76,9 @@ export class GameClient {
   private aoeTargetingActive: boolean = false;
   private aoeTargetingSkillName: string | null = null;
   private aoeLastPosition: { x: number; y: number; z: number } | null = null;
+  private clickToMovePath: BabylonVector3[] = [];
+  private clickToMoveTargetIndex: number = 0;
+  private isClickToMoveActive: boolean = false;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.engine = new GameEngine(canvas);
@@ -103,6 +106,7 @@ export class GameClient {
     this.engineReadyResolve?.();
     this.engineReadyResolve = null;
     this.setupClickHandler();
+    this.setupClickToMove();
     this.setupAOETargeting(canvas);
   }
 
@@ -148,6 +152,39 @@ export class GameClient {
         this.callbacks.onTargetChange?.(null);
       }
     });
+  }
+
+  private setupClickToMove(): void {
+    this.engine.setMoveIndicatorCallback((worldPos: BabylonVector3) => {
+      if (!this.playerMesh || this.aoeTargetingActive) return;
+
+      let path: BabylonVector3[];
+      if (this.engine.isNavMeshReady()) {
+        const startPos = this.playerMesh.position.clone();
+        const endPos = new BabylonVector3(worldPos.x, worldPos.y, worldPos.z);
+        path = this.engine.computePath(startPos, endPos);
+        if (path.length === 0) return;
+      } else {
+        path = [new BabylonVector3(worldPos.x, worldPos.y, worldPos.z)];
+      }
+
+      this.clickToMovePath = path;
+      this.clickToMoveTargetIndex = 0;
+      this.isClickToMoveActive = true;
+
+      this.engine.showMoveIndicator(new BabylonVector3(
+        path[path.length - 1].x,
+        path[path.length - 1].y,
+        path[path.length - 1].z
+      ));
+    });
+  }
+
+  cancelClickToMove(): void {
+    this.clickToMovePath = [];
+    this.clickToMoveTargetIndex = 0;
+    this.isClickToMoveActive = false;
+    this.engine.hideMoveIndicator();
   }
 
   private setupAOETargeting(_canvas: HTMLCanvasElement): void {
@@ -722,36 +759,67 @@ export class GameClient {
     const speedMultiplier = (this.stats as any)?.speedMultiplier ?? 1;
     const speed = input.sprint ? GAME_CONFIG.PLAYER_SPEED * 1.5 * speedMultiplier : GAME_CONFIG.PLAYER_SPEED * speedMultiplier;
 
-    const camera = this.engine.getScene()?.activeCamera;
-    let camForward = BabylonVector3.Forward();
-    let camRight = BabylonVector3.Right();
-
-    if (camera) {
-      camera.getDirectionToRef(BabylonVector3.Forward(), camForward);
-      camForward.y = 0;
-      camForward.normalize();
-      camera.getDirectionToRef(BabylonVector3.Right(), camRight);
-      camRight.y = 0;
-      camRight.normalize();
+    if (movementVector.length() > 0.001) {
+      this.cancelClickToMove();
     }
 
-    const moveDirection = new BabylonVector3(0, 0, 0);
-    moveDirection.addInPlace(camForward.scale(movementVector.z));
-    moveDirection.addInPlace(camRight.scale(movementVector.x));
+    let isMoving = false;
 
-    const isMoving = moveDirection.length() > 0.001;
+    if (this.isClickToMoveActive && this.clickToMovePath.length > 0 && this.clickToMoveTargetIndex < this.clickToMovePath.length) {
+      const target = this.clickToMovePath[this.clickToMoveTargetIndex];
+      const dx = target.x - this.playerMesh.position.x;
+      const dz = target.z - this.playerMesh.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+
+      if (dist < 0.3) {
+        this.clickToMoveTargetIndex++;
+        if (this.clickToMoveTargetIndex >= this.clickToMovePath.length) {
+          this.cancelClickToMove();
+        }
+      } else {
+        const dirX = dx / dist;
+        const dirZ = dz / dist;
+        this.playerMesh.position.x += dirX * speed * deltaTime;
+        this.playerMesh.position.z += dirZ * speed * deltaTime;
+        this.playerMesh.position.y = target.y;
+        this.playerMesh.rotation.y = Math.atan2(dirX, dirZ);
+        isMoving = true;
+      }
+    } else if (movementVector.length() > 0.001) {
+      const camera = this.engine.getScene()?.activeCamera;
+      let camForward = BabylonVector3.Forward();
+      let camRight = BabylonVector3.Right();
+
+      if (camera) {
+        camera.getDirectionToRef(BabylonVector3.Forward(), camForward);
+        camForward.y = 0;
+        camForward.normalize();
+        camera.getDirectionToRef(BabylonVector3.Right(), camRight);
+        camRight.y = 0;
+        camRight.normalize();
+      }
+
+      const moveDirection = new BabylonVector3(0, 0, 0);
+      moveDirection.addInPlace(camForward.scale(movementVector.z));
+      moveDirection.addInPlace(camRight.scale(movementVector.x));
+
+      if (moveDirection.length() > 0.001) {
+        moveDirection.normalize();
+        this.playerMesh.position.addInPlace(moveDirection.scale(speed * deltaTime));
+        const angle = Math.atan2(moveDirection.x, moveDirection.z);
+        this.playerMesh.rotation.y = angle;
+        isMoving = true;
+      }
+    }
 
     if (isMoving) {
-      moveDirection.normalize();
-      this.playerMesh.position.addInPlace(moveDirection.scale(speed * deltaTime));
-      const angle = Math.atan2(moveDirection.x, moveDirection.z);
-      this.playerMesh.rotation.y = angle;
       this.engine.startAnimation(this.playerId!, 'Walk');
-      this.engine.updateEntityPosition(this.playerId!, this.playerMesh.position);
     } else {
       this.engine.startAnimation(this.playerId!, 'Idle');
-      this.engine.updateEntityPosition(this.playerId!, this.playerMesh.position);
     }
+    this.engine.updateEntityPosition(this.playerId!, this.playerMesh.position);
+
+    this.engine.updateMoveIndicator(deltaTime);
 
     const now = Date.now();
     if (now - this.lastMoveSend > 50) {

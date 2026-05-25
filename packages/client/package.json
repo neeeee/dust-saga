@@ -62,6 +62,7 @@
     "@babylonjs/materials": "^9.2.0",
     "@dust-saga/shared": "*",
     "bcrypt": "6.0.0",
+    "recastjs": "^0.3.0",
     "socket.io-client": "^4.8.3",
     "uuid": "14.0.0",
     "vue": "^3.5.32"
