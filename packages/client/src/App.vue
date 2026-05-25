@@ -110,6 +110,7 @@
         :equipment="equipment"
         @close="showEnhancement = false"
         @enhance="handleEnhance"
+        :last-result="lastEnhanceResult"
       />
 
       <NotificationPopup
@@ -511,7 +512,12 @@ function handleRespawn() {
 function handleEnhance(data: { weaponSlot: { slotIndex: number; itemId: string }; materialSlots: Array<{ slotIndex: number; itemId: string }> }) {
   if (!gameClient) return;
   gameClient.sendEnhance(data);
-  showEnhancement.value = false;
+}
+
+const lastEnhanceResult = ref<{ success: boolean; weaponSlotIndex: number; enhancementLevel: number; enhancementElement: string } | null>(null);
+
+function handleEnhancementResult(data: { success: boolean; weaponSlotIndex: number; enhancementLevel: number; enhancementElement: string }) {
+  lastEnhanceResult.value = data;
 }
 
 function handleAcceptQuest(questId: string) {
@@ -560,6 +566,9 @@ onMounted(async () => {
     },
     onNotification: (message, type) => {
       showNotification(message, type);
+    },
+    onEnhancementResult: (data) => {
+      handleEnhancementResult(data);
     },
     onDeath: (data) => {
       if (data.isDead) {
@@ -776,6 +785,10 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
   }
 
   const tag = (document.activeElement?.tagName || '').toLowerCase();
+  if (e.code === 'Escape' && (chatFocused.value || tag === 'input' || tag === 'textarea' || tag === 'select')) {
+    chatPanelRef.value?.blurInput();
+    return;
+  }
   if (chatFocused.value || tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
   if (e.code === 'KeyI') {

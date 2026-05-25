@@ -52,13 +52,16 @@
 
         <div class="column">
           <div class="column-label">Result</div>
-          <div class="slot result-slot">
-            <template v-if="resultItem">
-              <span class="slot-item-name result-name">{{ getItemName(resultItem) }}</span>
+          <div class="slot result-slot" :class="resultSlotClass">
+            <template v-if="weaponSlot && detectElement()">
+              <span class="slot-item-name result-name">{{ getResultName() }}</span>
             </template>
             <template v-else>
               <span class="slot-placeholder">?</span>
             </template>
+          </div>
+          <div v-if="successRateLabel" class="success-rate" :class="successRateClass">
+            {{ successRateLabel }}
           </div>
           <button class="enhance-btn" :disabled="!canEnhance" @click="handleEnhance">
             Enhance
@@ -70,17 +73,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, reactive, watch, onMounted, onUnmounted } from 'vue';
 import { ITEM_DATABASE, getEnhancedItemName } from '@dust-saga/shared';
 import { useDraggable } from '../composables/useDraggable';
 
 const { posX, posY, attach, detach } = useDraggable('[data-drag-handle]', 'panel-enhancement', { x: 400, y: 150 });
 const panelRef = ref<HTMLElement | null>(null);
 
+const ENHANCE_FAILURE: number[] = [0, 0, 0, 5, 10, 15, 20, 30, 40, 50];
+
 const props = defineProps<{
   visible: boolean;
   inventory: Array<{ itemId: string; quantity: number; slot: number }>;
   equipment: Record<string, any>;
+  lastResult: { success: boolean; weaponSlotIndex: number; enhancementLevel: number; enhancementElement: string } | null;
 }>();
 
 const emit = defineEmits<{
@@ -90,7 +96,6 @@ const emit = defineEmits<{
 
 const weaponSlot = ref<{ itemId: string; slot: number; enhancementLevel?: number; enhancementElement?: string } | null>(null);
 const materialSlots = reactive<[typeof weaponSlot.value, typeof weaponSlot.value, typeof weaponSlot.value]>([null, null, null]);
-const resultItem = ref<string | null>(null);
 
 const GEM_ELEMENTS: Record<string, string> = {
   fire_gem: 'fire', ice_gem: 'ice', lightning_gem: 'lightning',
@@ -109,6 +114,14 @@ function getWeaponDisplayName(): string {
   return getEnhancedItemName(baseName, weaponSlot.value.enhancementLevel, weaponSlot.value.enhancementElement);
 }
 
+function getResultName(): string {
+  if (!weaponSlot.value) return '';
+  const element = detectElement();
+  const currentLevel = weaponSlot.value.enhancementLevel || 0;
+  const baseName = getItemName(weaponSlot.value.itemId);
+  return getEnhancedItemName(baseName, currentLevel + 1, element || undefined);
+}
+
 function detectElement(): string | null {
   for (const mat of materialSlots) {
     if (!mat) continue;
@@ -118,10 +131,36 @@ function detectElement(): string | null {
   return weaponSlot.value?.enhancementElement || null;
 }
 
+const currentLevel = computed(() => weaponSlot.value?.enhancementLevel || 0);
+
+const successRateLabel = computed(() => {
+  if (currentLevel.value >= 10) return null;
+  const rate = ENHANCE_FAILURE[currentLevel.value];
+  if (rate <= 0) return 'Guaranteed';
+  if (rate <= 5) return 'Excellent';
+  if (rate <= 15) return 'Great';
+  if (rate <= 30) return 'Good';
+  return 'Risky';
+});
+
+const successRateClass = computed(() => {
+  if (currentLevel.value >= 10) return '';
+  const rate = ENHANCE_FAILURE[currentLevel.value];
+  if (rate <= 0) return 'rate-guaranteed';
+  if (rate <= 5) return 'rate-excellent';
+  if (rate <= 15) return 'rate-great';
+  if (rate <= 30) return 'rate-good';
+  return 'rate-risky';
+});
+
+const resultSlotClass = computed(() => {
+  if (!props.lastResult) return '';
+  return props.lastResult.success ? 'result-success' : 'result-failed';
+});
+
 const canEnhance = computed(() => {
   if (!weaponSlot.value) return false;
-  const currentLevel = weaponSlot.value.enhancementLevel || 0;
-  if (currentLevel >= 10) return false;
+  if (currentLevel.value >= 10) return false;
   return detectElement() !== null;
 });
 
@@ -149,8 +188,6 @@ function onDrop(e: DragEvent, slotType: string, index?: number) {
     } else if (slotType === 'material' && index !== undefined) {
       materialSlots[index] = item;
     }
-
-    updateResult();
   } catch {}
 }
 
@@ -160,18 +197,6 @@ function clearSlot(slotType: string, index?: number) {
   } else if (slotType === 'material' && index !== undefined) {
     materialSlots[index] = null;
   }
-  updateResult();
-}
-
-function updateResult() {
-  if (!weaponSlot.value) {
-    resultItem.value = null;
-    return;
-  }
-  const element = detectElement();
-  const currentLevel = weaponSlot.value.enhancementLevel || 0;
-  const baseName = getItemName(weaponSlot.value.itemId);
-  resultItem.value = getEnhancedItemName(baseName, currentLevel + 1, element || undefined);
 }
 
 function handleEnhance() {
@@ -186,22 +211,31 @@ function handleEnhance() {
   });
 }
 
+watch(() => props.lastResult, (result) => {
+  if (!result || !weaponSlot.value) return;
+  if (result.weaponSlotIndex !== weaponSlot.value.slot) return;
+
+  if (result.success) {
+    weaponSlot.value = {
+      ...weaponSlot.value,
+      enhancementLevel: result.enhancementLevel,
+      enhancementElement: result.enhancementElement,
+    };
+  }
+
+  for (let i = materialSlots.length - 1; i >= 0; i--) {
+    if (materialSlots[i] !== null) {
+      materialSlots[i] = null;
+    }
+  }
+});
+
 onMounted(() => {
   if (panelRef.value) attach(panelRef.value);
 });
 
 onUnmounted(() => {
   if (panelRef.value) detach(panelRef.value);
-});
-
-watch(() => props.visible, (v) => {
-  if (!v) {
-    weaponSlot.value = null;
-    materialSlots[0] = null;
-    materialSlots[1] = null;
-    materialSlots[2] = null;
-    resultItem.value = null;
-  }
 });
 </script>
 
@@ -321,6 +355,16 @@ watch(() => props.visible, (v) => {
   border-color: rgba(255, 215, 0, 0.2);
 }
 
+.result-slot.result-success {
+  border-color: rgba(76, 175, 80, 0.5);
+  background: rgba(76, 175, 80, 0.08);
+}
+
+.result-slot.result-failed {
+  border-color: rgba(244, 67, 54, 0.5);
+  background: rgba(244, 67, 54, 0.08);
+}
+
 .slot-placeholder {
   color: #555;
   font-size: 0.72rem;
@@ -352,8 +396,22 @@ watch(() => props.visible, (v) => {
   color: #ff6666;
 }
 
+.success-rate {
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: bold;
+  padding: 4px 0;
+  transition: color 0.2s;
+}
+
+.rate-guaranteed { color: #4caf50; }
+.rate-excellent { color: #66bb6a; }
+.rate-great { color: #ffa726; }
+.rate-good { color: #ce93d8; }
+.rate-risky { color: #ef5350; }
+
 .enhance-btn {
-  margin-top: 10px;
+  margin-top: 6px;
   width: 100%;
   padding: 8px;
   background: #667eea;

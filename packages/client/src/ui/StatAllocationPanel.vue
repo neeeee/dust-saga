@@ -353,7 +353,7 @@ const combatStats = computed(() => {
     accuracy: props.statBreakdown?.totalAccuracy ?? gc?.accuracy ?? 0,
     dodge: props.statBreakdown?.totalDodge ?? gc?.dodge ?? 0,
     attackSpeed: gc?.attackSpeed || 0,
-    castSpeed: props.stats?.castSpeed ?? 100,
+    castSpeed: ((props.stats?.castSpeed ?? 100) - 100) / 100,
   };
 });
 

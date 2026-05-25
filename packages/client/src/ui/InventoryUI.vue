@@ -3,7 +3,6 @@
     <div class="panel-header" data-drag-handle>
       <span class="drag-dots">&#8960;</span>
       <h3>Inventory</h3>
-      <span class="inv-count">{{ inventory.length }}/{{ maxSlots }}</span>
       <button class="close-btn" @click="$emit('close')">x</button>
     </div>
 
@@ -13,14 +12,14 @@
           v-for="slot in leftSlots"
           :key="slot.key"
           class="equip-slot"
-          :class="{ filled: equipment[slot.key] }"
+          :class="{ filled: equipment[slot.key], [getItemRarity(equipment[slot.key]?.itemId)]: equipment[slot.key] }"
           @click="handleEquipClick(slot.key)"
-          @mouseenter="equipment[slot.key] && showTooltip($event, equipment[slot.key].itemId)"
+          @mouseenter="equipment[slot.key] && showTooltip($event, equipment[slot.key].itemId, equipment[slot.key].enhancementLevel, equipment[slot.key].enhancementElement)"
           @mouseleave="hideTooltip"
         >
-          <span class="slot-icon">{{ slot.icon }}</span>
+          <span class="slot-icon">{{ equipment[slot.key] ? getItemIcon(equipment[slot.key].itemId) : slot.icon }}</span>
           <span class="slot-label">{{ slot.label }}</span>
-          <span v-if="equipment[slot.key]" class="slot-item-name" :class="getItemRarity(equipment[slot.key].itemId)">{{ getEquipSlotName(equipment[slot.key]) }}</span>
+          <span v-if="equipment[slot.key]" class="slot-item-dot"></span>
         </div>
       </div>
 
@@ -33,21 +32,25 @@
           v-for="slot in rightSlots"
           :key="slot.key"
           class="equip-slot"
-          :class="{ filled: equipment[slot.key] }"
+          :class="{ filled: equipment[slot.key], [getItemRarity(equipment[slot.key]?.itemId)]: equipment[slot.key] }"
           @click="handleEquipClick(slot.key)"
-          @mouseenter="equipment[slot.key] && showTooltip($event, equipment[slot.key].itemId)"
+          @mouseenter="equipment[slot.key] && showTooltip($event, equipment[slot.key].itemId, equipment[slot.key].enhancementLevel, equipment[slot.key].enhancementElement)"
           @mouseleave="hideTooltip"
         >
-          <span class="slot-icon">{{ slot.icon }}</span>
+          <span class="slot-icon">{{ equipment[slot.key] ? getItemIcon(equipment[slot.key].itemId) : slot.icon }}</span>
           <span class="slot-label">{{ slot.label }}</span>
-          <span v-if="equipment[slot.key]" class="slot-item-name" :class="getItemRarity(equipment[slot.key].itemId)">{{ getEquipSlotName(equipment[slot.key]) }}</span>
+          <span v-if="equipment[slot.key]" class="slot-item-dot"></span>
         </div>
       </div>
     </div>
 
     <div class="inventory-bottom">
       <div class="tab-bar">
-        <div v-for="t in tabs" :key="t" class="tab" :class="{ active: activeTab === t }" @click="activeTab = t">{{ t }}</div>
+        <div class="tab" :class="{ active: activeTab === 1 }" @click="activeTab = 1">1</div>
+        <div class="tab" :class="{ active: activeTab === 2 }" @click="activeTab = 2">2</div>
+        <div class="tab" :class="{ active: activeTab === 3 }" @click="activeTab = 3">3</div>
+        <div class="tab" :class="{ active: activeTab === 4 }" @click="activeTab = 4">4</div>
+        <div class="slot-count">{{ usedSlotCount }}/{{ totalSlots }}</div>
       </div>
       <div class="item-grid">
         <div
@@ -59,11 +62,11 @@
           @dragstart="onItemDragStart($event, item)"
           @click="handleItemClick(item)"
           @contextmenu.prevent="handleItemRightClick($event, item)"
-          @mouseenter="showTooltip($event, item.itemId)"
+          @mouseenter="showTooltip($event, item.itemId, item.enhancementLevel, item.enhancementElement)"
           @mouseleave="hideTooltip"
         >
-          <span class="item-name">{{ getInventoryItemName(item) }}</span>
-          <span v-if="item.quantity > 1" class="item-qty">x{{ item.quantity }}</span>
+          <span class="item-icon">{{ getItemIcon(item.itemId) }}</span>
+          <span v-if="item.quantity > 1" class="item-qty">{{ item.quantity }}</span>
         </div>
         <div v-for="n in emptySlots" :key="'empty-' + n" class="item-slot empty"></div>
       </div>
@@ -90,10 +93,11 @@
       class="item-tooltip"
       :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
     >
-      <div class="tooltip-name" :class="tooltip.rarity">{{ tooltip.name }}</div>
+      <div class="tooltip-name" :class="tooltip.rarity">{{ tooltip.enhanceLevel > 0 ? getEnhancedItemName(tooltip.name, tooltip.enhanceLevel, tooltip.enhanceElement) : tooltip.name }}</div>
       <div class="tooltip-type">{{ tooltip.type }}</div>
       <div v-if="tooltip.slot" class="tooltip-slot">Slot: {{ tooltip.slot }}</div>
       <div v-if="tooltip.level > 0" class="tooltip-level">Required Level: {{ tooltip.level }}</div>
+      <div v-if="tooltip.enhanceLevel > 0" class="tooltip-enhance">+{{ tooltip.enhanceLevel }} Enhanced</div>
       <div class="tooltip-desc">{{ tooltip.description }}</div>
       <div v-if="tooltip.statLines.length > 0" class="tooltip-stats">
         <div v-for="(line, i) in tooltip.statLines" :key="i" class="tooltip-stat">{{ line }}</div>
@@ -128,20 +132,25 @@ const emit = defineEmits<{
 }>();
 
 const SLOTS_PER_TAB = 16;
+const totalSlots = 64;
 const activeTab = ref(1);
-const tabs = computed(() => {
-  const total = Math.ceil(props.inventory.length / SLOTS_PER_TAB) || 1;
-  return Array.from({ length: Math.max(total, 1) }, (_, i) => i + 1);
-});
+
+const usedSlotCount = computed(() => props.inventory.length);
 
 const tabItems = computed(() => {
   const start = (activeTab.value - 1) * SLOTS_PER_TAB;
-  return props.inventory.slice(start, start + SLOTS_PER_TAB);
+  const end = start + SLOTS_PER_TAB;
+  const items: Array<{ itemId: string; quantity: number; slot: number; enhancementLevel?: number; enhancementElement?: string }> = [];
+  for (let i = start; i < end && i < totalSlots; i++) {
+    const item = props.inventory.find(inv => inv.slot === i);
+    if (item) items.push(item);
+  }
+  return items;
 });
 
 const emptySlots = computed(() => {
-  const count = SLOTS_PER_TAB - tabItems.value.length;
-  return count > 0 ? count : 0;
+  const tabItemCount = tabItems.value.length;
+  return SLOTS_PER_TAB - tabItemCount;
 });
 
 const leftSlots = [
@@ -181,6 +190,18 @@ function getItemName(itemId: string): string {
   return ITEM_DATABASE[itemId]?.name || itemId;
 }
 
+const ITEM_TYPE_ICONS: Record<string, string> = {
+  weapon: 'W', armor: 'A', helmet: 'H', boots: 'B', gloves: 'G',
+  legs: 'L', shield: 'S', earring: 'e', necklace: 'N', belt: 'b',
+  ring: 'r', consumable: 'P', material: 'M', quest: 'Q',
+};
+
+function getItemIcon(itemId: string): string {
+  const def = ITEM_DATABASE[itemId];
+  if (!def) return '?';
+  return ITEM_TYPE_ICONS[def.type] || '?';
+}
+
 function getEquipSlotName(eq: any): string {
   if (!eq) return '';
   const baseName = getItemName(eq.itemId);
@@ -196,11 +217,11 @@ function getItemRarity(itemId: string): string {
   return ITEM_DATABASE[itemId]?.rarity || 'common';
 }
 
-const tooltip = reactive<{ visible: boolean; x: number; y: number; name: string; rarity: string; type: string; slot: string; level: number; description: string; statLines: string[] }>({
-  visible: false, x: 0, y: 0, name: '', rarity: 'common', type: '', slot: '', level: 0, description: '', statLines: [],
+const tooltip = reactive<{ visible: boolean; x: number; y: number; name: string; rarity: string; type: string; slot: string; level: number; description: string; statLines: string[]; enhanceLevel: number; enhanceElement: string | null }>({
+  visible: false, x: 0, y: 0, name: '', rarity: 'common', type: '', slot: '', level: 0, description: '', statLines: [], enhanceLevel: 0, enhanceElement: null,
 });
 
-function showTooltip(event: MouseEvent, itemId: string): void {
+function showTooltip(event: MouseEvent, itemId: string, enhancementLevel?: number, enhancementElement?: string | null): void {
   const def = ITEM_DATABASE[itemId];
   if (!def) return;
   const statLines: string[] = [];
@@ -228,6 +249,20 @@ function showTooltip(event: MouseEvent, itemId: string): void {
   if (s.SPI) statLines.push(`+${s.SPI} SPI`);
   if (s.INT) statLines.push(`+${s.INT} INT`);
 
+  if (enhancementLevel && enhancementLevel > 0) {
+    const enhAtk = !((s.magicAttack && s.magicAttack > 0) || (s.INT && s.INT > 0) || (s.SPI && s.SPI > 0)) ? enhancementLevel * 3 : 0;
+    const enhMatk = (s.magicAttack && s.magicAttack > 0) || (s.INT && s.INT > 0) || (s.SPI && s.SPI > 0) ? enhancementLevel * 2 : 0;
+    if (enhAtk > 0) statLines.push(`+${enhAtk} Attack (Enhance)`);
+    if (enhMatk > 0) statLines.push(`+${enhMatk}% Magic Attack (Enhance)`);
+    if (def.equipmentSlot === 'armor' || def.equipmentSlot === 'helmet') {
+      statLines.push(`+${enhancementLevel * 3} Defense (Enhance)`);
+      statLines.push(`+${enhancementLevel * 15} Health (Enhance)`);
+    } else if (def.equipmentSlot === 'boots') {
+      statLines.push(`+${enhancementLevel * 2} Defense (Enhance)`);
+      statLines.push(`+${enhancementLevel} Dodge (Enhance)`);
+    }
+  }
+
   const panelRect = panelRef.value?.getBoundingClientRect();
   const tx = event.clientX + 12 - (panelRect?.left || 0);
   const ty = event.clientY + 12 - (panelRect?.top || 0);
@@ -242,6 +277,8 @@ function showTooltip(event: MouseEvent, itemId: string): void {
   tooltip.level = def.requiredLevel;
   tooltip.description = def.description;
   tooltip.statLines = statLines;
+  tooltip.enhanceLevel = enhancementLevel || 0;
+  tooltip.enhanceElement = enhancementElement || null;
 }
 
 function hideTooltip(): void {
@@ -653,6 +690,11 @@ onUnmounted(() => {
   background: rgba(102, 126, 234, 0.1);
 }
 
+.equip-slot.filled.uncommon { border-color: rgba(30, 255, 0, 0.45); background: rgba(30, 255, 0, 0.06); }
+.equip-slot.filled.rare { border-color: rgba(0, 112, 255, 0.5); background: rgba(0, 112, 255, 0.06); }
+.equip-slot.filled.epic { border-color: rgba(163, 53, 238, 0.5); background: rgba(163, 53, 238, 0.06); }
+.equip-slot.filled.legendary { border-color: rgba(255, 165, 0, 0.5); background: rgba(255, 165, 0, 0.06); }
+
 .slot-icon {
   width: 22px;
   height: 22px;
@@ -667,10 +709,23 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+.slot-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .equip-slot.filled .slot-icon {
   color: #aab;
   background: rgba(102, 126, 234, 0.2);
+  font-size: 0.7rem;
 }
+
+.equip-slot.filled.uncommon .slot-icon { background: rgba(30, 255, 0, 0.2); }
+.equip-slot.filled.rare .slot-icon { background: rgba(0, 112, 255, 0.2); }
+.equip-slot.filled.epic .slot-icon { background: rgba(163, 53, 238, 0.2); }
+.equip-slot.filled.legendary .slot-icon { background: rgba(255, 165, 0, 0.2); }
 
 .slot-label {
   color: #666;
@@ -678,20 +733,6 @@ onUnmounted(() => {
   width: 32px;
   flex-shrink: 0;
 }
-
-.slot-item-name {
-  font-size: 0.55rem;
-  color: #ccc;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-
-.slot-item-name.uncommon { color: #4caf50; }
-.slot-item-name.rare { color: #42a5f5; }
-.slot-item-name.epic { color: #ab47bc; }
-.slot-item-name.legendary { color: #ffa726; }
 
 .inventory-bottom {
   padding: 8px 12px 12px;
@@ -702,6 +743,14 @@ onUnmounted(() => {
   display: flex;
   gap: 2px;
   margin-bottom: 8px;
+  align-items: center;
+}
+
+.slot-count {
+  margin-left: auto;
+  font-size: 0.65rem;
+  color: #777;
+  padding: 4px 6px;
 }
 
 .tab {
@@ -739,10 +788,8 @@ onUnmounted(() => {
   border-radius: 3px;
   text-align: center;
   cursor: pointer;
-  font-size: 0.65rem;
   position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 2px;
@@ -762,19 +809,26 @@ onUnmounted(() => {
 .item-slot.epic { border-color: rgba(163, 53, 238, 0.45); }
 .item-slot.legendary { border-color: rgba(255, 165, 0, 0.45); }
 
-.item-name {
-  font-size: 0.5rem;
-  color: #ccc;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
+.item-icon {
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: #999;
+  line-height: 1;
 }
 
+.item-slot.uncommon .item-icon { color: #4caf50; }
+.item-slot.rare .item-icon { color: #42a5f5; }
+.item-slot.epic .item-icon { color: #ab47bc; }
+.item-slot.legendary .item-icon { color: #ffa726; }
+
 .item-qty {
-  font-size: 0.55rem;
-  color: #aaa;
+  position: absolute;
+  bottom: 1px;
+  right: 3px;
+  font-size: 0.5rem;
+  color: #ddd;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px #000;
 }
 
 .item-tooltip {
@@ -812,6 +866,12 @@ onUnmounted(() => {
 .tooltip-level {
   color: #aaa;
   font-size: 0.65rem;
+}
+
+.tooltip-enhance {
+  color: #ffd700;
+  font-size: 0.7rem;
+  margin: 2px 0;
 }
 
 .tooltip-desc {

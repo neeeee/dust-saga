@@ -36,6 +36,7 @@ export interface GameCallbacks {
   onSkillUsed: (skillName: string, mpCost: number, cooldownRemaining: number) => void;
   onSkillError: (skillName: string, error: string) => void;
   onEntityStatusEffects: (entityId: string, effects: any[]) => void;
+  onEnhancementResult: (data: { success: boolean; weaponSlotIndex: number; enhancementLevel: number; enhancementElement: string }) => void;
 }
 
 export class GameClient {
@@ -48,6 +49,8 @@ export class GameClient {
   private lastUpdate: number = 0;
   private lastTeleportTime: number = 0;
   private zoneLoading: boolean = false;
+  private engineReadyResolve: (() => void) | null = null;
+  private engineReadyPromise: Promise<void> = new Promise((resolve) => { this.engineReadyResolve = resolve; });
   private pendingSpawns: Array<{ id: string; type: string; position: any; data: any }> = [];
   private playerId: string | null = null;
   private playerMesh: any = null;
@@ -97,6 +100,8 @@ export class GameClient {
     this.engine = new GameEngine(canvas);
     this.input = new InputManager();
     await this.engine.initialize();
+    this.engineReadyResolve?.();
+    this.engineReadyResolve = null;
     this.setupClickHandler();
     this.setupAOETargeting(canvas);
   }
@@ -267,6 +272,7 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.WORLD_STATE, async (packet: any) => {
+      await this.engineReadyPromise;
       const { zoneId, zoneDef, enemies, npcs, players } = packet.data;
       this.currentZoneId = zoneId;
       this.zoneLoading = true;
@@ -620,6 +626,12 @@ export class GameClient {
       } else {
         this.callbacks.onNotification?.('Enhancement failed.', 'error');
       }
+      this.callbacks.onEnhancementResult?.({
+        success: packet.data.success,
+        weaponSlotIndex: packet.data.weaponSlotIndex,
+        enhancementLevel: packet.data.enhancementLevel,
+        enhancementElement: packet.data.enhancementElement,
+      });
     });
 
     this.network.onPacket(PacketType.NPC_DIALOG, (packet: any) => {

@@ -76,7 +76,11 @@ function focusInput() {
   inputEl.value?.focus();
 }
 
-defineExpose({ focusInput });
+function blurInput() {
+  inputEl.value?.blur();
+}
+
+defineExpose({ focusInput, blurInput });
 
 onMounted(() => {
   if (panelRef.value) attach(panelRef.value);
