@@ -1336,19 +1336,25 @@ export class NetworkServer {
     return applied;
   }
 
-  private getDebuffResist(targetId: string, category: 'ailment' | 'disorder'): number {
+  private getDebuffResist(targetId: string, category: string): number {
     const player = this.state.players.get(targetId);
     if (player) {
       const baseStats = player.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
       const totalSTA = (player.statPoints.STA || 0) + baseStats.STA;
       const totalSPI = (player.statPoints.SPI || 0) + baseStats.SPI;
-      if (category === 'ailment') {
-        const gearBonus = player.statBreakdown?.gearCombat?.ailmentResist || 0;
+      const gc = player.statBreakdown?.gearCombat;
+      const staCategories = new Set(['ailment', 'stun', 'trip', 'knockdown', 'knockback', 'bleed']);
+      const spiCategories = new Set(['disorder', 'freeze', 'burn', 'curse', 'sleep', 'weakness', 'weaken']);
+      if (staCategories.has(category)) {
+        const gearKey = `${category}Resist` as keyof typeof gc;
+        const gearBonus = (gc as any)?.[gearKey] || 0;
         return computeAilmentResist(totalSTA, gearBonus);
-      } else {
-        const gearBonus = player.statBreakdown?.gearCombat?.disorderResist || 0;
+      } else if (spiCategories.has(category)) {
+        const gearKey = `${category}Resist` as keyof typeof gc;
+        const gearBonus = (gc as any)?.[gearKey] || 0;
         return computeDisorderResist(totalSPI, gearBonus);
       }
+      return 0;
     }
     const enemy = this.spawnMgr.getEnemy(targetId);
     if (enemy) {
@@ -2770,15 +2776,27 @@ export class NetworkServer {
           data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
         });
 
-        if (this.skillSys.lastProficiencyGain) {
-          const pg = this.skillSys.lastProficiencyGain;
-          this.sendToPlayer(session.characterId, {
-            type: PacketType.CHAT_MESSAGE,
-            timestamp: Date.now(),
-            data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
-          });
-          this.skillSys.lastProficiencyGain = undefined;
-        }
+    if (this.skillSys.lastProficiencyGain) {
+      const pg = this.skillSys.lastProficiencyGain;
+      this.sendToPlayer(session.characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
+      });
+      this.skillSys.lastProficiencyGain = undefined;
+    }
+
+    if (this.skillSys.lastCooldownDebug) {
+      const cd = this.skillSys.lastCooldownDebug;
+      if (cd.cooldownReduction > 0) {
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.CHAT_MESSAGE,
+          timestamp: Date.now(),
+          data: { sender: 'Cooldown', message: `${cd.skillName}: ${cd.baseCd}s -> ${cd.effective.toFixed(1)}s (-${cd.cooldownReduction}% INT=${cd.totalINT})`, channel: 'system' }
+        });
+      }
+      this.skillSys.lastCooldownDebug = undefined;
+    }
 
         if (this.skillSys.lastBuffDebug) {
           this.sendToPlayer(session.characterId, {

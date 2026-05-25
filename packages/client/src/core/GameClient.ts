@@ -759,6 +759,18 @@ export class GameClient {
     const speedMultiplier = (this.stats as any)?.speedMultiplier ?? 1;
     const speed = input.sprint ? GAME_CONFIG.PLAYER_SPEED * 1.5 * speedMultiplier : GAME_CONFIG.PLAYER_SPEED * speedMultiplier;
 
+    const camera = this.engine.getScene()?.activeCamera;
+    let camForward = BabylonVector3.Forward();
+    let camRight = BabylonVector3.Right();
+    if (camera) {
+      camera.getDirectionToRef(BabylonVector3.Forward(), camForward);
+      camForward.y = 0;
+      camForward.normalize();
+      camera.getDirectionToRef(BabylonVector3.Right(), camRight);
+      camRight.y = 0;
+      camRight.normalize();
+    }
+
     if (movementVector.length() > 0.001) {
       this.cancelClickToMove();
     }
@@ -786,19 +798,6 @@ export class GameClient {
         isMoving = true;
       }
     } else if (movementVector.length() > 0.001) {
-      const camera = this.engine.getScene()?.activeCamera;
-      let camForward = BabylonVector3.Forward();
-      let camRight = BabylonVector3.Right();
-
-      if (camera) {
-        camera.getDirectionToRef(BabylonVector3.Forward(), camForward);
-        camForward.y = 0;
-        camForward.normalize();
-        camera.getDirectionToRef(BabylonVector3.Right(), camRight);
-        camRight.y = 0;
-        camRight.normalize();
-      }
-
       const moveDirection = new BabylonVector3(0, 0, 0);
       moveDirection.addInPlace(camForward.scale(movementVector.z));
       moveDirection.addInPlace(camRight.scale(movementVector.x));
@@ -844,7 +843,7 @@ export class GameClient {
       this.lastAutoAttackTime = 0;
     }
 
-    if (this.autoAttacking && this.targetId) {
+    if (this.autoAttacking && this.targetId && this.targetId !== this.playerId) {
       const now = Date.now();
       const attackSpeedMult = (this.statBreakdown as any)?.gearCombat?.attackSpeed ?? 0;
       const attackSpeedMultiplier = 1 + attackSpeedMult;
@@ -1068,6 +1067,44 @@ export class GameClient {
 
   getNetworkClient(): NetworkClient {
     return this.network;
+  }
+
+  cycleTarget(direction: number = 1): void {
+    if (!this.playerMesh) return;
+    const pos = this.playerMesh.position;
+    const range = 30;
+
+    const enemies: string[] = [];
+    for (const [id, entity] of this.knownEntities) {
+      if (entity.type !== 'enemy' && entity.type !== 'player') continue;
+      if (id === this.playerId) continue;
+      const group = this.engine.getMeshGroup(id);
+      if (!group) continue;
+      const ePos = group.root.position;
+      const dx = pos.x - ePos.x;
+      const dz = pos.z - ePos.z;
+      if (dx * dx + dz * dz <= range * range) {
+        enemies.push(id);
+      }
+    }
+
+    if (enemies.length === 0) {
+      this.setTarget(null);
+      return;
+    }
+
+    const currentIdx = this.targetId ? enemies.indexOf(this.targetId) : -1;
+    const nextIdx = ((currentIdx + direction) % enemies.length + enemies.length) % enemies.length;
+    const nextId = enemies[nextIdx];
+    const entity = this.knownEntities.get(nextId);
+    this.targetId = nextId;
+    this.engine.setTargetIndicator(nextId);
+    if (entity?.type === 'enemy') {
+      const ed = this.enemies.get(nextId);
+      this.callbacks.onTargetChange?.(nextId, ed ? { name: ed.name || 'Enemy', level: ed.level || 1, health: ed.health || 0, maxHealth: ed.maxHealth || 1, type: 'enemy' } : null);
+    } else if (entity?.type === 'player') {
+      this.callbacks.onTargetChange?.(nextId, { name: entity.data.name || 'Player', level: entity.data.level || 0, health: entity.data.health || 0, maxHealth: entity.data.maxHealth || 0, type: 'player' });
+    }
   }
 
   getPlayerId(): string | null {

@@ -66,6 +66,17 @@ export interface ItemStats {
   holyResist?: number;
   ailmentResist?: number;
   disorderResist?: number;
+  stunResist?: number;
+  tripResist?: number;
+  freezeResist?: number;
+  burnResist?: number;
+  curseResist?: number;
+  bleedResist?: number;
+  sleepResist?: number;
+  weaknessResist?: number;
+  weakenResist?: number;
+  knockdownResist?: number;
+  knockbackResist?: number;
   weaponElement?: 'fire' | 'ice' | 'lightning' | 'holy' | 'dark' | 'poison';
   weaponElementPower?: number;
 }
@@ -82,6 +93,7 @@ export interface ItemDefinition {
   sellPrice: number;
   requiredLevel: number;
   equipmentSlot?: EquipmentSlot;
+  soulSlots?: number;
 }
 
 export interface InventoryItem {

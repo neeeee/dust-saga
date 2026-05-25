@@ -799,6 +799,9 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     showStatPanel.value = !showStatPanel.value;
   } else if (e.code === 'KeyK') {
     showSkillWindow.value = !showSkillWindow.value;
+  } else if (e.code === 'Tab') {
+    e.preventDefault();
+    gameClient?.cycleTarget(e.shiftKey ? -1 : 1);
   } else if (e.code === 'Escape') {
     showInventory.value = false;
     showQuests.value = false;

@@ -98,6 +98,7 @@
       <div v-if="tooltip.slot" class="tooltip-slot">Slot: {{ tooltip.slot }}</div>
       <div v-if="tooltip.level > 0" class="tooltip-level">Required Level: {{ tooltip.level }}</div>
       <div v-if="tooltip.enhanceLevel > 0" class="tooltip-enhance">+{{ tooltip.enhanceLevel }} Enhanced</div>
+      <div v-if="tooltip.soulSlots > 0" class="tooltip-souls">Soul Slots: {{ tooltip.soulSlots }}</div>
       <div class="tooltip-desc">{{ tooltip.description }}</div>
       <div v-if="tooltip.statLines.length > 0" class="tooltip-stats">
         <div v-for="(line, i) in tooltip.statLines" :key="i" class="tooltip-stat">{{ line }}</div>
@@ -217,8 +218,8 @@ function getItemRarity(itemId: string): string {
   return ITEM_DATABASE[itemId]?.rarity || 'common';
 }
 
-const tooltip = reactive<{ visible: boolean; x: number; y: number; name: string; rarity: string; type: string; slot: string; level: number; description: string; statLines: string[]; enhanceLevel: number; enhanceElement: string | null }>({
-  visible: false, x: 0, y: 0, name: '', rarity: 'common', type: '', slot: '', level: 0, description: '', statLines: [], enhanceLevel: 0, enhanceElement: null,
+const tooltip = reactive<{ visible: boolean; x: number; y: number; name: string; rarity: string; type: string; slot: string; level: number; description: string; statLines: string[]; enhanceLevel: number; enhanceElement: string | null; soulSlots: number }>({
+  visible: false, x: 0, y: 0, name: '', rarity: 'common', type: '', slot: '', level: 0, description: '', statLines: [], enhanceLevel: 0, enhanceElement: null, soulSlots: 0,
 });
 
 function showTooltip(event: MouseEvent, itemId: string, enhancementLevel?: number, enhancementElement?: string | null): void {
@@ -279,6 +280,7 @@ function showTooltip(event: MouseEvent, itemId: string, enhancementLevel?: numbe
   tooltip.statLines = statLines;
   tooltip.enhanceLevel = enhancementLevel || 0;
   tooltip.enhanceElement = enhancementElement || null;
+  tooltip.soulSlots = def.soulSlots || 0;
 }
 
 function hideTooltip(): void {
@@ -871,6 +873,12 @@ onUnmounted(() => {
 .tooltip-enhance {
   color: #ffd700;
   font-size: 0.7rem;
+  margin: 2px 0;
+}
+
+.tooltip-souls {
+  color: #bb86fc;
+  font-size: 0.65rem;
   margin: 2px 0;
 }
 

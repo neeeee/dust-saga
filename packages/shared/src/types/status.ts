@@ -99,7 +99,7 @@ export interface StatusEffect {
   dotMpDrain?: number;
   dotHPPercent?: number;
   consumable?: boolean;
-  debuffCategory?: 'ailment' | 'disorder';
+  debuffCategory?: 'ailment' | 'disorder' | 'stun' | 'trip' | 'freeze' | 'burn' | 'curse' | 'bleed' | 'sleep' | 'weakness' | 'weaken' | 'knockdown' | 'knockback';
   exclusiveGroup?: string;
 }
 
@@ -307,17 +307,30 @@ export interface StatBonusBreakdown {
     holyResist: number;
     ailmentResist: number;
     disorderResist: number;
+    stunResist: number;
+    tripResist: number;
+    freezeResist: number;
+    burnResist: number;
+    curseResist: number;
+    bleedResist: number;
+    sleepResist: number;
+    weaknessResist: number;
+    weakenResist: number;
+    knockdownResist: number;
+    knockbackResist: number;
   };
   enhancement?: EnhancementBonus;
   totalAccuracy?: number;
   totalDodge?: number;
+  totalAilmentResist?: number;
+  totalDisorderResist?: number;
 }
 
 export function computeStatBreakdown(
   statPoints: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number },
   statusEffects: StatusEffect[],
   gearBonuses: { STA: number; STR: number; AGI: number; DEX: number; SPI: number; INT: number },
-  gearCombat?: { accuracy: number; dodge: number; attackSpeed: number; fireResist: number; iceResist: number; lightningResist: number; poisonResist: number; darkResist: number; holyResist: number; ailmentResist: number; disorderResist: number }
+  gearCombat?: { accuracy: number; dodge: number; attackSpeed: number; fireResist: number; iceResist: number; lightningResist: number; poisonResist: number; darkResist: number; holyResist: number; ailmentResist: number; disorderResist: number; stunResist: number; tripResist: number; freezeResist: number; burnResist: number; curseResist: number; bleedResist: number; sleepResist: number; weaknessResist: number; weakenResist: number; knockdownResist: number; knockbackResist: number }
 ): StatBonusBreakdown {
   const buffs = { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
 

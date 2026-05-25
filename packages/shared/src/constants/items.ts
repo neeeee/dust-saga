@@ -59,7 +59,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 35,
     requiredLevel: 5,
-    equipmentSlot: EquipmentSlot.ARMOR
+    equipmentSlot: EquipmentSlot.ARMOR,
+    soulSlots: 1
   },
   'plate_armor': {
     id: 'plate_armor',
@@ -71,7 +72,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 100,
     requiredLevel: 10,
-    equipmentSlot: EquipmentSlot.ARMOR
+    equipmentSlot: EquipmentSlot.ARMOR,
+    soulSlots: 1
   },
   'cloth_helmet': {
     id: 'cloth_helmet',
@@ -131,7 +133,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 10,
     requiredLevel: 1,
-    equipmentSlot: EquipmentSlot.RING_1
+    equipmentSlot: EquipmentSlot.RING_1,
+    soulSlots: 3
   },
   'flame_amulet': {
     id: 'flame_amulet',
@@ -167,7 +170,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 200,
     requiredLevel: 15,
-    equipmentSlot: EquipmentSlot.ARMOR
+    equipmentSlot: EquipmentSlot.ARMOR,
+    soulSlots: 2
   },
   'frost_blade': {
     id: 'frost_blade',
@@ -179,7 +183,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 250,
     requiredLevel: 15,
-    equipmentSlot: EquipmentSlot.WEAPON
+    equipmentSlot: EquipmentSlot.WEAPON,
+    soulSlots: 2
   },
   'basic_staff': {
     id: 'basic_staff',
@@ -203,7 +208,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 180,
     requiredLevel: 15,
-    equipmentSlot: EquipmentSlot.HELMET
+    equipmentSlot: EquipmentSlot.HELMET,
+    soulSlots: 2
   },
   'plague_walkers': {
     id: 'plague_walkers',
@@ -215,7 +221,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 160,
     requiredLevel: 15,
-    equipmentSlot: EquipmentSlot.BOOTS
+    equipmentSlot: EquipmentSlot.BOOTS,
+    soulSlots: 2
   },
   'windstrider_boots': {
     id: 'windstrider_boots',
@@ -227,7 +234,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 400,
     requiredLevel: 20,
-    equipmentSlot: EquipmentSlot.BOOTS
+    equipmentSlot: EquipmentSlot.BOOTS,
+    soulSlots: 3
   },
   'dragonscale_ring': {
     id: 'dragonscale_ring',
@@ -239,7 +247,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 500,
     requiredLevel: 20,
-    equipmentSlot: EquipmentSlot.RING_1
+    equipmentSlot: EquipmentSlot.RING_1,
+    soulSlots: 3
   },
   'health_potion': {
     id: 'health_potion',
@@ -438,7 +447,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 1000,
     requiredLevel: 25,
-    equipmentSlot: EquipmentSlot.WEAPON
+    equipmentSlot: EquipmentSlot.WEAPON,
+    soulSlots: 3
   },
   'eternal_torso': {
     id: 'eternal_torso',
@@ -450,7 +460,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 800,
     requiredLevel: 25,
-    equipmentSlot: EquipmentSlot.ARMOR
+    equipmentSlot: EquipmentSlot.ARMOR,
+    soulSlots: 3
   },
   'example_gloves': {
     id: 'example_gloves',
@@ -474,7 +485,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 800,
     requiredLevel: 25,
-    equipmentSlot: EquipmentSlot.GLOVES
+    equipmentSlot: EquipmentSlot.GLOVES,
+    soulSlots: 3
   },
   'eternal_legs': {
     id: 'eternal_legs',
@@ -486,7 +498,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 800,
     requiredLevel: 25,
-    equipmentSlot: EquipmentSlot.LEGS
+    equipmentSlot: EquipmentSlot.LEGS,
+    soulSlots: 3
   },
   'eternal_boots': {
     id: 'eternal_boots',
@@ -498,7 +511,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 800,
     requiredLevel: 25,
-    equipmentSlot: EquipmentSlot.BOOTS
+    equipmentSlot: EquipmentSlot.BOOTS,
+    soulSlots: 3
   },
   'earring_of_power': {
     id: 'earring_of_power',
@@ -510,7 +524,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 300,
     requiredLevel: 15,
-    equipmentSlot: EquipmentSlot.EARRING_1
+    equipmentSlot: EquipmentSlot.EARRING_1,
+    soulSlots: 2
   }
 };
 

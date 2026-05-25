@@ -9,11 +9,12 @@ export function computeDisorderResist(totalSPI: number, gearBonus: number = 0): 
 export function computeDebuffAccuracy(
   casterSPI: number,
   proficiencyAdeptness: number,
-  category: 'ailment' | 'disorder'
+  category: string
 ): number {
   const BASE_HIT_CHANCE = 20;
   const SPI_BONUS_PER_POINT = 0.30;
-  const PROFICIENCY_BONUS_PER_POINT = category === 'disorder' ? 0.5 : 0.3;
+  const disorderCategories = new Set(['disorder', 'freeze', 'burn', 'curse', 'sleep', 'weakness', 'weaken']);
+  const PROFICIENCY_BONUS_PER_POINT = disorderCategories.has(category) ? 0.5 : 0.3;
   const accuracy = BASE_HIT_CHANCE + casterSPI * SPI_BONUS_PER_POINT + proficiencyAdeptness * PROFICIENCY_BONUS_PER_POINT;
   return Math.min(95, accuracy);
 }

@@ -66,10 +66,6 @@
             <span class="combat-label">Atk Spd</span>
             <span class="combat-value">{{ formatPercent(combatStats.attackSpeed) }}</span>
           </div>
-          <div class="combat-item">
-            <span class="combat-label">Cast Spd</span>
-            <span class="combat-value">{{ formatPercent(combatStats.castSpeed) }}</span>
-          </div>
         </div>
       </div>
 
@@ -131,6 +127,31 @@
             <span class="resist-icon dark">H</span>
             <span class="resist-label">Holy</span>
             <span class="resist-value">{{ resistances.holy }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="resistances">
+        <h3>Status Resistances</h3>
+        <div class="resist-grid">
+          <div class="resist-item" v-for="r in [
+            { key: 'ailment', label: 'Ailment', cls: 'ailment' },
+            { key: 'disorder', label: 'Disorder', cls: 'disorder' },
+            { key: 'stun', label: 'Stun', cls: 'stun' },
+            { key: 'trip', label: 'Trip', cls: 'trip' },
+            { key: 'freeze', label: 'Freeze', cls: 'freeze' },
+            { key: 'burn', label: 'Burn', cls: 'burn' },
+            { key: 'curse', label: 'Curse', cls: 'curse' },
+            { key: 'bleed', label: 'Bleed', cls: 'bleed' },
+            { key: 'sleep', label: 'Sleep', cls: 'sleep' },
+            { key: 'weakness', label: 'Weakness', cls: 'weakness' },
+            { key: 'weaken', label: 'Weaken', cls: 'weaken' },
+            { key: 'knockdown', label: 'Knockdown', cls: 'knockdown' },
+            { key: 'knockback', label: 'Knockback', cls: 'knockback' },
+          ]" :key="r.key">
+            <span class="resist-icon" :class="r.cls">{{ r.label[0] }}</span>
+            <span class="resist-label">{{ r.label }}</span>
+            <span class="resist-value">{{ statusResistances[r.key as keyof typeof statusResistances.value] }}</span>
           </div>
         </div>
       </div>
@@ -382,6 +403,26 @@ const resistances = computed(() => {
     poison: gc?.poisonResist || 0,
     dark: gc?.darkResist || 0,
     holy: gc?.holyResist || 0,
+  };
+});
+
+const statusResistances = computed(() => {
+  const gc = props.statBreakdown?.gearCombat;
+  const sb = props.statBreakdown;
+  return {
+    ailment: sb?.totalAilmentResist ?? (gc?.ailmentResist || 0),
+    disorder: sb?.totalDisorderResist ?? (gc?.disorderResist || 0),
+    stun: gc?.stunResist || 0,
+    trip: gc?.tripResist || 0,
+    freeze: gc?.freezeResist || 0,
+    burn: gc?.burnResist || 0,
+    curse: gc?.curseResist || 0,
+    bleed: gc?.bleedResist || 0,
+    sleep: gc?.sleepResist || 0,
+    weakness: gc?.weaknessResist || 0,
+    knockdown: gc?.knockdownResist || 0,
+    knockback: gc?.knockbackResist || 0,
+    weaken: gc?.weakenResist || 0,
   };
 });
 
@@ -805,6 +846,20 @@ onUnmounted(() => {
   background: rgba(156, 39, 176, 0.3);
   color: #ab47bc;
 }
+
+.resist-icon.ailment { background: rgba(255, 152, 0, 0.3); color: #ffb74d; }
+.resist-icon.disorder { background: rgba(233, 30, 99, 0.3); color: #ec407a; }
+.resist-icon.stun { background: rgba(255, 193, 7, 0.3); color: #ffca28; }
+.resist-icon.trip { background: rgba(121, 85, 72, 0.3); color: #a1887f; }
+.resist-icon.freeze { background: rgba(33, 150, 243, 0.3); color: #42a5f5; }
+.resist-icon.burn { background: rgba(244, 67, 54, 0.3); color: #ef5350; }
+.resist-icon.curse { background: rgba(106, 27, 154, 0.3); color: #9c27b0; }
+.resist-icon.bleed { background: rgba(198, 40, 40, 0.3); color: #c62828; }
+.resist-icon.sleep { background: rgba(63, 81, 181, 0.3); color: #5c6bc0; }
+.resist-icon.weakness { background: rgba(233, 30, 99, 0.3); color: #ec407a; }
+.resist-icon.knockdown { background: rgba(121, 85, 72, 0.3); color: #8d6e63; }
+.resist-icon.knockback { background: rgba(255, 152, 0, 0.3); color: #ffa726; }
+.resist-icon.weaken { background: rgba(233, 30, 99, 0.3); color: #ec407a; }
 
 .resist-label {
   color: #aaa;

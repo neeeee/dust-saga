@@ -23,13 +23,15 @@ import {
   calculateDodge,
   calculateAccuracy,
   getDodgeAgiBonus,
+  computeAilmentResist,
+  computeDisorderResist,
 } from '@dust-saga/shared';
 
 export class PlayerSystem extends System {
   private levelUpCallbacks: Array<(playerId: string, newLevel: number) => void> = [];
 
   private getGearBonuses(session: PlayerSession) {
-    const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0, accuracy: 0, dodge: 0, attackSpeed: 0, castSpeed: 0, fireResist: 0, iceResist: 0, lightningResist: 0, poisonResist: 0, darkResist: 0, holyResist: 0, magicAttackPercent: 0, ailmentResist: 0, disorderResist: 0, criticalChance: 0 };
+    const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0, accuracy: 0, dodge: 0, attackSpeed: 0, castSpeed: 0, fireResist: 0, iceResist: 0, lightningResist: 0, poisonResist: 0, darkResist: 0, holyResist: 0, magicAttackPercent: 0, ailmentResist: 0, disorderResist: 0, criticalChance: 0, stunResist: 0, tripResist: 0, freezeResist: 0, burnResist: 0, curseResist: 0, bleedResist: 0, sleepResist: 0, weaknessResist: 0, weakenResist: 0, knockdownResist: 0, knockbackResist: 0 };
     for (const slot of Object.values(session.equipment)) {
       if (!slot) continue;
       const def = ITEM_DATABASE[slot.itemId];
@@ -59,6 +61,17 @@ export class PlayerSystem extends System {
       if (s.magicAttack) bonuses.magicAttackPercent += s.magicAttack;
       if (s.ailmentResist) bonuses.ailmentResist += s.ailmentResist;
       if (s.disorderResist) bonuses.disorderResist += s.disorderResist;
+      if (s.stunResist) bonuses.stunResist += s.stunResist;
+      if (s.tripResist) bonuses.tripResist += s.tripResist;
+      if (s.freezeResist) bonuses.freezeResist += s.freezeResist;
+      if (s.burnResist) bonuses.burnResist += s.burnResist;
+      if (s.curseResist) bonuses.curseResist += s.curseResist;
+      if (s.bleedResist) bonuses.bleedResist += s.bleedResist;
+      if (s.sleepResist) bonuses.sleepResist += s.sleepResist;
+      if (s.weaknessResist) bonuses.weaknessResist += s.weaknessResist;
+      if (s.weakenResist) bonuses.weakenResist += s.weakenResist;
+      if (s.knockdownResist) bonuses.knockdownResist += s.knockdownResist;
+      if (s.knockbackResist) bonuses.knockbackResist += s.knockbackResist;
       if (s.criticalChance) bonuses.criticalChance += s.criticalChance;
 
       const enhanceLevel = slot.enhancementLevel || 0;
@@ -339,7 +352,7 @@ export class PlayerSystem extends System {
       session.stats.mana = Math.floor(effective.maxMana * manaRatio);
     }
 
-    const { STA, STR, AGI, DEX, SPI, INT, accuracy, dodge, attackSpeed, fireResist, iceResist, lightningResist, poisonResist, darkResist, holyResist, ailmentResist, disorderResist, ...flatGear } = gear;
+    const { STA, STR, AGI, DEX, SPI, INT, accuracy, dodge, attackSpeed, fireResist, iceResist, lightningResist, poisonResist, darkResist, holyResist, ailmentResist, disorderResist, stunResist, tripResist, freezeResist, burnResist, curseResist, bleedResist, sleepResist, weaknessResist, weakenResist, knockdownResist, knockbackResist, ...flatGear } = gear;
 
     let buffFireResist = 0, buffIceResist = 0, buffLightningResist = 0, buffPoisonResist = 0, buffDarkResist = 0, buffHolyResist = 0;
     for (const effect of session.statusEffects || []) {
@@ -354,7 +367,7 @@ export class PlayerSystem extends System {
       }
     }
 
-    session.statBreakdown = computeStatBreakdown(session.statPoints, session.statusEffects || [], { STA, STR, AGI, DEX, SPI, INT }, { accuracy, dodge, attackSpeed, fireResist: fireResist + buffFireResist, iceResist: iceResist + buffIceResist, lightningResist: lightningResist + buffLightningResist, poisonResist: poisonResist + buffPoisonResist, darkResist: darkResist + buffDarkResist, holyResist: holyResist + buffHolyResist, ailmentResist, disorderResist });
+    session.statBreakdown = computeStatBreakdown(session.statPoints, session.statusEffects || [], { STA, STR, AGI, DEX, SPI, INT }, { accuracy, dodge, attackSpeed, fireResist: fireResist + buffFireResist, iceResist: iceResist + buffIceResist, lightningResist: lightningResist + buffLightningResist, poisonResist: poisonResist + buffPoisonResist, darkResist: darkResist + buffDarkResist, holyResist: holyResist + buffHolyResist, ailmentResist, disorderResist, stunResist, tripResist, freezeResist, burnResist, curseResist, bleedResist, sleepResist, weaknessResist, weakenResist, knockdownResist, knockbackResist });
 
     const enhBonuses = this.getEnhancementBonuses(session);
     session.statBreakdown.enhancement = enhBonuses;
@@ -364,6 +377,10 @@ export class PlayerSystem extends System {
     const totalDex = (session.statPoints.DEX || 0) + baseStats.DEX + DEX + (session.statBreakdown.buffs?.DEX || 0);
     session.statBreakdown.totalDodge = calculateDodge(session.stats.level, totalAgi, effective.dodgeBonus + dodge);
     session.statBreakdown.totalAccuracy = calculateAccuracy(session.stats.level, totalDex, effective.accuracyBonus + accuracy);
+    const totalSTA = (session.statPoints.STA || 0) + baseStats.STA + STA + (session.statBreakdown.buffs?.STA || 0);
+    const totalSPI = (session.statPoints.SPI || 0) + baseStats.SPI + SPI + (session.statBreakdown.buffs?.SPI || 0);
+    session.statBreakdown.totalAilmentResist = computeAilmentResist(totalSTA, ailmentResist);
+    session.statBreakdown.totalDisorderResist = computeDisorderResist(totalSPI, disorderResist);
   }
 
   healPlayer(session: PlayerSession): void {

@@ -76,6 +76,7 @@ export class SkillSystem {
   private globalCooldowns: Map<string, number> = new Map();
   lastBuffDebug: string | undefined;
   lastProficiencyGain: ProficiencyGainResult | undefined;
+  lastCooldownDebug: { skillName: string; totalINT: number; cooldownReduction: number; baseCd: number; effective: number } | undefined;
 
   gainProficiency(session: PlayerSession, skillName: string): ProficiencyGainResult | null {
     const subCategory = SKILL_TO_SUBCATEGORY[skillName];
@@ -269,8 +270,13 @@ export class SkillSystem {
 
     const now = Date.now();
     if (!session.skillCooldowns) session.skillCooldowns = [];
-    const cooldownMultiplier = Math.max(0, 100 - Math.floor(session.statPoints.INT / 10) * 2) / 100;
+    const totalINT = (session.statPoints.INT || 0) + (session.baseStats?.INT || 0);
+    const cooldownReduction = Math.floor(totalINT / 10) * 2;
+    const cooldownMultiplier = Math.max(0, 100 - cooldownReduction) / 100;
     const effectiveCooldown = Math.floor(skill.cooldown * 1000 * cooldownMultiplier);
+    if (cooldownReduction > 0) {
+      this.lastCooldownDebug = { skillName, totalINT, cooldownReduction, baseCd: skill.cooldown, effective: effectiveCooldown / 1000 };
+    }
     session.skillCooldowns.push({
       skillName,
       readyAt: now + effectiveCooldown
