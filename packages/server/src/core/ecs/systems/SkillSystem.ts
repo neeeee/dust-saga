@@ -46,6 +46,7 @@ export interface SkillUseResult {
   damage?: number;
   healing?: number;
   mpRestored?: number;
+  mpDamage?: number;
   maxHpIncrease?: number;
   isCritical?: boolean;
   missed?: boolean;
@@ -60,6 +61,16 @@ export interface SkillUseResult {
     isCritical: boolean;
     elementalDamage?: Array<{ element: string; damage: number }>;
   }>;
+  createdItems?: Array<{ itemId: string; quantity: number; consumeItems?: Array<{ itemId: string; quantity: number }> }>;
+  sacrificeHeal?: boolean;
+  targetId?: string;
+  dispelBuff?: boolean;
+  dispelDebuff?: boolean;
+  revealInvisible?: boolean;
+  fear?: boolean;
+  summonObject?: { objectType: string; duration: number; hp?: number; defense?: number; aoeDamage?: number };
+  banishObject?: boolean;
+  blockOnly?: boolean;
 }
 
 interface SkillClassification {
@@ -190,6 +201,29 @@ export class SkillSystem {
       return { canUse: false, error: 'no_mana' };
     }
 
+    if (skill.blockOnly) {
+      const hasBlockingStance = session.statusEffects?.some(e =>
+        e.type === StatusEffectType.BUFF_BLOCKING_STANCE || e.buffData?.blockingStance || e.buffData?.defensiveMarch
+      );
+      if (!hasBlockingStance) {
+        return { canUse: false, error: 'not_blocking' };
+      }
+    }
+
+    if (skill.shieldRequired) {
+      const hasShield = !!session.equipment?.shield;
+      if (!hasShield) {
+        return { canUse: false, error: 'no_shield' };
+      }
+    }
+
+    if (skill.negateFieldSpells || skill.debuffEffectTable?.preventFieldSpells) {
+      const hasPrevent = session.statusEffects?.some(e => e.type === StatusEffectType.PREVENT_FIELD_SPELLS);
+      if (hasPrevent) {
+        return { canUse: false, error: 'field_blocked' };
+      }
+    }
+
     if (session.statusEffects?.some(e => e.type === StatusEffectType.SILENCE && skill.mpCost > 0)) {
       return { canUse: false, error: 'silenced' };
     }
@@ -310,7 +344,23 @@ export class SkillSystem {
       };
     }
 
+    if (skill.createItems && skill.createItems.length > 0) {
+      return { success: true, createdItems: skill.createItems };
+    }
+
+    if (skill.sacrificeHeal && targetId) {
+      return { success: true, sacrificeHeal: true, targetId };
+    }
+
     const classification = this.classifySkill(skill);
+
+    if (skill.mpDamage && classification.dealsDamage && targetId) {
+      const basePower = skill.basePower ?? 1;
+      const totalINT = (session.statPoints.INT || 0) + (session.baseStats?.INT || 0);
+      const totalSPI = (session.statPoints.SPI || 0) + (session.baseStats?.SPI || 0);
+      const mpDamageAmount = Math.floor(basePower * (totalINT + totalSPI * 0.3) * 0.5);
+      return { success: true, mpDamage: mpDamageAmount, damageType: 'magical' };
+    }
 
     if (classification.restoresMp) {
       const mpAmount = this.calculateMpRegen(session, skill);
@@ -688,6 +738,30 @@ export class SkillSystem {
       addEffect(StatusEffectType.SILENCE, 0, { duration: dt.hasSilence.duration * 1000 });
     }
 
+    if (dt.hasFear) {
+      addEffect(StatusEffectType.FEAR, 0);
+    }
+
+    if (dt.mpDamage && dt.mpDamageDirect) {
+      addEffect(StatusEffectType.MP_DAMAGE_DEBUFF, dt.mpDamage, { mpDamageDirect: dt.mpDamage });
+    }
+
+    if (dt.preventFieldSpells) {
+      addEffect(StatusEffectType.PREVENT_FIELD_SPELLS, 0);
+    }
+
+    if (dt.preventResurrect) {
+      addEffect(StatusEffectType.PREVENT_RESSURECT, 0);
+    }
+
+    if (dt.curse) {
+      addEffect(StatusEffectType.CURSE, 0);
+    }
+
+    if (dt.revealInvisible) {
+      addEffect(StatusEffectType.BUFF_GENERIC, 0);
+    }
+
     return effects;
   }
 
@@ -902,6 +976,122 @@ export class SkillSystem {
       pushEffect(StatusEffectType.BUFF_RESIST, 0, { resistMods: bt.resistMods }, { exclusiveGroup: 'resist_element' });
     }
 
+    if (bt.moveSpeed) {
+      pushEffect(StatusEffectType.BUFF_MOVE_SPEED, bt.moveSpeed, { moveSpeedFlat: bt.moveSpeed });
+    }
+
+    if (bt.critResist) {
+      pushEffect(StatusEffectType.BUFF_CRIT_RESIST, bt.critResist, { critResistPercent: bt.critResist });
+    }
+
+    if (bt.critDamageReduce) {
+      pushEffect(StatusEffectType.BUFF_CRIT_DAMAGE_REDUCE, bt.critDamageReduce, { critDamageReducePercent: bt.critDamageReduce });
+    }
+
+    if (bt.auraDamageReduce) {
+      pushEffect(StatusEffectType.BUFF_AURA_DAMAGE_REDUCE, bt.auraDamageReduce, { auraDamageReducePercent: bt.auraDamageReduce });
+    }
+
+    if (bt.manaShield) {
+      target.statusEffects = target.statusEffects.filter(e => e.type !== StatusEffectType.BUFF_MANA_SHIELD);
+      pushEffect(StatusEffectType.BUFF_MANA_SHIELD, 0, { manaShield: true });
+    }
+
+    if (bt.spellInterruptResist) {
+      pushEffect(StatusEffectType.BUFF_SPELL_INTERRUPT_RESIST, bt.spellInterruptResist, { spellInterruptResistPercent: bt.spellInterruptResist });
+    }
+
+    if (bt.debuffResist) {
+      pushEffect(StatusEffectType.BUFF_DEBUFF_RESIST, bt.debuffResist, { debuffResistPercent: bt.debuffResist });
+    }
+
+    if (bt.blockingStance) {
+      target.statusEffects = target.statusEffects.filter(e => e.type !== StatusEffectType.BUFF_BLOCKING_STANCE);
+      pushEffect(StatusEffectType.BUFF_BLOCKING_STANCE, 0, { blockingStance: true, blockingRange: bt.blockingRange || 6 });
+    }
+
+    if (bt.defensiveMarch) {
+      target.statusEffects = target.statusEffects.filter(e => e.type !== StatusEffectType.BUFF_BLOCKING_STANCE);
+      pushEffect(StatusEffectType.BUFF_BLOCKING_STANCE, 0, { blockingStance: true, blockingRange: bt.blockingRange || 7, defensiveMarch: true });
+    }
+
+    if (bt.shieldCharge) {
+      pushEffect(StatusEffectType.BUFF_MOVE_SPEED, 300, { moveSpeedFlat: 300, shieldCharge: true });
+    }
+
+    if (bt.blockChance) {
+      pushEffect(StatusEffectType.BUFF_BLOCK_CHANCE, bt.blockChance, { blockChancePercent: bt.blockChance });
+    }
+
+    if (bt.consumableOnAttack) {
+      pushEffect(StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK, bt.accuracy || 50, { consumableOnAttack: true, accuracyBonusFlat: bt.accuracy || 50 });
+    }
+
+    if (bt.dodgeReduction) {
+      pushEffect(StatusEffectType.BUFF_GENERIC, 0, { dodgeReductionFlat: bt.dodgeReduction });
+    }
+
+    if (bt.healingOverTime) {
+      const hot = bt.healingOverTime;
+      const prof = hot.proficiencyStat ? (casterSession?.skillProficiencies?.[hot.proficiencyStat] || 0) : 0;
+      const spi = (casterSession?.statPoints?.SPI || 0) + (casterSession?.baseStats?.SPI || 0);
+      const hpPerTick = Math.floor(hot.base + spi * hot.spiScale + prof * 0.5);
+      pushEffect(StatusEffectType.BUFF_GENERIC, 0, { healOverTime: { hpPerTick, tickInterval: 3000 } });
+    }
+
+    if (bt.partyHeal) {
+      const healAmount = bt.partyHeal;
+      const spi = (casterSession?.statPoints?.SPI || 0) + (casterSession?.baseStats?.SPI || 0);
+      const finalHeal = Math.floor(healAmount + spi * 0.5);
+      target.stats.health = Math.min(target.stats.maxHealth, target.stats.health + finalHeal);
+    }
+
+    if (bt.dispelDebuff) {
+      target.statusEffects = target.statusEffects.filter(e => !e.debuffCategory);
+    }
+
+    if (bt.dispelBuff) {
+      target.statusEffects = target.statusEffects.filter(e => !e.buffData);
+    }
+
+    if (bt.attackPowerMultiplierProficiency) {
+      const prof = bt.attackPowerMultiplierProficiency;
+      const profValue = casterSession?.skillProficiencies?.[prof.proficiencyStat] || 0;
+      const multiplier = 1 + profValue * prof.perProficiency;
+      pushEffect(StatusEffectType.BUFF_ATTACK, multiplier);
+    }
+
+    if (bt.cooldownReduction) {
+      pushEffect(StatusEffectType.BUFF_GENERIC, 0, { cooldownReductionPercent: bt.cooldownReduction });
+    }
+
+    if (bt.magicalDamageBonus) {
+      pushEffect(StatusEffectType.BUFF_GENERIC, 0, { magicalDamageBonusPercent: bt.magicalDamageBonus });
+    }
+
+    if (bt.songType) {
+      const songMap: Record<string, StatusEffectType> = {
+        green: StatusEffectType.SONG_GREEN,
+        blue: StatusEffectType.SONG_BLUE,
+        yellow: StatusEffectType.SONG_YELLOW,
+        red: StatusEffectType.SONG_RED,
+      };
+      const songEffectType = songMap[bt.songType];
+      if (songEffectType) {
+        target.statusEffects = target.statusEffects.filter(e => ![StatusEffectType.SONG_GREEN, StatusEffectType.SONG_BLUE, StatusEffectType.SONG_YELLOW, StatusEffectType.SONG_RED].includes(e.type));
+        pushEffect(songEffectType, 0, { songType: bt.songType, songRadius: 3 });
+      }
+    }
+
+    if (bt.delayExplosion) {
+      const delayMs = bt.delayExplosion.minSeconds * 1000 + Math.random() * (bt.delayExplosion.maxSeconds - bt.delayExplosion.minSeconds) * 1000;
+      pushEffect(StatusEffectType.BUFF_GENERIC, 0, { delayExplosion: { minMs: delayMs, maxMs: delayMs } });
+      if (effects.length > 0) {
+        const lastEffect = effects[effects.length - 1];
+        lastEffect.delayExplosionAt = Date.now() + delayMs;
+      }
+    }
+
     if (bt.spiValues) {
       const totalSpi = (casterSession?.baseStats?.SPI || 0) + (casterSession?.statPoints?.SPI || target.statPoints.SPI || 0);
       const totalTargetSpi = target.baseStats?.SPI + target.statPoints.SPI;
@@ -1062,6 +1252,23 @@ export class SkillSystem {
         }
         if (effect.dotMpDrain) {
           mpDamage += effect.dotMpDrain;
+        }
+      }
+
+      if (effect.buffData?.healOverTime && now - effect.lastTickAt >= effect.buffData.healOverTime.tickInterval) {
+        effect.lastTickAt = now;
+        healed += effect.buffData.healOverTime.hpPerTick;
+      }
+
+      const songTypes = [StatusEffectType.SONG_GREEN, StatusEffectType.SONG_BLUE, StatusEffectType.SONG_YELLOW, StatusEffectType.SONG_RED];
+      if (songTypes.includes(effect.type) && effect.tickInterval > 0 && now - effect.lastTickAt >= effect.tickInterval) {
+        effect.lastTickAt = now;
+        if (effect.type === StatusEffectType.SONG_RED) {
+          const basePower = 2;
+          const totalINT = (session.statPoints.INT || 0) + (session.baseStats?.INT || 0);
+          const totalSPI = (session.statPoints.SPI || 0) + (session.baseStats?.SPI || 0);
+          damage += Math.floor(basePower * (totalINT + totalSPI * 0.3));
+          mpDamage += Math.floor(basePower * (totalINT + totalSPI * 0.3) * 0.3);
         }
       }
     }

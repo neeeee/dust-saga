@@ -80,7 +80,7 @@ import { useDraggable } from '../composables/useDraggable';
 const { posX, posY, attach, detach } = useDraggable('[data-drag-handle]', 'panel-enhancement', { x: 400, y: 150 });
 const panelRef = ref<HTMLElement | null>(null);
 
-const ENHANCE_FAILURE: number[] = [0, 0, 0, 5, 10, 15, 20, 30, 40, 50];
+const ENHANCE_FAILURE: number[] = [0, 0, 5, 15, 25, 35, 50, 65, 80, 90];
 
 const props = defineProps<{
   visible: boolean;
@@ -137,20 +137,20 @@ const successRateLabel = computed(() => {
   if (currentLevel.value >= 10) return null;
   const rate = ENHANCE_FAILURE[currentLevel.value];
   if (rate <= 0) return 'Guaranteed';
-  if (rate <= 5) return 'Excellent';
-  if (rate <= 15) return 'Great';
-  if (rate <= 30) return 'Good';
-  return 'Risky';
+  if (rate <= 10) return 'Great';
+  if (rate <= 25) return 'Good';
+  if (rate <= 50) return 'Risky';
+  return 'Dangerous';
 });
 
 const successRateClass = computed(() => {
   if (currentLevel.value >= 10) return '';
   const rate = ENHANCE_FAILURE[currentLevel.value];
   if (rate <= 0) return 'rate-guaranteed';
-  if (rate <= 5) return 'rate-excellent';
-  if (rate <= 15) return 'rate-great';
-  if (rate <= 30) return 'rate-good';
-  return 'rate-risky';
+  if (rate <= 10) return 'rate-excellent';
+  if (rate <= 25) return 'rate-great';
+  if (rate <= 50) return 'rate-risky';
+  return 'rate-dangerous';
 });
 
 const resultSlotClass = computed(() => {
@@ -409,6 +409,7 @@ onUnmounted(() => {
 .rate-great { color: #ffa726; }
 .rate-good { color: #ce93d8; }
 .rate-risky { color: #ef5350; }
+.rate-dangerous { color: #b71c1c; }
 
 .enhance-btn {
   margin-top: 6px;

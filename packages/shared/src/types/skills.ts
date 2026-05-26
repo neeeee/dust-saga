@@ -18,7 +18,8 @@ export enum PhysicalDamageSubType {
   SLASH = 'slash',
   THRUST = 'thrust',
   CLEAVE = 'cleave',
-  BASH = 'bash'
+  BASH = 'bash',
+  RANGED = 'ranged'
 }
 
 export enum MagicalDamageSubType {
@@ -26,7 +27,8 @@ export enum MagicalDamageSubType {
   ICE = 'ice',
   LIGHTNING = 'lightning',
   DARK = 'dark',
-  HOLY = 'holy'
+  HOLY = 'holy',
+  POISON = 'poison'
 }
 
 export type DamageSubType = PhysicalDamageSubType | MagicalDamageSubType;
@@ -71,12 +73,34 @@ export interface SkillDefinition {
   baseHits?: number;
   pulseCount?: number;
   pulseInterval?: number;
+  consumableItem?: string;
+  consumableItemQuantity?: number;
+  createItems?: Array<{ itemId: string; quantity: number; consumeItems?: Array<{ itemId: string; quantity: number }> }>;
+  sacrificeHeal?: boolean;
+  hidden?: boolean;
+  isSong?: boolean;
+  mpDamage?: boolean;
+  delayExplosion?: { minSeconds: number; maxSeconds: number };
+  dispelBuff?: boolean;
+  dispelDebuff?: boolean;
+  revealInvisible?: boolean;
+  summonObject?: { objectType: string; duration: number; hp?: number; defense?: number; aoeDamage?: number };
+  banishObject?: boolean;
+  negateFieldSpells?: boolean;
+  fieldSpellNegationRadius?: number;
+  damageVsLowDefense?: boolean;
+  fearAOE?: boolean;
+  preventResurrect?: boolean;
+  curse?: boolean;
+  blockOnly?: boolean;
+  shieldRequired?: boolean;
 }
 
 export interface SkillSubCategory {
   id: number;
   name: string;
   skills: Record<string, SkillDefinition>;
+  hidden?: boolean;
 }
 
 export interface SkillCategoryData {

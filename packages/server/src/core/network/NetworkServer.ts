@@ -1067,6 +1067,34 @@ export class NetworkServer {
       return;
     }
 
+    const skillDef = this.skillSys.findSkillDefinition(skillName);
+    if (skillDef?.consumableItem) {
+      const needed = skillDef.consumableItemQuantity || 1;
+      const count = session.inventory.filter(i => i.itemId === skillDef.consumableItem).reduce((s, i) => s + i.quantity, 0);
+      if (count < needed) {
+        this.sendToPlayer(characterId, {
+          type: PacketType.SKILL_USE,
+          timestamp: Date.now(),
+          data: { skillName, error: 'no_materials' }
+        });
+        return;
+      }
+      let remaining = needed;
+      for (let i = session.inventory.length - 1; i >= 0 && remaining > 0; i--) {
+        if (session.inventory[i].itemId === skillDef.consumableItem) {
+          const take = Math.min(session.inventory[i].quantity, remaining);
+          session.inventory[i].quantity -= take;
+          remaining -= take;
+          if (session.inventory[i].quantity <= 0) session.inventory.splice(i, 1);
+        }
+      }
+      this.sendToPlayer(characterId, {
+        type: PacketType.INVENTORY_UPDATE,
+        timestamp: Date.now(),
+        data: { inventory: session.inventory }
+      });
+    }
+
     const { started, castTime } = this.skillSys.beginCast(session, skillName, targetId || null);
     if (!started) return;
 
@@ -1168,6 +1196,113 @@ export class NetworkServer {
           : 0
       }
     });
+
+    if (result.createdItems && result.createdItems.length > 0) {
+      for (const ci of result.createdItems) {
+        if (ci.consumeItems) {
+          let canCraft = true;
+          for (const mat of ci.consumeItems) {
+            const count = session.inventory.filter(i => i.itemId === mat.itemId).reduce((s, i) => s + i.quantity, 0);
+            if (count < mat.quantity) { canCraft = false; break; }
+          }
+          if (!canCraft) continue;
+          for (const mat of ci.consumeItems) {
+            let remaining = mat.quantity;
+            for (let i = session.inventory.length - 1; i >= 0 && remaining > 0; i--) {
+              if (session.inventory[i].itemId === mat.itemId) {
+                const take = Math.min(session.inventory[i].quantity, remaining);
+                session.inventory[i].quantity -= take;
+                remaining -= take;
+                if (session.inventory[i].quantity <= 0) session.inventory.splice(i, 1);
+              }
+            }
+          }
+        }
+        this.playerSys.addItemToInventory(session, ci.itemId, ci.quantity);
+        this.sendToPlayer(characterId, {
+          type: PacketType.NOTIFICATION,
+          timestamp: Date.now(),
+          data: { message: `Created: ${ci.itemId} x${ci.quantity}` }
+        });
+      }
+      this.sendToPlayer(characterId, {
+        type: PacketType.INVENTORY_UPDATE,
+        timestamp: Date.now(),
+        data: { inventory: session.inventory }
+      });
+    }
+
+    if (result.sacrificeHeal && result.targetId) {
+      const target = this.state.players.get(result.targetId);
+      if (target) {
+        session.stats.health = 0;
+        session.isDead = true;
+        target.stats.health = target.stats.maxHealth;
+      }
+    }
+
+    if (result.mpDamage && result.mpDamage > 0 && firstTargetId) {
+      const mpTarget = this.spawnMgr.getEnemy(firstTargetId);
+      if (mpTarget) {
+        this.broadcastInZone(session.zoneId, {
+          type: PacketType.DAMAGE,
+          timestamp: Date.now(),
+          data: { attackerId: characterId, targetId: firstTargetId, damage: result.mpDamage, damageType: 'mp', skillName }
+        });
+      } else {
+        const playerTarget = this.state.players.get(firstTargetId);
+        if (playerTarget) {
+          playerTarget.stats.mana = Math.max(0, playerTarget.stats.mana - result.mpDamage);
+        }
+      }
+      this.broadcastInZone(session.zoneId, {
+        type: PacketType.DAMAGE,
+        timestamp: Date.now(),
+        data: { attackerId: characterId, targetId: firstTargetId, damage: result.mpDamage, damageType: 'mp', skillName }
+      });
+    }
+
+    if (result.fear && aoePosition) {
+      const fearTargets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
+      for (const ft of fearTargets) {
+        const enemy = this.spawnMgr.getEnemy(ft.id);
+        if (enemy && enemy.state !== 'dead') {
+          const angle = Math.random() * Math.PI * 2;
+          enemy.position.x += Math.cos(angle) * 10;
+          enemy.position.z += Math.sin(angle) * 10;
+        }
+      }
+    }
+
+    if (result.dispelBuff && firstTargetId) {
+      const playerTarget = this.state.players.get(firstTargetId);
+      if (playerTarget) {
+        playerTarget.statusEffects = playerTarget.statusEffects.filter(e => !e.buffData);
+      }
+    }
+
+    if (result.dispelDebuff && firstTargetId) {
+      const playerTarget = this.state.players.get(firstTargetId);
+      if (playerTarget) {
+        playerTarget.statusEffects = playerTarget.statusEffects.filter(e => !e.debuffCategory);
+      }
+    }
+
+    if (result.summonObject && aoePosition) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: `Summoned ${result.summonObject.objectType}` }
+      });
+    }
+
+    if (result.banishObject) {
+      this.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: 'Banished summoned object' }
+      });
+    }
 
     if (result.damage) {
       if (aoePosition) {
@@ -2065,7 +2200,7 @@ export class NetworkServer {
       return;
     }
 
-    const ENHANCE_FAILURE_CHANCE: number[] = [0, 0, 0, 5, 10, 15, 20, 30, 40, 50];
+    const ENHANCE_FAILURE_CHANCE: number[] = [0, 0, 5, 15, 25, 35, 50, 65, 80, 90];
     const failChance = currentLevel < ENHANCE_FAILURE_CHANCE.length ? ENHANCE_FAILURE_CHANCE[currentLevel] : 50;
     if (Math.random() * 100 < failChance) {
       const sortedSlots = [...consumedSlots].sort((a, b) => b - a);
@@ -3827,10 +3962,28 @@ export class NetworkServer {
       radius,
       pulseInterval,
       remainingPulses: totalPulses,
-      lastPulseAt: 0,
+      lastPulseAt: Date.now(),
       expiresAt: lastPulseTime + 1500,
       entitiesInside: new Map<string, number>(),
     };
+    const now = Date.now();
+    for (const [id, enemy] of this.spawnMgr.getAllEnemies()) {
+      if (enemy.state === 'dead') continue;
+      const dx = enemy.position.x - position.x;
+      const dz = enemy.position.z - position.z;
+      if (Math.sqrt(dx * dx + dz * dz) <= radius) {
+        zone.entitiesInside.set(id, now);
+      }
+    }
+    for (const [id, player] of this.state.players) {
+      if (id === session.characterId) continue;
+      if (player.stats.health <= 0 || !player.position) continue;
+      const dx = player.position.x - position.x;
+      const dz = player.position.z - position.z;
+      if (Math.sqrt(dx * dx + dz * dz) <= radius) {
+        zone.entitiesInside.set(id, now);
+      }
+    }
     this.activeAOEZones.set(zoneId, zone);
 
     this.broadcastInZone(session.zoneId, {
@@ -3986,6 +4139,34 @@ export class NetworkServer {
         data: { skillName, error: check.error }
       });
       return;
+    }
+
+    const groundSkillDef = this.skillSys.findSkillDefinition(skillName);
+    if (groundSkillDef?.consumableItem) {
+      const needed = groundSkillDef.consumableItemQuantity || 1;
+      const count = session.inventory.filter(i => i.itemId === groundSkillDef.consumableItem).reduce((s, i) => s + i.quantity, 0);
+      if (count < needed) {
+        this.sendToPlayer(characterId, {
+          type: PacketType.SKILL_USE,
+          timestamp: Date.now(),
+          data: { skillName, error: 'no_materials' }
+        });
+        return;
+      }
+      let remaining = needed;
+      for (let i = session.inventory.length - 1; i >= 0 && remaining > 0; i--) {
+        if (session.inventory[i].itemId === groundSkillDef.consumableItem) {
+          const take = Math.min(session.inventory[i].quantity, remaining);
+          session.inventory[i].quantity -= take;
+          remaining -= take;
+          if (session.inventory[i].quantity <= 0) session.inventory.splice(i, 1);
+        }
+      }
+      this.sendToPlayer(characterId, {
+        type: PacketType.INVENTORY_UPDATE,
+        timestamp: Date.now(),
+        data: { inventory: session.inventory }
+      });
     }
 
     const { started, castTime } = this.skillSys.beginCast(session, skillName, null, aoePosition);
@@ -4230,7 +4411,7 @@ export class NetworkServer {
       });
     }
 
-    if (result.damage && firstTargetId) {
+    if (result.damage) {
       this.applyAOEDamageToTargets(session, skillName, aoePosition, aoeRadius, result);
     }
 

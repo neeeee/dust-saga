@@ -34,6 +34,26 @@ export enum StatusEffectType {
   DEBUFF_DAMAGE_TAKEN_UP = 'debuff_damage_taken_up',
   WEAPON_AURA = 'weapon_aura',
   BUFF_RESIST = 'buff_resist',
+  BUFF_CRIT_RESIST = 'buff_crit_resist',
+  BUFF_CRIT_DAMAGE_REDUCE = 'buff_crit_damage_reduce',
+  BUFF_AURA_DAMAGE_REDUCE = 'buff_aura_damage_reduce',
+  BUFF_MANA_SHIELD = 'buff_mana_shield',
+  BUFF_SPELL_INTERRUPT_RESIST = 'buff_spell_interrupt_resist',
+  BUFF_DEBUFF_RESIST = 'buff_debuff_resist',
+  BUFF_DAMAGE_REDIRECT = 'buff_damage_redirect',
+  BUFF_BLOCK_CHANCE = 'buff_block_chance',
+  BUFF_BLOCKING_STANCE = 'buff_blocking_stance',
+  BUFF_CONSUMABLE_ON_ATTACK = 'buff_consumable_on_attack',
+  SONG_ACTIVE = 'song_active',
+  SONG_GREEN = 'song_green',
+  SONG_BLUE = 'song_blue',
+  SONG_YELLOW = 'song_yellow',
+  SONG_RED = 'song_red',
+  FEAR = 'fear',
+  CURSE = 'curse',
+  PREVENT_FIELD_SPELLS = 'prevent_field_spells',
+  PREVENT_RESSURECT = 'prevent_resurrect',
+  MP_DAMAGE_DEBUFF = 'mp_damage_debuff',
 }
 
 export interface SpiValueTier {
@@ -57,6 +77,53 @@ export interface BuffEffectTable {
   dodgeChance?: number;
   accuracy?: number;
   attackSpeed?: number;
+  moveSpeed?: number;
+  critResist?: number;
+  critDamageReduce?: number;
+  auraDamageReduce?: number;
+  manaShield?: boolean;
+  spellInterruptResist?: number;
+  debuffResist?: number;
+  damageRedirect?: { targetId: string };
+  blockChance?: number;
+  consumableOnAttack?: boolean;
+  cooldownReduction?: number;
+  magicalDamageBonus?: number;
+  damageNegation?: { base: number; spiScale: number; proficiencyCap: number; proficiencyStat: string };
+  dodgeReduction?: number;
+  accuracyBonus?: number;
+  healingOverTime?: { base: number; spiScale: number; proficiencyStat: string };
+  partyHeal?: number;
+  healPercent?: number;
+  mpDamage?: number;
+  mpDamageAOE?: boolean;
+  attackPowerMultiplierProficiency?: { baseStat: string; perProficiency: number; proficiencyStat: string };
+  fear?: boolean;
+  fearAOE?: boolean;
+  songType?: 'green' | 'blue' | 'yellow' | 'red';
+  delayExplosion?: { minSeconds: number; maxSeconds: number };
+  preventResurrect?: boolean;
+  preventFieldSpells?: boolean;
+  consumableItem?: { itemId: string; quantity: number };
+  createItems?: Array<{ itemId: string; quantity: number; consumeItems?: Array<{ itemId: string; quantity: number }> }>;
+  sacrificeHeal?: boolean;
+  dispelBuff?: boolean;
+  dispelDebuff?: boolean;
+  revealInvisible?: boolean;
+  summonObject?: { objectType: string; duration: number; hp?: number; defense?: number; aoeDamage?: number };
+  banishObject?: boolean;
+  negateFieldSpells?: boolean;
+  fieldSpellNegationRadius?: number;
+  blockingStance?: boolean;
+  blockingRange?: number;
+  shieldCharge?: boolean;
+  defensiveMarch?: boolean;
+  skillDisableAOE?: boolean;
+  damageVsLowDefense?: boolean;
+  songRadius?: number;
+  songCooldownReduction?: number;
+  songMagicalDamageBonus?: number;
+  songDamageNegation?: { base: number; spiScale: number; proficiencyCap: number };
   spiValues?: SpiValueTier[];
   weaponAura?: {
     element: string;
@@ -79,8 +146,35 @@ export interface BuffData {
   dodgeFlat?: number;
   accuracyFlat?: number;
   attackSpeedPercent?: number;
+  moveSpeedFlat?: number;
+  moveSpeedMultiplier?: number;
   weaponAura?: { element: string; minDamage: number; maxDamage: number };
   resistMods?: Record<string, number>;
+  critResistPercent?: number;
+  critDamageReducePercent?: number;
+  auraDamageReducePercent?: number;
+  manaShield?: boolean;
+  spellInterruptResistPercent?: number;
+  debuffResistPercent?: number;
+  damageRedirectTargetId?: string;
+  blockChancePercent?: number;
+  consumableOnAttack?: boolean;
+  cooldownReductionPercent?: number;
+  magicalDamageBonusPercent?: number;
+  dodgeReductionFlat?: number;
+  accuracyBonusFlat?: number;
+  healOverTime?: { hpPerTick: number; tickInterval: number };
+  fear?: boolean;
+  delayExplosion?: { minMs: number; maxMs: number };
+  preventResurrect?: boolean;
+  preventFieldSpells?: boolean;
+  blockingStance?: boolean;
+  blockingRange?: number;
+  defensiveMarch?: boolean;
+  shieldCharge?: boolean;
+  songType?: 'green' | 'blue' | 'yellow' | 'red';
+  songRadius?: number;
+  damageNegation?: { base: number; spiScale: number; proficiencyCap: number };
 }
 
 export interface StatusEffect {
@@ -101,6 +195,14 @@ export interface StatusEffect {
   consumable?: boolean;
   debuffCategory?: 'ailment' | 'disorder' | 'stun' | 'trip' | 'freeze' | 'burn' | 'curse' | 'bleed' | 'sleep' | 'weakness' | 'weaken' | 'knockdown' | 'knockback';
   exclusiveGroup?: string;
+  mpDamageDirect?: number;
+  summonObjectId?: string;
+  summonObjectType?: string;
+  delayExplosionAt?: number;
+  delayExplosionTargetId?: string;
+  preventResurrect?: boolean;
+  preventFieldSpells?: boolean;
+  fearDirection?: { x: number; y: number; z: number };
 }
 
 export interface StatusEffectDefinition {
@@ -147,6 +249,27 @@ export const STATUS_EFFECT_DEFS: Partial<Record<StatusEffectType, StatusEffectDe
   [StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP]: { type: StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.WEAPON_AURA]: { type: StatusEffectType.WEAPON_AURA, duration: 480000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_RESIST]: { type: StatusEffectType.BUFF_RESIST, duration: 30000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_CRIT_RESIST]: { type: StatusEffectType.BUFF_CRIT_RESIST, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_CRIT_DAMAGE_REDUCE]: { type: StatusEffectType.BUFF_CRIT_DAMAGE_REDUCE, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_AURA_DAMAGE_REDUCE]: { type: StatusEffectType.BUFF_AURA_DAMAGE_REDUCE, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_MANA_SHIELD]: { type: StatusEffectType.BUFF_MANA_SHIELD, duration: 999999999, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_SPELL_INTERRUPT_RESIST]: { type: StatusEffectType.BUFF_SPELL_INTERRUPT_RESIST, duration: 80000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_DEBUFF_RESIST]: { type: StatusEffectType.BUFF_DEBUFF_RESIST, duration: 15000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_DAMAGE_REDIRECT]: { type: StatusEffectType.BUFF_DAMAGE_REDIRECT, duration: 300000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_BLOCK_CHANCE]: { type: StatusEffectType.BUFF_BLOCK_CHANCE, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_BLOCKING_STANCE]: { type: StatusEffectType.BUFF_BLOCKING_STANCE, duration: 999999999, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK]: { type: StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_MOVE_SPEED]: { type: StatusEffectType.BUFF_MOVE_SPEED, duration: 2000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.SONG_GREEN]: { type: StatusEffectType.SONG_GREEN, duration: 999999999, tickInterval: 3000, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.SONG_BLUE]: { type: StatusEffectType.SONG_BLUE, duration: 999999999, tickInterval: 3000, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.SONG_YELLOW]: { type: StatusEffectType.SONG_YELLOW, duration: 999999999, tickInterval: 3000, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.SONG_RED]: { type: StatusEffectType.SONG_RED, duration: 999999999, tickInterval: 3000, potency: 0, isDoT: false, isCC: true },
+  [StatusEffectType.SONG_ACTIVE]: { type: StatusEffectType.SONG_ACTIVE, duration: 999999999, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.FEAR]: { type: StatusEffectType.FEAR, duration: 5000, tickInterval: 0, potency: 0, isDoT: true, isCC: true },
+  [StatusEffectType.CURSE]: { type: StatusEffectType.CURSE, duration: 60000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.PREVENT_FIELD_SPELLS]: { type: StatusEffectType.PREVENT_FIELD_SPELLS, duration: 60000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.PREVENT_RESSURECT]: { type: StatusEffectType.PREVENT_RESSURECT, duration: 60000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.MP_DAMAGE_DEBUFF]: { type: StatusEffectType.MP_DAMAGE_DEBUFF, duration: 10000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
 };
 
 export function isCCImmune(activeEffects: StatusEffect[]): boolean {

@@ -1,7 +1,9 @@
 export type DebuffDOTType = 'poison' | 'severe_poison' | 'bleed' | 'mp_drain';
 
+export type DebuffCategory = 'ailment' | 'disorder' | 'stun' | 'trip' | 'freeze' | 'burn' | 'curse' | 'bleed' | 'sleep' | 'weakness' | 'weaken' | 'knockdown' | 'knockback';
+
 export interface DebuffEffectTable {
-  debuffCategory?: 'ailment' | 'disorder' | 'stun' | 'trip' | 'freeze' | 'burn' | 'curse' | 'bleed' | 'sleep' | 'weakness' | 'weaken' | 'knockdown' | 'knockback';
+  debuffCategory?: DebuffCategory;
   dot?: DebuffDOTType;
   dotPotency?: number;
   dotHPPercent?: number;
@@ -18,6 +20,8 @@ export interface DebuffEffectTable {
   damageTakenUp?: number;
   moveSpeedDown?: number;
   dodgeDown?: number;
+  mpDamage?: number;
+  mpDamageDirect?: boolean;
   hasFreeze?: { duration: number };
   hasSleep?: { duration: number };
   hasStun?: { duration: number };
@@ -25,10 +29,14 @@ export interface DebuffEffectTable {
   hasKnockback?: {
     knockbackDistance: number;
   };
+  hasFear?: boolean;
   preventEquipment?: {
     equipmentSlotDisabled: string;
   };
   consumable?: boolean;
   preventFieldSpells?: boolean;
   preventSpellCast?: boolean;
+  preventResurrect?: boolean;
+  curse?: boolean;
+  revealInvisible?: boolean;
 }
