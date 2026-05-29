@@ -94,3 +94,24 @@ export function distanceSquared(pos1: { x: number; y: number; z: number }, pos2:
   const dz = pos1.z - pos2.z;
   return dx * dx + dy * dy + dz * dz;
 }
+
+export function distance2D(a: { x: number; z: number }, b: { x: number; z: number }): number {
+  const dx = a.x - b.x;
+  const dz = a.z - b.z;
+  return Math.sqrt(dx * dx + dz * dz);
+}
+
+export function moveToward(
+  entity: { position: { x: number; y: number; z: number }; rotation: number },
+  target: { x: number; y: number; z: number },
+  speed: number,
+): void {
+  const dx = target.x - entity.position.x;
+  const dz = target.z - entity.position.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist > 0.01) {
+    entity.position.x += (dx / dist) * speed;
+    entity.position.z += (dz / dist) * speed;
+    entity.rotation = Math.atan2(dx, dz);
+  }
+}

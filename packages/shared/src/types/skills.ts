@@ -1,3 +1,4 @@
+import { StatusEffectType } from './status';
 import type { BuffEffectTable } from './status';
 import type { DebuffEffectTable } from '../constants/debuffs';
 
@@ -49,6 +50,7 @@ export enum AOETargetMode {
 export interface SkillDefinition {
   name: string;
   reqPoints: SkillReqPoints;
+  reqLevel?: number;
   mpCost: number;
   castTime: number;
   cooldown: number;
@@ -56,6 +58,7 @@ export interface SkillDefinition {
   description: string;
   damageType?: DamageType;
   damageSubType?: DamageSubType;
+  skillType?: SkillType;
   isPassive?: boolean;
   isAOE?: boolean;
   aoeTargetMode?: AOETargetMode;
@@ -80,11 +83,13 @@ export interface SkillDefinition {
   hidden?: boolean;
   isSong?: boolean;
   mpDamage?: boolean;
+  onHitEffects?: OnHitEffect[];
+  healing?: HealingEffect;
   delayExplosion?: { minSeconds: number; maxSeconds: number };
   dispelBuff?: boolean;
   dispelDebuff?: boolean;
   revealInvisible?: boolean;
-  summonObject?: { objectType: string; duration: number; hp?: number; defense?: number; aoeDamage?: number };
+  summonObject?: SummonObject;
   banishObject?: boolean;
   negateFieldSpells?: boolean;
   fieldSpellNegationRadius?: number;
@@ -118,22 +123,19 @@ export interface ClassSpecificSkill {
   description: string;
   damageType?: DamageType;
   damageSubType?: DamageSubType;
-  isPassive?: boolean;
+  skillType?: SkillType;
   isAOE?: boolean;
   aoeTargetMode?: AOETargetMode;
   aoeRadius?: number;
   range?: number;
-  isBuff?: boolean;
-  isDebuff?: boolean;
-  hasDebuff?: boolean;
-  selfBuffOnly?: boolean;
-  isRevive?: boolean;
   buffEffectTable?: BuffEffectTable;
   debuffEffectTable?: DebuffEffectTable;
   debuffDuration?: number;
   basePower?: number;
   pulseCount?: number;
   pulseInterval?: number;
+  onHitEffects?: OnHitEffect[];
+  healing?: HealingEffect;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;
@@ -163,6 +165,56 @@ export enum SkillTargetType {
   SELF_OR_TARGET = 'self_or_target',
   PARTY = 'party',
   OTHER_ONLY = 'other_only'
+}
+
+export enum SkillType {
+  DAMAGE_PHYSICAL = 'damage_physical',
+  DAMAGE_MAGICAL = 'damage_magical',
+  HEAL = 'heal',
+  HEAL_OVER_TIME = 'heal_over_time',
+  PARTY_HEAL = 'party_heal',
+  HP_BUFF = 'hp_buff',
+  MP_RESTORE = 'mp_restore',
+  DRAIN_LIFE = 'drain_life',
+  SACRIFICE_HEAL = 'sacrifice_heal',
+  REVIVE = 'revive',
+  BUFF = 'buff',
+  DEBUFF = 'debuff',
+  SONG = 'song',
+  CRAFT = 'craft',
+  UTILITY = 'utility',
+  SUMMON = 'summon',
+  FIELD_SPELL = 'field_spell',
+  MP_DAMAGE = 'mp_damage',
+  DISPEL = 'dispel',
+  FEAR = 'fear',
+  PASSIVE = 'passive',
+}
+
+export interface OnHitEffect {
+  type: StatusEffectType;
+  chance?: number;
+  potency?: number | { formula?: string; stat?: string; [key: string]: unknown };
+  duration?: number;
+}
+
+export interface HealingEffect {
+  type: 'single' | 'party' | 'over_time' | 'hp_buff';
+  baseAmount?: number;
+  statMultipliers?: Record<string, number>;
+  percentOfMaxHp?: number;
+  flatBonus?: number;
+  tickInterval?: number;
+  proficiencyStat?: string;
+  mpCostScaling?: number;
+}
+
+export interface SummonObject {
+  objectType: string;
+  duration: number;
+  hp?: number;
+  defense?: number;
+  aoeDamage?: number;
 }
 
 export const SKILL_TARGET_RULES: Record<string, SkillTargetType> = {
@@ -260,8 +312,43 @@ export const SKILL_TARGET_RULES: Record<string, SkillTargetType> = {
   'Befuddle': SkillTargetType.OTHER_ONLY,
 };
 
-export function isPassiveSkill(skill: SkillDefinition): boolean {
-  return skill.isPassive || skill.name.includes('(Passive)');
+export function isPassiveSkill(skill: SkillDefinition | ClassSpecificSkill): boolean {
+  if (skill.skillType === SkillType.PASSIVE) return true;
+  if ('isPassive' in skill && skill.isPassive) return true;
+  if ('name' in skill && skill.name.includes('(Passive)')) return true;
+  return false;
+}
+
+export function getSkillTargetType(skill: SkillDefinition | ClassSpecificSkill): SkillTargetType | undefined {
+  if ('skillType' in skill && skill.skillType) {
+    switch (skill.skillType) {
+      case SkillType.REVIVE:
+      case SkillType.DEBUFF:
+      case SkillType.DAMAGE_PHYSICAL:
+      case SkillType.DAMAGE_MAGICAL:
+      case SkillType.DISPEL:
+      case SkillType.MP_DAMAGE:
+      case SkillType.FEAR:
+      case SkillType.SONG:
+        return SkillTargetType.OTHER_ONLY;
+      case SkillType.HEAL:
+      case SkillType.PARTY_HEAL:
+        return SkillTargetType.PARTY;
+      case SkillType.BUFF:
+      case SkillType.HEAL_OVER_TIME:
+      case SkillType.HP_BUFF:
+      case SkillType.MP_RESTORE:
+      case SkillType.DRAIN_LIFE:
+      case SkillType.SACRIFICE_HEAL:
+        return SkillTargetType.SELF;
+      case SkillType.CRAFT:
+      case SkillType.SUMMON:
+      case SkillType.UTILITY:
+      case SkillType.FIELD_SPELL:
+        return undefined;
+    }
+  }
+  return undefined;
 }
 
 export function meetsRequirements(

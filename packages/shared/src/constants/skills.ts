@@ -1238,7 +1238,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             isBuff: true,
             selfBuffOnly: true,
             buffEffectTable: {
-              moveSpeed: 200,
+              moveSpeed: 1,
             },
           },
           "Quick Step": {

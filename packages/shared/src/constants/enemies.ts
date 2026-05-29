@@ -22,6 +22,13 @@ export interface EnemyDefinition {
   darkResist?: number;
   holyResist?: number;
   poisonResist?: number;
+  magicAttack?: number;
+  attackCooldown?: number;
+  aggroStrategy?: 'first' | 'closest' | 'lowestHp';
+  patrolStrategy?: 'random' | 'sequential';
+  skills?: Array<string>;
+  immunities?: string[];
+  magicDefense?: number;
 }
 
 export const ENEMY_DATABASE: Record<string, EnemyDefinition> = {
@@ -463,25 +470,24 @@ export const ENEMY_DATABASE: Record<string, EnemyDefinition> = {
         { itemId: 'health_potion', quantity: 4, chance: 0.65 }
       ]
     }
+  },
+  'striking_dummy': {
+    id: 'striking_dummy',
+    name: 'Striking Dummy',
+    modelFile: 'Enemy Small.glb',
+    level: 1,
+    health: 999999,
+    attack: 0,
+    defense: 0,
+    speed: 0,
+    experience: 0,
+    aggroRange: 0,
+    attackRange: 0,
+    leashRange: 0,
+    respawnTime: 5000,
+    lootTable: { rolls: 0, drops: [] },
+    patrolSpeed: 0,
   }
-};
-
-ENEMY_DATABASE['striking_dummy'] = {
-  id: 'striking_dummy',
-  name: 'Striking Dummy',
-  modelFile: 'Enemy Small.glb',
-  level: 1,
-  health: 999999,
-  attack: 0,
-  defense: 0,
-  speed: 0,
-  experience: 0,
-  aggroRange: 0,
-  attackRange: 0,
-  leashRange: 0,
-  respawnTime: 5000,
-  lootTable: { rolls: 0, drops: [] },
-  patrolSpeed: 0,
 };
 
 export function getEnemyDefinition(id: string): EnemyDefinition | undefined {

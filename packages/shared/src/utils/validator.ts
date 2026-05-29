@@ -10,6 +10,7 @@ export interface MovementInput {
 
 export class Validator {
   static validatePosition(pos: { x: number; y: number; z: number }): boolean {
+    const MAX = GAME_CONFIG.MAX_POSITION;
     return (
       typeof pos.x === 'number' &&
       typeof pos.y === 'number' &&
@@ -19,7 +20,10 @@ export class Validator {
       !isNaN(pos.z) &&
       isFinite(pos.x) &&
       isFinite(pos.y) &&
-      isFinite(pos.z)
+      isFinite(pos.z) &&
+      Math.abs(pos.x) <= MAX &&
+      Math.abs(pos.y) <= MAX &&
+      Math.abs(pos.z) <= MAX
     );
   }
 

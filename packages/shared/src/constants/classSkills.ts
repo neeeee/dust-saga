@@ -1,4 +1,6 @@
-import type { ClassSpecificSkills, AOETargetMode } from '../types/skills';
+import { SkillType } from '../types/skills';
+import type { ClassSpecificSkills } from '../types/skills';
+import { StatusEffectType } from '../types/status';
 import { BaseClass } from '../types/jobs';
 
 export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
@@ -10,6 +12,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 1,
       description: "Provoke target to attack you",
+      skillType: SkillType.DEBUFF,
     },
     "Brewer (Passive)": {
       reqLevel: 12,
@@ -18,7 +21,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "12% more potion effectiveness",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Lunge": {
       reqLevel: 15,
@@ -27,6 +30,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 30,
       duration: 120,
       description: "Increased attack speed with melee weapons",
+      skillType: SkillType.BUFF,
     },
   },
   1: {
@@ -37,6 +41,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 1,
       description: "Provoke target to attack you",
+      skillType: SkillType.DEBUFF,
     },
     "Brewer (Passive)": {
       reqLevel: 12,
@@ -45,7 +50,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "12% more potion effectiveness",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Lunge": {
       reqLevel: 15,
@@ -54,6 +59,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 30,
       duration: 120,
       description: "Increased attack speed with melee weapons",
+      skillType: SkillType.BUFF,
     },
     "Empower (Passive)": {
       reqLevel: 20,
@@ -62,7 +68,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase attack power of melee weapons",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Leg Sweep": {
       reqLevel: 20,
@@ -71,6 +77,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 5,
       description: "Attack and reduce target's movement speed",
+      skillType: SkillType.DAMAGE_PHYSICAL,
+      onHitEffects: [{ type: StatusEffectType.SLOW, duration: 5 }],
     },
     "War Cry": {
       reqLevel: 28,
@@ -84,6 +92,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       buffEffectTable: {
         attackPowerMultiplier: 1.4,
       },
+      skillType: SkillType.BUFF,
     },
     "Raging Soul": {
       reqLevel: 35,
@@ -92,6 +101,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 60,
       duration: 30,
       description: "Increase attack power of next attack",
+      skillType: SkillType.BUFF,
     },
   },
   2: {
@@ -102,6 +112,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 1,
       description: "Provoke target to attack you",
+      skillType: SkillType.DEBUFF,
     },
     "Brewer (Passive)": {
       reqLevel: 12,
@@ -110,7 +121,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "12% more potion effectiveness",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Lunge": {
       reqLevel: 15,
@@ -119,6 +130,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 30,
       duration: 120,
       description: "Increased attack speed with melee weapons",
+      skillType: SkillType.BUFF,
     },
     "Empower (Passive)": {
       reqLevel: 18,
@@ -127,7 +139,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase attack power of melee weapons",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Leg Sweep": {
       reqLevel: 20,
@@ -136,6 +148,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 5,
       description: "Attack and reduce target's movement speed",
+      skillType: SkillType.DAMAGE_PHYSICAL,
+      onHitEffects: [{ type: StatusEffectType.SLOW, duration: 5 }],
     },
     "War Cry": {
       reqLevel: 28,
@@ -144,6 +158,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "Increase attack power of all allies",
+      skillType: SkillType.BUFF,
     },
     "Raging Soul": {
       reqLevel: 35,
@@ -152,6 +167,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 60,
       duration: 30,
       description: "Increase attack power of next attack",
+      skillType: SkillType.BUFF,
     },
     "Desperado": {
       reqLevel: 45,
@@ -160,6 +176,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 35,
       duration: 60,
       description: "Attack Power increased, damage taken increased",
+      skillType: SkillType.BUFF,
     },
     "Skill Focus": {
       reqLevel: 50,
@@ -168,6 +185,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Sacrifice 30% of your current HP to cut CDs by 50%",
+      skillType: SkillType.UTILITY,
     },
   },
   3: {
@@ -178,6 +196,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 1,
       description: "Provoke target to attack you",
+      skillType: SkillType.DEBUFF,
     },
     "Brewer (Passive)": {
       reqLevel: 12,
@@ -186,7 +205,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "12% more potion effectiveness",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Lunge": {
       reqLevel: 15,
@@ -195,6 +214,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 30,
       duration: 120,
       description: "Increased attack speed with melee weapons",
+      skillType: SkillType.BUFF,
     },
     "Empower (Passive)": {
       reqLevel: 18,
@@ -203,7 +223,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase attack power of melee weapons",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Leg Sweep": {
       reqLevel: 20,
@@ -212,6 +232,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 5,
       description: "Attack and reduce target's movement speed",
+      skillType: SkillType.DAMAGE_PHYSICAL,
+      onHitEffects: [{ type: StatusEffectType.SLOW, duration: 5 }],
     },
     "War Cry": {
       reqLevel: 28,
@@ -220,6 +242,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "Increase attack power of all allies",
+      skillType: SkillType.BUFF,
     },
     "Raging Soul": {
       reqLevel: 35,
@@ -228,6 +251,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 60,
       duration: 30,
       description: "Increase attack power of next attack",
+      skillType: SkillType.BUFF,
     },
     "Equine Charge": {
       reqLevel: 45,
@@ -236,6 +260,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 9,
       duration: 0,
       description: "Charge at target with your spear",
+      skillType: SkillType.DAMAGE_PHYSICAL,
     },
     "Jousting (Passive)": {
       reqLevel: 45,
@@ -244,7 +269,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Can use skills and charge on horseback",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Charge": {
       reqLevel: 50,
@@ -253,6 +278,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Mounted Charge/Dash/Rush (Spear)",
+      skillType: SkillType.DAMAGE_PHYSICAL,
     },
   },
   4: {
@@ -263,6 +289,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 1,
       description: "Provoke target to attack you",
+      skillType: SkillType.DEBUFF,
     },
     "Brewer (Passive)": {
       reqLevel: 12,
@@ -271,7 +298,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "12% more potion effectiveness",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Lunge": {
       reqLevel: 15,
@@ -280,6 +307,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 30,
       duration: 120,
       description: "Increased attack speed with melee weapons",
+      skillType: SkillType.BUFF,
     },
     "Obscene Gesture": {
       reqLevel: 20,
@@ -288,6 +316,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 10,
       description: "Provoke target to attack you",
+      skillType: SkillType.DEBUFF,
     },
     "Providence": {
       reqLevel: 28,
@@ -296,6 +325,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "+25 magic resistance for yourself and party",
+      skillType: SkillType.BUFF,
     },
   },
   5: {
@@ -306,6 +336,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 1,
       description: "Provoke target to attack you",
+      skillType: SkillType.DEBUFF,
     },
     "Brewer (Passive)": {
       reqLevel: 12,
@@ -314,7 +345,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "12% more potion effectiveness",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Lunge": {
       reqLevel: 15,
@@ -323,6 +354,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 30,
       duration: 120,
       description: "Increased attack speed with melee weapons",
+      skillType: SkillType.BUFF,
     },
     "Obscene Gesture": {
       reqLevel: 20,
@@ -331,6 +363,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 10,
       description: "Provoke target to attack you",
+      skillType: SkillType.DEBUFF,
     },
     "Providence": {
       reqLevel: 28,
@@ -339,6 +372,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "+25 magic resistance for yourself and party",
+      skillType: SkillType.BUFF,
     },
     "Deflect (Passive)": {
       reqLevel: 45,
@@ -347,7 +381,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Automatically deflects charge damage when blocking (Shield)",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Jousting (Passive)": {
       reqLevel: 45,
@@ -356,7 +390,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Can use skills and charge on horseback",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Bore Brunt": {
       reqLevel: 50,
@@ -366,6 +400,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1,
       duration: 300,
       description: "Take damage for up to three party members",
+      skillType: SkillType.UTILITY,
     },
   },
   6: {
@@ -376,6 +411,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 1,
       description: "Provoke target to attack you",
+      skillType: SkillType.DEBUFF,
     },
     "Brewer (Passive)": {
       reqLevel: 12,
@@ -384,7 +420,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "12% more potion effectiveness",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Lunge": {
       reqLevel: 15,
@@ -393,6 +429,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 30,
       duration: 120,
       description: "Increased attack speed with melee weapons",
+      skillType: SkillType.BUFF,
     },
     "Obscene Gesture": {
       reqLevel: 20,
@@ -401,6 +438,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 10,
       description: "Provoke target to attack you",
+      skillType: SkillType.DEBUFF,
     },
     "Providence": {
       reqLevel: 28,
@@ -409,6 +447,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "+25 magic resistance for yourself and party",
+      skillType: SkillType.BUFF,
     },
     "Strong Stance (Passive)": {
       reqLevel: 45,
@@ -417,7 +456,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Can use shield to block magic",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Jousting (Passive)": {
       reqLevel: 45,
@@ -426,7 +465,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Can use skills and charge on horseback",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Defensive Attack (Passive)": {
       reqLevel: 50,
@@ -435,7 +474,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Can use offensive skills while blocking",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
   },
   7: {
@@ -446,6 +485,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 180,
       description: "Increase movement speed",
+      skillType: SkillType.BUFF,
     },
     "Hide": {
       reqLevel: 18,
@@ -454,6 +494,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Stationary invisibility (2MP per second)",
+      skillType: SkillType.UTILITY,
     },
   },
   8: {
@@ -464,6 +505,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 180,
       description: "Increase movement speed",
+      skillType: SkillType.BUFF,
     },
     "Hide": {
       reqLevel: 18,
@@ -472,6 +514,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Stationary invisibility (2MP per second)",
+      skillType: SkillType.UTILITY,
     },
     "Hawkeye (Passive)": {
       reqLevel: 20,
@@ -480,7 +523,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase accuracy",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Accelerate": {
       reqLevel: 28,
@@ -489,6 +532,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "Increase movement speed of target",
+      skillType: SkillType.BUFF,
     },
     "Rapid Fire": {
       reqLevel: 35,
@@ -497,6 +541,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 45,
       duration: 0,
       description: "Increase attack speed (crossbow)",
+      skillType: SkillType.BUFF,
     },
   },
   9: {
@@ -507,6 +552,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 180,
       description: "Increase movement speed",
+      skillType: SkillType.BUFF,
     },
     "Hide": {
       reqLevel: 18,
@@ -515,6 +561,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Stationary invisibility (2MP per second)",
+      skillType: SkillType.UTILITY,
     },
     "Hawkeye (Passive)": {
       reqLevel: 20,
@@ -523,7 +570,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase accuracy",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Accelerate": {
       reqLevel: 28,
@@ -532,6 +579,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "Increase movement speed of target",
+      skillType: SkillType.BUFF,
     },
     "Rapid Fire": {
       reqLevel: 35,
@@ -540,6 +588,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 45,
       duration: 0,
       description: "Increase attack speed (crossbow)",
+      skillType: SkillType.BUFF,
     },
     "Snipers Nest": {
       reqLevel: 45,
@@ -548,6 +597,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 5,
       duration: 0,
       description: "Attack Power, Accuracy, Range buff while stationary (Bow, Crossbow)",
+      skillType: SkillType.BUFF,
     },
     "Kindling Arrow": {
       reqLevel: 50,
@@ -556,6 +606,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 0,
       description: "AOE fire field (bow)",
+      skillType: SkillType.FIELD_SPELL,
     },
   },
   10: {
@@ -566,6 +617,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 180,
       description: "Increase movement speed",
+      skillType: SkillType.BUFF,
     },
     "Hide": {
       reqLevel: 18,
@@ -574,6 +626,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Stationary invisibility (2MP per second)",
+      skillType: SkillType.UTILITY,
     },
     "Hawkeye (Passive)": {
       reqLevel: 20,
@@ -582,7 +635,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase accuracy",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Accelerate": {
       reqLevel: 28,
@@ -591,6 +644,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "Increase movement speed of target",
+      skillType: SkillType.BUFF,
     },
     "Rapid Fire": {
       reqLevel: 35,
@@ -599,6 +653,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 45,
       duration: 0,
       description: "Increase attack speed (crossbow)",
+      skillType: SkillType.BUFF,
     },
     "Watchful Eye": {
       reqLevel: 45,
@@ -607,6 +662,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Become stationary to see and attack invisible targets",
+      skillType: SkillType.UTILITY,
     },
     "Horse Archer": {
       reqLevel: 45,
@@ -615,6 +671,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 90,
       duration: 0,
       description: "Allows you to use certain skills while mounted",
+      skillType: SkillType.UTILITY,
     },
     "Arrow Fusillade (Passive)": {
       reqLevel: 50,
@@ -623,7 +680,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "+2 range and double attack with crossbow",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
   },
   11: {
@@ -634,6 +691,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 180,
       description: "Increase movement speed",
+      skillType: SkillType.BUFF,
     },
     "Hide": {
       reqLevel: 18,
@@ -642,6 +700,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Stationary invisibility (2MP per second)",
+      skillType: SkillType.UTILITY,
     },
     "Shifty (Passive)": {
       reqLevel: 20,
@@ -650,7 +709,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Dodge rate buff",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Cloak": {
       reqLevel: 20,
@@ -659,6 +718,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Mobile invisibility (3MP per second)",
+      skillType: SkillType.UTILITY,
     },
     "Third Eye": {
       reqLevel: 28,
@@ -667,6 +727,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "Accuracy buff",
+      skillType: SkillType.BUFF,
     },
   },
   12: {
@@ -677,6 +738,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 180,
       description: "Increase movement speed",
+      skillType: SkillType.BUFF,
     },
     "Hide": {
       reqLevel: 18,
@@ -685,6 +747,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Stationary invisibility (2MP per second)",
+      skillType: SkillType.UTILITY,
     },
     "Shifty (Passive)": {
       reqLevel: 20,
@@ -693,7 +756,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Dodge rate buff",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Cloak": {
       reqLevel: 20,
@@ -702,6 +765,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Mobile invisibility (3MP per second)",
+      skillType: SkillType.UTILITY,
     },
     "Third Eye": {
       reqLevel: 28,
@@ -710,6 +774,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "Accuracy buff",
+      skillType: SkillType.BUFF,
     },
     "Furtive Steps (Passive)": {
       reqLevel: 45,
@@ -718,7 +783,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "No cloaked movement penalty, minor MP regen buff",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Counterpunch": {
       reqLevel: 50,
@@ -727,6 +792,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 90,
       duration: 0,
       description: "Weak counter attack with knuckles",
+      skillType: SkillType.DAMAGE_PHYSICAL,
     },
   },
   13: {
@@ -737,6 +803,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 180,
       description: "Increase movement speed",
+      skillType: SkillType.BUFF,
     },
     "Hide": {
       reqLevel: 18,
@@ -745,6 +812,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Stationary invisibility (2MP per second)",
+      skillType: SkillType.UTILITY,
     },
     "Shifty (Passive)": {
       reqLevel: 20,
@@ -753,7 +821,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Dodge rate buff",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Cloak": {
       reqLevel: 20,
@@ -762,6 +830,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Mobile invisibility (3MP per second)",
+      skillType: SkillType.UTILITY,
     },
     "Third Eye": {
       reqLevel: 28,
@@ -770,6 +839,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "Accuracy buff",
+      skillType: SkillType.BUFF,
     },
     "Treachery (Passive)": {
       reqLevel: 45,
@@ -778,7 +848,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Can remain cloaked while placing traps",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
   },
   14: {
@@ -789,7 +859,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase MP regen",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Heal": {
       reqLevel: 18,
@@ -798,6 +868,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Heal target",
+      skillType: SkillType.HEAL,
+      healing: { type: 'single' },
     },
   },
   15: {
@@ -808,7 +880,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase MP regen",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Heal": {
       reqLevel: 18,
@@ -817,6 +889,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Heal target",
+      skillType: SkillType.HEAL,
+      healing: { type: 'single' },
     },
     "Inspiration (Passive)": {
       reqLevel: 20,
@@ -825,7 +899,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase SPI based on Prayer proficiency",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Tranquil Mind": {
       reqLevel: 20,
@@ -834,6 +908,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 120,
       description: "Increase MP regen for party",
+      skillType: SkillType.BUFF,
     },
     "Divine Aid": {
       reqLevel: 28,
@@ -842,6 +917,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.54,
       duration: 480,
       description: "Increase LP for party, 15% of base LP + 250",
+      skillType: SkillType.HP_BUFF,
     },
     "Revive": {
       reqLevel: 35,
@@ -850,6 +926,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 30,
       duration: 0,
       description: "Revive target",
+      skillType: SkillType.REVIVE,
     },
   },
   16: {
@@ -860,7 +937,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase MP regen",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Heal": {
       reqLevel: 18,
@@ -869,6 +946,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Heal target",
+      skillType: SkillType.HEAL,
+      healing: { type: 'single' },
     },
     "Inspiration (Passive)": {
       reqLevel: 20,
@@ -877,7 +956,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase SPI based on Prayer proficiency",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Tranquil Mind": {
       reqLevel: 20,
@@ -886,6 +965,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 120,
       description: "Increase MP regen for party",
+      skillType: SkillType.BUFF,
     },
     "Divine Aid": {
       reqLevel: 28,
@@ -894,6 +974,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.54,
       duration: 480,
       description: "Increase LP for party, 15% of base LP + 250",
+      skillType: SkillType.HP_BUFF,
     },
     "Revive": {
       reqLevel: 35,
@@ -902,6 +983,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 30,
       duration: 0,
       description: "Revive target",
+      skillType: SkillType.REVIVE,
     },
     "Sanctuary": {
       reqLevel: 45,
@@ -910,6 +992,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 60,
       duration: 0,
       description: "AOE LP regen",
+      skillType: SkillType.PARTY_HEAL,
+      healing: { type: 'party' },
     },
     "Merciful Blessing (Passive)": {
       reqLevel: 50,
@@ -918,7 +1002,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase strength of heals, First Aid is instant cast",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
   },
   17: {
@@ -929,7 +1013,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase MP regen",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Heal": {
       reqLevel: 18,
@@ -938,6 +1022,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Heal target",
+      skillType: SkillType.HEAL,
+      healing: { type: 'single' },
     },
     "Inspiration (Passive)": {
       reqLevel: 20,
@@ -946,7 +1032,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase SPI based on Prayer proficiency",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Tranquil Mind": {
       reqLevel: 20,
@@ -955,6 +1041,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 120,
       description: "Increase MP regen for party",
+      skillType: SkillType.BUFF,
     },
     "Revive": {
       reqLevel: 35,
@@ -963,6 +1050,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 30,
       duration: 0,
       description: "Revive target",
+      skillType: SkillType.REVIVE,
     },
     "Enchantment": {
       reqLevel: 45,
@@ -971,6 +1059,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1.5,
       duration: 480,
       description: "Aura power buff and magical attack power buff",
+      skillType: SkillType.BUFF,
     },
     "Karmic Aura (Passive)": {
       reqLevel: 50,
@@ -979,7 +1068,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Toggle to enable AOE buffs",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
   },
   18: {
@@ -990,7 +1079,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase MP regen",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Heal": {
       reqLevel: 18,
@@ -999,6 +1088,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Heal target",
+      skillType: SkillType.HEAL,
+      healing: { type: 'single' },
     },
     "Blessed Garments (Passive)": {
       reqLevel: 20,
@@ -1007,7 +1098,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Poison, Charm, and Magic resistance increase when gear is enhanced with holy",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Mana Restore": {
       reqLevel: 20,
@@ -1016,6 +1107,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 210,
       description: "Restore MP over time",
+      skillType: SkillType.MP_RESTORE,
     },
     "Speedy Gale": {
       reqLevel: 28,
@@ -1073,6 +1165,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
           },
         ],
       },
+      skillType: SkillType.BUFF,
     },
   },
   19: {
@@ -1083,7 +1176,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase MP regen",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Heal": {
       reqLevel: 18,
@@ -1092,6 +1185,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Heal target",
+      skillType: SkillType.HEAL,
+      healing: { type: 'single' },
     },
     "Blessed Garments (Passive)": {
       reqLevel: 20,
@@ -1100,7 +1195,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Poison, Charm, and Magic resistance increase when gear is enhanced with holy",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Mana Restore": {
       reqLevel: 20,
@@ -1109,72 +1204,74 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 210,
       description: "Restore MP over time",
+      skillType: SkillType.MP_RESTORE,
     },
-     "Speedy Gale": {
-       reqLevel: 28,
-       mpCost: 55,
-       castTime: 0,
-       cooldown: 1,
-       duration: 480,
-       description: "Increase dodge rate",
-       isAOE: true,
-       buffEffectTable: {
-         spiValues: [
-           {
-             value: 33,
-             Blessing: [
-               { value: 8, dodgeChance: 13 },
-               { value: 16, dodgeChance: 18 },
-               { value: 24, dodgeChance: 24 },
-               { value: 31, dodgeChance: 30 },
-               { value: 39, dodgeChance: 37 },
-               { value: 47, dodgeChance: 43 },
-             ],
-           },
-           {
-             value: 50,
-             Blessing: [
-               { value: 8, dodgeChance: 16 },
-               { value: 16, dodgeChance: 22 },
-               { value: 24, dodgeChance: 28 },
-               { value: 31, dodgeChance: 35 },
-               { value: 39, dodgeChance: 41 },
-               { value: 47, dodgeChance: 48 },
-             ],
-           },
-           {
-             value: 67,
-             Blessing: [
-               { value: 8, dodgeChance: 20 },
-               { value: 16, dodgeChance: 26 },
-               { value: 24, dodgeChance: 33 },
-               { value: 31, dodgeChance: 40 },
-               { value: 39, dodgeChance: 46 },
-               { value: 47, dodgeChance: 53 },
-             ],
-           },
-           {
-             value: 100,
-             Blessing: [
-               { value: 8, dodgeChance: 24 },
-               { value: 16, dodgeChance: 30 },
-               { value: 24, dodgeChance: 37 },
-               { value: 31, dodgeChance: 44 },
-               { value: 39, dodgeChance: 51 },
-               { value: 47, dodgeChance: 58 },
-             ],
-           },
-         ],
-       },
-     },
-     "Sound Mind (Passive)": {
+    "Speedy Gale": {
+      reqLevel: 28,
+      mpCost: 55,
+      castTime: 0,
+      cooldown: 1,
+      duration: 480,
+      description: "Increase dodge rate",
+      isAOE: true,
+      buffEffectTable: {
+        spiValues: [
+          {
+            value: 33,
+            Blessing: [
+              { value: 8, dodgeChance: 13 },
+              { value: 16, dodgeChance: 18 },
+              { value: 24, dodgeChance: 24 },
+              { value: 31, dodgeChance: 30 },
+              { value: 39, dodgeChance: 37 },
+              { value: 47, dodgeChance: 43 },
+            ],
+          },
+          {
+            value: 50,
+            Blessing: [
+              { value: 8, dodgeChance: 16 },
+              { value: 16, dodgeChance: 22 },
+              { value: 24, dodgeChance: 28 },
+              { value: 31, dodgeChance: 35 },
+              { value: 39, dodgeChance: 41 },
+              { value: 47, dodgeChance: 48 },
+            ],
+          },
+          {
+            value: 67,
+            Blessing: [
+              { value: 8, dodgeChance: 20 },
+              { value: 16, dodgeChance: 26 },
+              { value: 24, dodgeChance: 33 },
+              { value: 31, dodgeChance: 40 },
+              { value: 39, dodgeChance: 46 },
+              { value: 47, dodgeChance: 53 },
+            ],
+          },
+          {
+            value: 100,
+            Blessing: [
+              { value: 8, dodgeChance: 24 },
+              { value: 16, dodgeChance: 30 },
+              { value: 24, dodgeChance: 37 },
+              { value: 31, dodgeChance: 44 },
+              { value: 39, dodgeChance: 51 },
+              { value: 47, dodgeChance: 58 },
+            ],
+          },
+        ],
+      },
+      skillType: SkillType.BUFF,
+    },
+    "Sound Mind (Passive)": {
       reqLevel: 45,
       mpCost: 0,
       castTime: 0,
       cooldown: 0,
       duration: 0,
       description: "Reduce duration of magic debuffs",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Paralyzing Bond": {
       reqLevel: 50,
@@ -1183,6 +1280,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 30,
       duration: 10,
       description: "Root target in place. Both you and target are immobile",
+      skillType: SkillType.DEBUFF,
+      onHitEffects: [{ type: StatusEffectType.ROOT, duration: 10 }],
     },
   },
   20: {
@@ -1193,7 +1292,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase MP regen",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Heal": {
       reqLevel: 18,
@@ -1202,6 +1301,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 3,
       duration: 0,
       description: "Heal target",
+      skillType: SkillType.HEAL,
+      healing: { type: 'single' },
     },
     "Blessed Garments (Passive)": {
       reqLevel: 20,
@@ -1210,7 +1311,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Poison, Charm, and Magic resistance increase when gear is enhanced with holy",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Mana Restore": {
       reqLevel: 20,
@@ -1219,71 +1320,74 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 210,
       description: "Restore MP over time",
+      skillType: SkillType.MP_RESTORE,
     },
-     "Speedy Gale": {
-       reqLevel: 28,
-       mpCost: 55,
-       castTime: 0,
-       cooldown: 1,
-       duration: 480,
-       description: "Increase dodge rate",
-       isAOE: true,
-       buffEffectTable: {
-         spiValues: [
-           {
-             value: 33,
-             Blessing: [
-               { value: 8, dodgeChance: 13 },
-               { value: 16, dodgeChance: 18 },
-               { value: 24, dodgeChance: 24 },
-               { value: 31, dodgeChance: 30 },
-               { value: 39, dodgeChance: 37 },
-               { value: 47, dodgeChance: 43 },
-             ],
-           },
-           {
-             value: 50,
-             Blessing: [
-               { value: 8, dodgeChance: 16 },
-               { value: 16, dodgeChance: 22 },
-               { value: 24, dodgeChance: 28 },
-               { value: 31, dodgeChance: 35 },
-               { value: 39, dodgeChance: 41 },
-               { value: 47, dodgeChance: 48 },
-             ],
-           },
-           {
-             value: 67,
-             Blessing: [
-               { value: 8, dodgeChance: 20 },
-               { value: 16, dodgeChance: 26 },
-               { value: 24, dodgeChance: 33 },
-               { value: 31, dodgeChance: 40 },
-               { value: 39, dodgeChance: 46 },
-               { value: 47, dodgeChance: 53 },
-             ],
-           },
-           {
-             value: 100,
-             Blessing: [
-               { value: 8, dodgeChance: 24 },
-               { value: 16, dodgeChance: 30 },
-               { value: 24, dodgeChance: 37 },
-               { value: 31, dodgeChance: 44 },
-               { value: 39, dodgeChance: 51 },
-               { value: 47, dodgeChance: 58 },
-             ],
-           },
-         ],
-       },
-     },
-     "Mana Swap": {
+    "Speedy Gale": {
+      reqLevel: 28,
+      mpCost: 55,
+      castTime: 0,
+      cooldown: 1,
+      duration: 480,
+      description: "Increase dodge rate",
+      isAOE: true,
+      buffEffectTable: {
+        spiValues: [
+          {
+            value: 33,
+            Blessing: [
+              { value: 8, dodgeChance: 13 },
+              { value: 16, dodgeChance: 18 },
+              { value: 24, dodgeChance: 24 },
+              { value: 31, dodgeChance: 30 },
+              { value: 39, dodgeChance: 37 },
+              { value: 47, dodgeChance: 43 },
+            ],
+          },
+          {
+            value: 50,
+            Blessing: [
+              { value: 8, dodgeChance: 16 },
+              { value: 16, dodgeChance: 22 },
+              { value: 24, dodgeChance: 28 },
+              { value: 31, dodgeChance: 35 },
+              { value: 39, dodgeChance: 41 },
+              { value: 47, dodgeChance: 48 },
+            ],
+          },
+          {
+            value: 67,
+            Blessing: [
+              { value: 8, dodgeChance: 20 },
+              { value: 16, dodgeChance: 26 },
+              { value: 24, dodgeChance: 33 },
+              { value: 31, dodgeChance: 40 },
+              { value: 39, dodgeChance: 46 },
+              { value: 47, dodgeChance: 53 },
+            ],
+          },
+          {
+            value: 100,
+            Blessing: [
+              { value: 8, dodgeChance: 24 },
+              { value: 16, dodgeChance: 30 },
+              { value: 24, dodgeChance: 37 },
+              { value: 31, dodgeChance: 44 },
+              { value: 39, dodgeChance: 51 },
+              { value: 47, dodgeChance: 58 },
+            ],
+          },
+        ],
+      },
+      skillType: SkillType.BUFF,
+    },
+    "Mana Swap": {
       reqLevel: 45,
       mpCost: 16,
       castTime: 2,
       cooldown: 10,
       duration: 0,
       description: "Swap MP with target",
+      skillType: SkillType.UTILITY,
     },
     "Soul Swap": {
       reqLevel: 50,
@@ -1292,6 +1396,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 10,
       duration: 0,
       description: "Swap buffs with target",
+      skillType: SkillType.UTILITY,
     },
   },
   21: {
@@ -1302,6 +1407,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 2,
       duration: 0,
       description: "Fire a bolt of fire at target",
+      skillType: SkillType.DAMAGE_MAGICAL,
     },
     "Shock": {
       reqLevel: 12,
@@ -1310,6 +1416,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Trip the target with electricity",
+      skillType: SkillType.DAMAGE_MAGICAL,
+      onHitEffects: [{ type: StatusEffectType.KNOCKDOWN }],
     },
   },
   22: {
@@ -1320,6 +1428,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 2,
       duration: 0,
       description: "Fire a bolt of fire at target",
+      skillType: SkillType.DAMAGE_MAGICAL,
     },
     "Shock": {
       reqLevel: 12,
@@ -1328,6 +1437,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Trip the target with electricity",
+      skillType: SkillType.DAMAGE_MAGICAL,
+      onHitEffects: [{ type: StatusEffectType.KNOCKDOWN }],
     },
     "Scholar (Passive)": {
       reqLevel: 20,
@@ -1336,7 +1447,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Elemental proficiency increases elemental damage",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Thunder Crash": {
       reqLevel: 20,
@@ -1345,6 +1456,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 12,
       duration: 0,
       description: "Strike the target with electricity",
+      skillType: SkillType.DAMAGE_MAGICAL,
     },
   },
   23: {
@@ -1355,6 +1467,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 2,
       duration: 0,
       description: "Fire a bolt of fire at target",
+      skillType: SkillType.DAMAGE_MAGICAL,
     },
     "Shock": {
       reqLevel: 12,
@@ -1363,6 +1476,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Trip the target with electricity",
+      skillType: SkillType.DAMAGE_MAGICAL,
+      onHitEffects: [{ type: StatusEffectType.KNOCKDOWN }],
     },
     "Scholar (Passive)": {
       reqLevel: 20,
@@ -1371,7 +1486,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Elemental proficiency increases elemental damage",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Thunder Crash": {
       reqLevel: 20,
@@ -1380,6 +1495,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 12,
       duration: 0,
       description: "Strike the target with electricity",
+      skillType: SkillType.DAMAGE_MAGICAL,
     },
     "Magical Aid": {
       reqLevel: 45,
@@ -1388,6 +1504,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 15,
       duration: 0,
       description: "Increase strength of next magical attack",
+      skillType: SkillType.BUFF,
     },
   },
   24: {
@@ -1398,6 +1515,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 2,
       duration: 0,
       description: "Fire a bolt of fire at target",
+      skillType: SkillType.DAMAGE_MAGICAL,
     },
     "Shock": {
       reqLevel: 12,
@@ -1406,6 +1524,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Trip the target with electricity",
+      skillType: SkillType.DAMAGE_MAGICAL,
+      onHitEffects: [{ type: StatusEffectType.KNOCKDOWN }],
     },
     "Scholar (Passive)": {
       reqLevel: 20,
@@ -1414,7 +1534,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Elemental proficiency increases elemental damage",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Thunder Crash": {
       reqLevel: 20,
@@ -1423,6 +1543,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 12,
       duration: 0,
       description: "Strike the target with electricity",
+      skillType: SkillType.DAMAGE_MAGICAL,
     },
     "Teleport": {
       reqLevel: 45,
@@ -1431,6 +1552,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 300,
       duration: 0,
       description: "Create a portal to a memorized a location outside of town",
+      skillType: SkillType.UTILITY,
     },
     "Memorize": {
       reqLevel: 45,
@@ -1439,6 +1561,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 5,
       duration: 0,
       description: "Memorize a location outside of town",
+      skillType: SkillType.UTILITY,
     },
     "Intelleto": {
       reqLevel: 50,
@@ -1447,6 +1570,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase number of locations that can be memorized",
+      skillType: SkillType.UTILITY,
     },
     "Supreme Mind (Passive)": {
       reqLevel: 50,
@@ -1455,7 +1579,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increases power and reduces cooldown of invocation spells, soul bright is a 5s debuff",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
   },
   25: {
@@ -1466,6 +1590,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 2,
       duration: 0,
       description: "Fire a bolt of fire at target",
+      skillType: SkillType.DAMAGE_MAGICAL,
     },
     "Shock": {
       reqLevel: 12,
@@ -1474,6 +1599,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Trip the target with electricity",
+      skillType: SkillType.DAMAGE_MAGICAL,
+      onHitEffects: [{ type: StatusEffectType.KNOCKDOWN }],
     },
     "Shadow Garments (Passive)": {
       reqLevel: 20,
@@ -1482,7 +1609,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Fire, Ice, and Lightning resistance increase when gear is enhanced with dark",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
   },
   26: {
@@ -1493,6 +1620,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 2,
       duration: 0,
       description: "Fire a bolt of fire at target",
+      skillType: SkillType.DAMAGE_MAGICAL,
     },
     "Shock": {
       reqLevel: 12,
@@ -1501,6 +1629,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Trip the target with electricity",
+      skillType: SkillType.DAMAGE_MAGICAL,
+      onHitEffects: [{ type: StatusEffectType.KNOCKDOWN }],
     },
     "Shadow Garments (Passive)": {
       reqLevel: 20,
@@ -1509,7 +1639,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Fire, Ice, and Lightning resistance increase when gear is enhanced with dark",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Discomfort (Passive)": {
       reqLevel: 60,
@@ -1518,7 +1648,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Increase debuff duration +5%",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
   },
   27: {
@@ -1529,6 +1659,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 2,
       duration: 0,
       description: "Fire a bolt of fire at target",
+      skillType: SkillType.DAMAGE_MAGICAL,
     },
     "Shock": {
       reqLevel: 12,
@@ -1537,6 +1668,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 20,
       duration: 0,
       description: "Trip the target with electricity",
+      skillType: SkillType.DAMAGE_MAGICAL,
+      onHitEffects: [{ type: StatusEffectType.KNOCKDOWN }],
     },
     "Shadow Garments (Passive)": {
       reqLevel: 20,
@@ -1545,7 +1678,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Fire, Ice, and Lightning resistance increase when gear is enhanced with dark",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Dark Shield (Passive)": {
       reqLevel: 45,
@@ -1554,7 +1687,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Reduce recoil damage from Gloom",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
     "Median Riding (Passive)": {
       reqLevel: 45,
@@ -1563,7 +1696,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 0,
       duration: 0,
       description: "Gain ability to cast spells while mounted",
-      isPassive: true,
+      skillType: SkillType.PASSIVE,
     },
   },
 };

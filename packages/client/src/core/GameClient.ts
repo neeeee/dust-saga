@@ -608,6 +608,7 @@ export class GameClient {
         if (this.targetId === entityId) {
           this.targetId = null;
           this.autoAttacking = false;
+          this.engine.setTargetIndicator(null);
           this.callbacks.onTargetChange?.(null);
         }
       }

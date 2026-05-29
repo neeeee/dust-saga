@@ -1,5 +1,5 @@
 import { EntityManager, System } from '../EntityManager';
-import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats, calculateWeaponElementalDamage, calculateAccuracy, calculateHitChance } from '@dust-saga/shared';
+import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats, calculateWeaponElementalDamage, calculateAccuracy, calculateHitChance, StatusEffectType } from '@dust-saga/shared';
 
 interface ConeTarget {
   id: string;
@@ -313,14 +313,16 @@ export class CombatSystem extends System {
     target: PlayerSession
   ): DamageInfo | null {
     const now = Date.now();
-    if (now - enemy.lastAttackTime < GAME_CONFIG.ATTACK_COOLDOWN) return null;
+    const cooldown = GAME_CONFIG.ATTACK_COOLDOWN;
+    if (now - enemy.lastAttackTime < cooldown) return null;
 
     const def = getEnemyDefinition(enemy.enemyType);
     const attackRange = def?.attackRange || 2;
 
-    const dx = enemy.position.x - target.position.x;
-    const dz = enemy.position.z - target.position.z;
-    const dist = Math.sqrt(dx * dx + dz * dz);
+    const dist = Math.sqrt(
+      (enemy.position.x - target.position.x) ** 2 +
+      (enemy.position.z - target.position.z) ** 2
+    );
     if (dist > attackRange) return null;
 
     enemy.lastAttackTime = now;
@@ -340,36 +342,34 @@ export class CombatSystem extends System {
     }
 
     const attackPower = def?.attack || 5;
-    const isCritical = Math.random() < 0.05;
     const targetEffective = getEffectiveStats(
       target.stats,
       target.statPoints,
       target.statusEffects || []
     );
-    let damage = Math.max(
-      COMBAT_CONFIG.MIN_DAMAGE,
-      attackPower - targetEffective.defense * COMBAT_CONFIG.DAMAGE_REDUCTION_PER_DEFENSE * 10
-    );
+    const { damage, isCritical } = this.computePhysicalDamage(attackPower, targetEffective.defense, 'monster');
+
+    let finalDamage = damage;
 
     if (targetEffective.physicalDamageReduction > 0) {
-      damage = Math.floor(damage * (1 - Math.min(0.9, targetEffective.physicalDamageReduction)));
+      finalDamage = Math.floor(finalDamage * (1 - Math.min(0.9, targetEffective.physicalDamageReduction)));
     }
 
-    if (isCritical) {
-      damage = Math.floor(damage * COMBAT_CONFIG.CRITICAL_MULTIPLIER);
+    for (const effect of enemy.statusEffects || []) {
+      if (effect.type === StatusEffectType.DEBUFF_DAMAGE_DOWN) {
+        finalDamage = Math.floor(finalDamage * (1 - (effect.potency || 0)));
+      }
     }
 
-    damage = Math.floor(damage * (0.85 + Math.random() * 0.3));
+    const racialResult = processRacialOnDamage(target, finalDamage, 'physical');
+    finalDamage = racialResult.finalDamage;
 
-    const racialResult = processRacialOnDamage(target, damage, 'physical');
-    damage = racialResult.finalDamage;
-
-    target.stats.health = Math.max(0, target.stats.health - damage);
+    target.stats.health = Math.max(0, target.stats.health - finalDamage);
 
     return {
       attackerId: enemy.id,
       targetId: target.characterId,
-      damage,
+      damage: finalDamage,
       isCritical,
       damageType: 'physical'
     };

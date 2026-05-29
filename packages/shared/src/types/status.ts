@@ -57,9 +57,73 @@ export enum StatusEffectType {
   MP_DAMAGE_DEBUFF = 'mp_damage_debuff',
 }
 
+export const SONG_TYPES: readonly StatusEffectType[] = [
+  StatusEffectType.SONG_GREEN,
+  StatusEffectType.SONG_BLUE,
+  StatusEffectType.SONG_YELLOW,
+  StatusEffectType.SONG_RED,
+];
+
+export const CC_TYPES: readonly StatusEffectType[] = [
+  StatusEffectType.STUN,
+  StatusEffectType.FREEZE,
+];
+
+export function hasStatusEffectType(activeEffects: StatusEffect[], types: readonly StatusEffectType[]): boolean {
+  return activeEffects.some(e => types.includes(e.type));
+}
+
+export function isCCImmune(activeEffects: StatusEffect[]): boolean {
+  return hasStatusEffectType(activeEffects, CC_TYPES);
+}
+
+export function isSilenced(activeEffects: StatusEffect[]): boolean {
+  return activeEffects.some(e => e.type === StatusEffectType.SILENCE);
+}
+
+export function isRooted(activeEffects: StatusEffect[]): boolean {
+  return hasStatusEffectType(activeEffects, [StatusEffectType.ROOT, ...CC_TYPES]);
+}
+
 export interface SpiValueTier {
   value: number;
   Blessing?: Array<{ value: number; def?: number; dodgeChance?: number }>;
+}
+
+export function resolveSpiTieredValue(
+  spiValues: SpiValueTier[],
+  casterSpi: number,
+  casterBlessing: number,
+  resultKey: 'def' | 'dodgeChance'
+): { def?: number; dodgeChance?: number } | null {
+  const firstTier = spiValues[0];
+  if (!firstTier?.Blessing?.length) return null;
+  const firstValue = firstTier.Blessing[0][resultKey];
+  if (firstValue === undefined) return null;
+
+  let matchedSpiTier: SpiValueTier | null = null;
+  for (const tier of spiValues) {
+    if (casterSpi >= tier.value) {
+      matchedSpiTier = tier;
+    } else {
+      break;
+    }
+  }
+
+  if (!matchedSpiTier || !matchedSpiTier.Blessing) {
+    return { [resultKey]: firstValue } as any;
+  }
+
+  let matchedBlessing = matchedSpiTier.Blessing[0];
+  for (const bt of matchedSpiTier.Blessing) {
+    if (casterBlessing >= bt.value) {
+      matchedBlessing = bt;
+    } else {
+      break;
+    }
+  }
+
+  return { [resultKey]: matchedBlessing[resultKey] ?? firstValue } as any;
 }
 
 export interface BuffEffectTable {
@@ -201,7 +265,7 @@ export interface StatusEffect {
   summonObjectId?: string;
   summonObjectType?: string;
   delayExplosionAt?: number;
-  delayExplosionTargetId?: string;
+  delayExplosionTargetId?: number;
   preventResurrect?: boolean;
   preventFieldSpells?: boolean;
   fearDirection?: { x: number; y: number; z: number };
@@ -277,153 +341,161 @@ export const STATUS_EFFECT_DEFS: Partial<Record<StatusEffectType, StatusEffectDe
   [StatusEffectType.MP_DAMAGE_DEBUFF]: { type: StatusEffectType.MP_DAMAGE_DEBUFF, duration: 10000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
 };
 
-export function isCCImmune(activeEffects: StatusEffect[]): boolean {
-  return activeEffects.some(e => e.type === StatusEffectType.STUN || e.type === StatusEffectType.FREEZE);
+const STAT_TO_COMBAT: Record<string, (stat: number, stats: EffectiveStats) => void> = {
+  str: (v, s) => { s.attack += Math.floor(v * 1.5); },
+  int: (v, s) => { s.magicAttack += Math.floor(v * 1.5); },
+  sta: (v, s) => { s.maxHealth += Math.floor(v * 0.8); },
+  spi: (v, s) => { s.maxMana += Math.floor(v * 0.8); },
+  agi: (v, s) => { s.speed += Math.floor(v * 0.5); },
+};
+
+interface EffectiveStats {
+  attack: number;
+  defense: number;
+  magicAttack: number;
+  maxHealth: number;
+  maxMana: number;
+  speed: number;
+  physicalDamageReduction: number;
+  dodgeBonus: number;
+  accuracyBonus: number;
+  castTimeReduction: number;
+  attackSpeedMultiplier: number;
+  damageTakenMultiplier: number;
+  castSpeedPenalty: number;
+  speedMultiplier: number;
 }
 
-export function isSilenced(activeEffects: StatusEffect[]): boolean {
-  return activeEffects.some(e => e.type === StatusEffectType.SILENCE);
-}
-
-export function isRooted(activeEffects: StatusEffect[]): boolean {
-  return activeEffects.some(e => e.type === StatusEffectType.ROOT || e.type === StatusEffectType.FREEZE || e.type === StatusEffectType.STUN);
-}
+const ROOT_TYPES = new Set([StatusEffectType.ROOT, StatusEffectType.FREEZE, StatusEffectType.STUN]);
 
 export function getEffectiveStats(
   baseStats: { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number },
   statPoints: { STR: number; AGI: number; INT: number; SPI: number; DEX: number; STA: number },
   statusEffects: StatusEffect[]
 ): { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number; speedMultiplier: number; physicalDamageReduction: number; dodgeBonus: number; accuracyBonus: number; castTimeReduction: number; attackSpeedMultiplier: number; damageTakenMultiplier: number; castSpeedPenalty: number } {
-  let attack = baseStats.attack;
-  let defense = baseStats.defense;
-  let magicAttack = baseStats.magicAttack;
-  let maxHealth = baseStats.maxHealth;
-  let maxMana = baseStats.maxMana;
-  let speed = baseStats.speed;
-  let physicalDamageReduction = 0;
-  let dodgeBonus = 0;
-  let accuracyBonus = 0;
-  let castTimeReduction = 0;
-  let attackSpeedMultiplier = 1.0;
-  let damageTakenMultiplier = 1.0;
-  let castSpeedPenalty = 0;
+  const s: EffectiveStats = {
+    attack: baseStats.attack,
+    defense: baseStats.defense,
+    magicAttack: baseStats.magicAttack,
+    maxHealth: baseStats.maxHealth,
+    maxMana: baseStats.maxMana,
+    speed: baseStats.speed,
+    physicalDamageReduction: 0,
+    dodgeBonus: 0,
+    accuracyBonus: 0,
+    castTimeReduction: 0,
+    attackSpeedMultiplier: 1.0,
+    damageTakenMultiplier: 1.0,
+    castSpeedPenalty: 0,
+    speedMultiplier: 1,
+  };
 
-  const bonusSTR = statPoints.STR;
-  const bonusAGI = statPoints.AGI;
-  const bonusINT = statPoints.INT;
-  const bonusSPI = statPoints.SPI;
-  const bonusDEX = statPoints.DEX;
-  const bonusSTA = statPoints.STA;
+  const now = Date.now();
 
   for (const effect of statusEffects) {
-    if (effect.type === StatusEffectType.BUFF_ATTACK) {
-      attack = Math.floor(attack * effect.potency);
-    }
-    if (effect.type === StatusEffectType.BUFF_DEFENSE) {
-      if (effect.buffData?.flatDefense) {
-        defense += effect.buffData.flatDefense;
-      }
-      if (effect.buffData?.defenseMultiplier) {
-        defense = Math.floor(defense * effect.buffData.defenseMultiplier);
-      }
-    }
-    if (effect.type === StatusEffectType.BUFF_MAX_HP) {
-      if (effect.buffData?.maxHpFlat) {
-        maxHealth += effect.buffData.maxHpFlat;
-      }
-      if (effect.buffData?.maxHpPercent) {
-        maxHealth += Math.floor(baseStats.maxHealth * effect.buffData.maxHpPercent);
-      }
-    }
-    if (effect.type === StatusEffectType.BUFF_CAST_SPEED) {
-      castTimeReduction += effect.potency;
-    }
-    if (effect.type === StatusEffectType.BUFF_PHYSICAL_REDUC) {
-      physicalDamageReduction += effect.potency;
-    }
-    if (effect.type === StatusEffectType.BUFF_DODGE) {
-      dodgeBonus += effect.potency;
-    }
-    if (effect.type === StatusEffectType.BUFF_ACCURACY) {
-      accuracyBonus += effect.potency;
-    }
-    if (effect.type === StatusEffectType.BUFF_ATTACK_SPEED) {
-      attackSpeedMultiplier *= (1 + effect.potency);
-    }
-    if (effect.type === StatusEffectType.BUFF_STAT && effect.buffData?.flatStats) {
-      const s = effect.buffData.flatStats;
-      if (s.str) attack += Math.floor(s.str * 1.5);
-      if (s.int) magicAttack += Math.floor(s.int * 1.5);
-      if (s.sta) maxHealth += Math.floor(s.sta * 0.8);
-      if (s.spi) maxMana += Math.floor(s.spi * 0.8);
-      if (s.agi) speed += Math.floor(s.agi * 0.5);
-    }
-    if (effect.type === StatusEffectType.BUFF_GENERIC && effect.buffData) {
-      const bd = effect.buffData;
-      if (bd.flatDefense) defense += bd.flatDefense;
-      if (bd.defenseMultiplier) defense = Math.floor(defense * bd.defenseMultiplier);
-      if (bd.flatStats) {
-        const s = bd.flatStats;
-        if (s.str) attack += Math.floor(s.str * 1.5);
-        if (s.int) magicAttack += Math.floor(s.int * 1.5);
-        if (s.sta) maxHealth += Math.floor(s.sta * 0.8);
-        if (s.spi) maxMana += Math.floor(s.spi * 0.8);
-        if (s.agi) speed += Math.floor(s.agi * 0.5);
-      }
-      if (bd.physicalDamageReductionPercent) physicalDamageReduction += bd.physicalDamageReductionPercent;
-      if (bd.dodgeFlat) dodgeBonus += bd.dodgeFlat;
-      if (bd.accuracyFlat) accuracyBonus += bd.accuracyFlat;
-      if (bd.castTimeReductionPercent) castTimeReduction += bd.castTimeReductionPercent;
-      if (bd.attackSpeedPercent) attackSpeedMultiplier *= (1 + bd.attackSpeedPercent);
+    if (effect.appliedAt + effect.duration < now) continue;
+
+    switch (effect.type) {
+      case StatusEffectType.BUFF_ATTACK:
+        s.attack = Math.floor(s.attack * effect.potency);
+        break;
+      case StatusEffectType.BUFF_DEFENSE:
+        if (effect.buffData?.flatDefense) s.defense += effect.buffData.flatDefense;
+        if (effect.buffData?.defenseMultiplier) s.defense = Math.floor(s.defense * effect.buffData.defenseMultiplier);
+        break;
+      case StatusEffectType.BUFF_MAX_HP:
+        if (effect.buffData?.maxHpFlat) s.maxHealth += effect.buffData.maxHpFlat;
+        if (effect.buffData?.maxHpPercent) s.maxHealth += Math.floor(baseStats.maxHealth * effect.buffData.maxHpPercent);
+        break;
+      case StatusEffectType.BUFF_CAST_SPEED:
+        s.castTimeReduction += effect.potency;
+        break;
+      case StatusEffectType.BUFF_PHYSICAL_REDUC:
+        s.physicalDamageReduction += effect.potency;
+        break;
+      case StatusEffectType.BUFF_DODGE:
+        s.dodgeBonus += effect.potency;
+        break;
+      case StatusEffectType.BUFF_ACCURACY:
+        s.accuracyBonus += effect.potency;
+        break;
+      case StatusEffectType.BUFF_ATTACK_SPEED:
+        s.attackSpeedMultiplier *= (1 + effect.potency);
+        break;
+      case StatusEffectType.BUFF_STAT:
+        if (effect.buffData?.flatStats) {
+          for (const [stat, val] of Object.entries(effect.buffData.flatStats)) {
+            STAT_TO_COMBAT[stat]?.(val, s);
+          }
+        }
+        break;
+      case StatusEffectType.BUFF_GENERIC:
+        if (effect.buffData) {
+          const bd = effect.buffData;
+          if (bd.flatDefense) s.defense += bd.flatDefense;
+          if (bd.defenseMultiplier) s.defense = Math.floor(s.defense * bd.defenseMultiplier);
+          if (bd.flatStats) {
+            for (const [stat, val] of Object.entries(bd.flatStats)) {
+              STAT_TO_COMBAT[stat]?.(val, s);
+            }
+          }
+          if (bd.physicalDamageReductionPercent) s.physicalDamageReduction += bd.physicalDamageReductionPercent;
+          if (bd.dodgeFlat) s.dodgeBonus += bd.dodgeFlat;
+          if (bd.accuracyFlat) s.accuracyBonus += bd.accuracyFlat;
+          if (bd.castTimeReductionPercent) s.castTimeReduction += bd.castTimeReductionPercent;
+          if (bd.attackSpeedPercent) s.attackSpeedMultiplier *= (1 + bd.attackSpeedPercent);
+        }
+        break;
+      case StatusEffectType.DEBUFF_DAMAGE_DOWN:
+        s.attack = Math.floor(s.attack * (1 - (effect.potency || 0)));
+        break;
+      case StatusEffectType.DEBUFF_DEFENSE_DOWN:
+        s.defense = Math.floor(s.defense * (1 - (effect.potency || 0)));
+        break;
+      case StatusEffectType.DEBUFF_SPEED_DOWN:
+      case StatusEffectType.SLOW:
+        s.speed = Math.floor(s.speed * (1 - (effect.potency || 0)));
+        s.speedMultiplier *= (1 - (effect.potency || 0));
+        break;
+      case StatusEffectType.DEBUFF_ACCURACY_DOWN:
+        s.accuracyBonus -= Math.floor(100 * (effect.potency || 0));
+        break;
+      case StatusEffectType.DEBUFF_DODGE_DOWN:
+        s.dodgeBonus = Math.floor(s.dodgeBonus * (1 - (effect.potency || 0)));
+        break;
+      case StatusEffectType.DEBUFF_CAST_SPEED_DOWN:
+        s.castSpeedPenalty += (effect.potency || 0);
+        break;
+      case StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP:
+        s.damageTakenMultiplier *= (1 + (effect.potency || 0));
+        break;
+      case StatusEffectType.BUFF_MOVE_SPEED:
+        s.speedMultiplier += (effect.potency || 0);
+        break;
+      case StatusEffectType.ROOT:
+      case StatusEffectType.FREEZE:
+      case StatusEffectType.STUN:
+        s.speedMultiplier = 0;
+        break;
     }
   }
 
-  for (const effect of statusEffects) {
-    if (effect.type === StatusEffectType.DEBUFF_DAMAGE_DOWN) {
-      const reduction = effect.potency || 0;
-      attack = Math.floor(attack * (1 - reduction));
-    }
-    if (effect.type === StatusEffectType.DEBUFF_DEFENSE_DOWN) {
-      const reduction = effect.potency || 0;
-      defense = Math.floor(defense * (1 - reduction));
-    }
-    if (effect.type === StatusEffectType.DEBUFF_SPEED_DOWN || effect.type === StatusEffectType.SLOW) {
-      const reduction = effect.potency || 0;
-      speed = Math.floor(speed * (1 - reduction));
-    }
-    if (effect.type === StatusEffectType.DEBUFF_ACCURACY_DOWN) {
-      const reduction = effect.potency || 0;
-      accuracyBonus -= Math.floor(100 * reduction);
-    }
-    if (effect.type === StatusEffectType.DEBUFF_DODGE_DOWN) {
-      const reduction = effect.potency || 0;
-      dodgeBonus = Math.floor(dodgeBonus * (1 - reduction));
-    }
-    if (effect.type === StatusEffectType.DEBUFF_CAST_SPEED_DOWN) {
-      const penalty = effect.potency || 0;
-      castSpeedPenalty += penalty;
-    }
-    if (effect.type === StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP) {
-      const increase = effect.potency || 0;
-      damageTakenMultiplier *= (1 + increase);
-    }
-  }
-
-  let speedMultiplier = 1;
-  for (const effect of statusEffects) {
-    if (effect.appliedAt + effect.duration < Date.now()) continue;
-    if (effect.type === StatusEffectType.SLOW || effect.type === StatusEffectType.DEBUFF_SPEED_DOWN) {
-      speedMultiplier *= (1 - (effect.potency || 0));
-    }
-    if (effect.type === StatusEffectType.BUFF_MOVE_SPEED) {
-      speedMultiplier += (effect.potency || 0);
-    }
-    if (effect.type === StatusEffectType.ROOT || effect.type === StatusEffectType.FREEZE || effect.type === StatusEffectType.STUN) {
-      speedMultiplier = 0;
-    }
-  }
-
-  return { attack, defense, magicAttack, maxHealth, maxMana, speed, speedMultiplier, physicalDamageReduction, dodgeBonus, accuracyBonus, castTimeReduction, attackSpeedMultiplier, damageTakenMultiplier, castSpeedPenalty };
+  return {
+    attack: s.attack,
+    defense: s.defense,
+    magicAttack: s.magicAttack,
+    maxHealth: s.maxHealth,
+    maxMana: s.maxMana,
+    speed: s.speed,
+    speedMultiplier: s.speedMultiplier,
+    physicalDamageReduction: s.physicalDamageReduction,
+    dodgeBonus: s.dodgeBonus,
+    accuracyBonus: s.accuracyBonus,
+    castTimeReduction: s.castTimeReduction,
+    attackSpeedMultiplier: s.attackSpeedMultiplier,
+    damageTakenMultiplier: s.damageTakenMultiplier,
+    castSpeedPenalty: s.castSpeedPenalty,
+  };
 }
 
 export interface EnhancementBonus {
@@ -488,70 +560,4 @@ export function computeStatBreakdown(
   }
 
   return { gear: { ...gearBonuses }, buffs, gearCombat: gearCombat || undefined };
-}
-
-export function resolveLapisMediowBuff(
-  spiValues: SpiValueTier[],
-  casterSpi: number,
-  casterBlessing: number
-): { def: number } | null {
-  const firstTier = spiValues[0];
-  if (!firstTier?.Blessing?.length) return null;
-  const firstDef = firstTier.Blessing[0].def;
-  if (firstDef === undefined) return null;
-
-  let matchedSpiTier: SpiValueTier | null = null;
-  for (const tier of spiValues) {
-    if (casterSpi >= tier.value) {
-      matchedSpiTier = tier;
-    } else {
-      break;
-    }
-  }
-
-  if (!matchedSpiTier || !matchedSpiTier.Blessing) return { def: firstDef };
-
-  let matchedBlessing = matchedSpiTier.Blessing[0];
-  for (const bt of matchedSpiTier.Blessing) {
-    if (casterBlessing >= bt.value) {
-      matchedBlessing = bt;
-    } else {
-      break;
-    }
-  }
-
-  return { def: matchedBlessing.def ?? firstDef };
-}
-
-export function resolveGreenSongBuff(
-  spiValues: SpiValueTier[],
-  casterSpi: number,
-  casterBlessing: number
-): { dodgeChance: number } | null {
-  const firstTier = spiValues[0];
-  if (!firstTier?.Blessing?.length) return null;
-  const firstDodge = firstTier.Blessing[0].dodgeChance;
-  if (firstDodge === undefined) return null;
-
-  let matchedSpiTier: SpiValueTier | null = null;
-  for (const tier of spiValues) {
-    if (casterSpi >= tier.value) {
-      matchedSpiTier = tier;
-    } else {
-      break;
-    }
-  }
-
-  if (!matchedSpiTier || !matchedSpiTier.Blessing) return { dodgeChance: firstDodge };
-
-  let matchedBlessing = matchedSpiTier.Blessing[0];
-  for (const bt of matchedSpiTier.Blessing) {
-    if (casterBlessing >= bt.value) {
-      matchedBlessing = bt;
-    } else {
-      break;
-    }
-  }
-
-  return { dodgeChance: matchedBlessing.dodgeChance ?? firstDodge };
 }
