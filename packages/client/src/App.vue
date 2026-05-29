@@ -176,6 +176,17 @@
         @respawn="handleRespawn"
       />
 
+      <GMPanel
+        :visible="showGMPanel"
+        :send-command="gmSendCommand"
+        :on-chat-message="gmOnChatMessage"
+        :off-chat-message="gmOffChatMessage"
+        :dummy-stats="dummyStats"
+        :entity-status-effects="entityStatusEffects"
+        @close="showGMPanel = false"
+        @open="showGMPanel = true"
+      />
+
       <div class="controls-hint">
         Click to lock | WASD move | Shift sprint | F attack | I inventory | J quests | K skills | 1-0 skill bar | E interact
       </div>
@@ -188,9 +199,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { GameClient } from './core/GameClient';
-import { PacketType, PlayerStats, StatPoints, PartyData, PartyLootItem } from '@dust-saga/shared';
+import { PacketType, PlayerStats, StatPoints, PartyData, PartyLootItem, StatusEffectType } from '@dust-saga/shared';
 import CharacterSelect from './ui/CharacterSelect.vue';
 import GameHUD from './ui/GameHUD.vue';
 import ChatPanel from './ui/ChatPanel.vue';
@@ -205,6 +216,7 @@ import PartyCreateDialog from './ui/PartyCreateDialog.vue';
 import PartyInviteDialog from './ui/PartyInviteDialog.vue';
 import DeathPopup from './ui/DeathPopup.vue';
 import EnhancementWindow from './ui/EnhancementWindow.vue';
+import GMPanel from './ui/GMPanel.vue';
 import { useSkillStore } from './composables/useSkillStore';
 
 type GameState = 'auth' | 'character-select' | 'loading' | 'playing';
@@ -265,6 +277,8 @@ const playerJobId = ref('');
 const showSkillWindow = ref(false);
 const skillStore = useSkillStore();
 const playerStatusEffects = ref<any[]>([]);
+const showGMPanel = ref(false);
+const dummyStats = ref<Record<string, any>>({});
 
 const partyData = ref<PartyData | null>(null);
 const partyLootPool = ref<PartyLootItem[]>([]);
@@ -530,6 +544,21 @@ function showNotification(message: string, type: string) {
   notification.value = { message, type, visible: true };
 }
 
+function gmSendCommand(cmd: string) {
+  gameClient?.sendChatMessage(cmd);
+}
+
+const gmChatHandlers: Array<(sender: string, message: string) => void> = [];
+
+function gmOnChatMessage(handler: (sender: string, message: string) => void) {
+  gmChatHandlers.push(handler);
+}
+
+function gmOffChatMessage(handler: (sender: string, message: string) => void) {
+  const idx = gmChatHandlers.indexOf(handler);
+  if (idx >= 0) gmChatHandlers.splice(idx, 1);
+}
+
 onMounted(async () => {
   gameClient = new GameClient(null);
 
@@ -563,6 +592,7 @@ onMounted(async () => {
     onChatMessage: (sender, message) => {
       chatMessages.value.push({ sender, message });
       if (chatMessages.value.length > 50) chatMessages.value.shift();
+      gmChatHandlers.forEach(h => h(sender, message));
     },
     onNotification: (message, type) => {
       showNotification(message, type);
@@ -704,13 +734,19 @@ onMounted(async () => {
           targetLevel.value = packet.data.level;
         }
       }
+      const eid = packet.data.entityId;
+      dummyStats.value = { ...dummyStats.value, [eid]: { ...(dummyStats.value[eid] || {}), ...packet.data } };
     }
-    if (packet.data.stats && packet.data.characterId && packet.data.characterId === targetId.value && packet.data.characterId !== gameClient?.getPlayerId()) {
-      targetHealth.value = packet.data.stats.health || 0;
-      targetMaxHealth.value = packet.data.stats.maxHealth || 0;
-      if (packet.data.stats.level !== undefined) {
-        targetLevel.value = packet.data.stats.level;
+    if (packet.data.stats && packet.data.characterId && packet.data.characterId !== gameClient?.getPlayerId()) {
+      if (packet.data.characterId === targetId.value) {
+        targetHealth.value = packet.data.stats.health || 0;
+        targetMaxHealth.value = packet.data.stats.maxHealth || 0;
+        if (packet.data.stats.level !== undefined) {
+          targetLevel.value = packet.data.stats.level;
+        }
       }
+      const cid = packet.data.characterId;
+      dummyStats.value = { ...dummyStats.value, [cid]: { ...(dummyStats.value[cid] || {}), ...packet.data } };
     }
   });
 
@@ -791,7 +827,10 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
   }
   if (chatFocused.value || tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
-  if (e.code === 'KeyI') {
+  if (e.code === 'F12') {
+    e.preventDefault();
+    showGMPanel.value = !showGMPanel.value;
+  } else if (e.code === 'KeyI') {
     showInventory.value = !showInventory.value;
   } else if (e.code === 'KeyJ') {
     showQuests.value = !showQuests.value;
@@ -824,6 +863,25 @@ onUnmounted(() => {
   }
   stopDialogTracking();
   window.removeEventListener('keydown', handleGlobalKeyDown);
+});
+
+const SONG_TYPES = new Set([
+  StatusEffectType.SONG_GREEN,
+  StatusEffectType.SONG_BLUE,
+  StatusEffectType.SONG_YELLOW,
+  StatusEffectType.SONG_RED,
+]);
+
+watch(playerStatusEffects, (effects) => {
+  if (!gameClient) return;
+  const now = Date.now();
+  const activeSong = effects?.find(e => SONG_TYPES.has(e.type) && (!e.expiresAt || e.expiresAt > now));
+  const engine = gameClient.getEngine();
+  if (activeSong) {
+    engine.createSongIndicator(activeSong.type, 5);
+  } else {
+    engine.removeSongIndicator();
+  }
 });
 </script>
 

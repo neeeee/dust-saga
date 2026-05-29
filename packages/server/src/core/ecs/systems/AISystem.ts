@@ -1,5 +1,5 @@
 import { EntityManager, System } from '../EntityManager';
-import { EnemyInstance } from '@dust-saga/shared';
+import { EnemyInstance, StatusEffectType } from '@dust-saga/shared';
 import { getEnemyDefinition } from '@dust-saga/shared';
 
 export class AISystem extends System {
@@ -21,6 +21,22 @@ export class AISystem extends System {
 
   onEnemyAggro(callback: (enemyId: string, enemyType: string, targetId: string, enemyPos: { x: number; y: number; z: number }, spawnPos: { x: number; y: number; z: number }) => void): void {
     this.aggroCallbacks.push(callback);
+  }
+
+  private getSpeedMultiplier(enemy: EnemyInstance): number {
+    let multiplier = 1;
+    const now = Date.now();
+    for (const effect of enemy.statusEffects || []) {
+      if (effect.appliedAt + effect.duration < now) continue;
+      if (effect.type === StatusEffectType.DEBUFF_SPEED_DOWN) {
+        multiplier *= (1 - (effect.potency || 0.15));
+      } else if (effect.type === StatusEffectType.SLOW) {
+        multiplier *= (1 - (effect.potency || 0.3));
+      } else if (effect.type === StatusEffectType.ROOT || effect.type === StatusEffectType.FREEZE || effect.type === StatusEffectType.STUN) {
+        return 0;
+      }
+    }
+    return Math.max(0, multiplier);
   }
 
   updateEnemies(
@@ -103,7 +119,7 @@ export class AISystem extends System {
       return;
     }
 
-    const speed = (def.patrolSpeed || 1) * deltaTime;
+    const speed = (def.patrolSpeed || 1) * deltaTime * this.getSpeedMultiplier(enemy);
     enemy.position.x += (dx / dist) * speed;
     enemy.position.z += (dz / dist) * speed;
     enemy.rotation = Math.atan2(dx, dz);
@@ -153,7 +169,7 @@ export class AISystem extends System {
       return;
     }
 
-    const speed = def.speed * deltaTime;
+    const speed = def.speed * deltaTime * this.getSpeedMultiplier(enemy);
     enemy.position.x += (dx / dist) * speed;
     enemy.position.z += (dz / dist) * speed;
     enemy.rotation = Math.atan2(dx, dz);

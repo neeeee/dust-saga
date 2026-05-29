@@ -181,6 +181,8 @@ export const SKILL_TARGET_RULES: Record<string, SkillTargetType> = {
   'Auto-guard': SkillTargetType.SELF,
   'Defensive March': SkillTargetType.SELF,
 
+  'Guardian': SkillTargetType.OTHER_ONLY,
+
   // Offensive self buffs
   'Toxify': SkillTargetType.SELF,
   'Rush': SkillTargetType.SELF,

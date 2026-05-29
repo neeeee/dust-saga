@@ -109,6 +109,24 @@ const BUFF_TYPES = new Set([
   StatusEffectType.BUFF_DODGE,
   StatusEffectType.BUFF_ACCURACY,
   StatusEffectType.BUFF_ATTACK_SPEED,
+  StatusEffectType.WEAPON_AURA,
+  StatusEffectType.BUFF_RESIST,
+  StatusEffectType.BUFF_CRIT_RESIST,
+  StatusEffectType.BUFF_CRIT_DAMAGE_REDUCE,
+  StatusEffectType.BUFF_AURA_DAMAGE_REDUCE,
+  StatusEffectType.BUFF_MANA_SHIELD,
+  StatusEffectType.BUFF_SPELL_INTERRUPT_RESIST,
+  StatusEffectType.BUFF_DEBUFF_RESIST,
+  StatusEffectType.BUFF_DAMAGE_REDIRECT,
+  StatusEffectType.BUFF_BLOCK_CHANCE,
+  StatusEffectType.BUFF_BLOCKING_STANCE,
+  StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK,
+  StatusEffectType.BUFF_GUARDED,
+  StatusEffectType.BUFF_MOVE_SPEED,
+  StatusEffectType.SONG_GREEN,
+  StatusEffectType.SONG_BLUE,
+  StatusEffectType.SONG_YELLOW,
+  StatusEffectType.SONG_ACTIVE,
 ]);
 
 const DEBUFF_ICONS: Record<string, string> = {
@@ -131,6 +149,11 @@ const DEBUFF_ICONS: Record<string, string> = {
   [StatusEffectType.DEBUFF_ACCURACY_DOWN]: 'AC',
   [StatusEffectType.DEBUFF_CAST_SPEED_DOWN]: 'CS',
   [StatusEffectType.DEBUFF_DAMAGE_TAKEN_UP]: 'DT',
+  [StatusEffectType.DEBUFF_DODGE_DOWN]: 'Do',
+  [StatusEffectType.SONG_RED]: 'RS',
+  [StatusEffectType.FEAR]: 'Fe',
+  [StatusEffectType.CURSE]: 'Cu',
+  [StatusEffectType.MP_DAMAGE_DEBUFF]: 'MP',
 };
 
 function getEffectLabel(e: any): string {

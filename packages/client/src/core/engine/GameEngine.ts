@@ -57,6 +57,7 @@ export class GameEngine {
   private moveIndicator: AbstractMesh | null = null;
   private moveIndicatorMat: StandardMaterial | null = null;
   private moveIndicatorCallback: ((worldPos: V3) => void) | null = null;
+  private songIndicator: { disc: AbstractMesh; material: StandardMaterial } | null = null;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -139,7 +140,12 @@ export class GameEngine {
 
     this.engine.runRenderLoop(() => {
       if (this.scene) {
-        this.updateAOEZoneMeshes(Date.now());
+        const now = Date.now();
+        this.updateAOEZoneMeshes(now);
+        if (this.songIndicator && this.playerMesh) {
+          const pos = this.playerMesh.position;
+          this.updateSongIndicator({ x: pos.x, y: pos.y, z: pos.z }, now);
+        }
         this.scene.render();
       }
     });
@@ -901,6 +907,10 @@ export class GameEngine {
     if (name.includes('dark') || name.includes('despair') || name.includes('shadow')) return { diffuse: new Color3(0.6, 0.2, 0.8), emissive: new Color3(0.4, 0.1, 0.6) };
     if (name.includes('poison') || name.includes('pestilence')) return { diffuse: new Color3(0.3, 0.8, 0.2), emissive: new Color3(0.1, 0.5, 0.1) };
     if (name.includes('arrow')) return { diffuse: new Color3(0.8, 0.6, 0.3), emissive: new Color3(0.5, 0.3, 0.1) };
+    if (name.includes('song_green')) return { diffuse: new Color3(0.2, 0.8, 0.3), emissive: new Color3(0.1, 0.5, 0.15) };
+    if (name.includes('song_blue')) return { diffuse: new Color3(0.3, 0.5, 1.0), emissive: new Color3(0.15, 0.3, 0.7) };
+    if (name.includes('song_yellow')) return { diffuse: new Color3(0.9, 0.9, 0.2), emissive: new Color3(0.6, 0.6, 0.1) };
+    if (name.includes('song_red')) return { diffuse: new Color3(1.0, 0.3, 0.2), emissive: new Color3(0.7, 0.15, 0.1) };
     return { diffuse: new Color3(0.8, 0.3, 0.3), emissive: new Color3(0.5, 0.1, 0.1) };
   }
 
@@ -1074,12 +1084,56 @@ export class GameEngine {
     }
   }
 
+  private getSongColor(songType: string): { diffuse: Color3; emissive: Color3 } {
+    const name = songType.toLowerCase();
+    if (name.includes('green')) return { diffuse: new Color3(0.2, 0.8, 0.3), emissive: new Color3(0.1, 0.5, 0.15) };
+    if (name.includes('blue')) return { diffuse: new Color3(0.3, 0.5, 1.0), emissive: new Color3(0.15, 0.3, 0.7) };
+    if (name.includes('yellow')) return { diffuse: new Color3(0.9, 0.9, 0.2), emissive: new Color3(0.6, 0.6, 0.1) };
+    if (name.includes('red')) return { diffuse: new Color3(1.0, 0.3, 0.2), emissive: new Color3(0.7, 0.15, 0.1) };
+    return { diffuse: new Color3(0.5, 0.5, 0.5), emissive: new Color3(0.3, 0.3, 0.3) };
+  }
+
+  createSongIndicator(songType: string, radius: number): void {
+    if (!this.scene) return;
+    this.removeSongIndicator();
+
+    const disc = MeshBuilder.CreateDisc('song_indicator', { radius, tessellation: 64 }, this.scene);
+    const mat = new StandardMaterial('song_indicator_mat', this.scene);
+    const colors = this.getSongColor(songType);
+    mat.diffuseColor = colors.diffuse;
+    mat.emissiveColor = colors.emissive;
+    mat.disableLighting = true;
+    mat.alpha = 0.15;
+    mat.backFaceCulling = false;
+    disc.material = mat;
+    disc.rotation.x = Math.PI / 2;
+    disc.position.y = 0.05;
+    disc.isPickable = false;
+
+    this.songIndicator = { disc, material: mat };
+  }
+
+  removeSongIndicator(): void {
+    if (this.songIndicator) {
+      this.songIndicator.disc.dispose();
+      this.songIndicator.material.dispose();
+      this.songIndicator = null;
+    }
+  }
+
+  updateSongIndicator(position: { x: number; y: number; z: number }, now: number): void {
+    if (!this.songIndicator) return;
+    this.songIndicator.disc.position.set(position.x, 0.05, position.z);
+    this.songIndicator.material.alpha = 0.15 + 0.1 * Math.sin(now * 0.003);
+  }
+
   dispose(): void {
     if (this.isRotating) document.exitPointerLock();
     this.canvas?.removeEventListener('pointerdown', this.handlePointerDown);
     this.canvas?.removeEventListener('pointerup', this.handlePointerUp);
     this.canvas?.removeEventListener('pointermove', this.handlePointerMoveForCamera);
     this.hideAOETargetCircle();
+    this.removeSongIndicator();
     this.aoeZoneMeshes.forEach((entry) => {
       entry.disc.dispose();
       entry.material.dispose();

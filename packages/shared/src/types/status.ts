@@ -44,6 +44,7 @@ export enum StatusEffectType {
   BUFF_BLOCK_CHANCE = 'buff_block_chance',
   BUFF_BLOCKING_STANCE = 'buff_blocking_stance',
   BUFF_CONSUMABLE_ON_ATTACK = 'buff_consumable_on_attack',
+  BUFF_GUARDED = 'buff_guarded',
   SONG_ACTIVE = 'song_active',
   SONG_GREEN = 'song_green',
   SONG_BLUE = 'song_blue',
@@ -157,6 +158,7 @@ export interface BuffData {
   spellInterruptResistPercent?: number;
   debuffResistPercent?: number;
   damageRedirectTargetId?: string;
+  guardedBy?: string;
   blockChancePercent?: number;
   consumableOnAttack?: boolean;
   cooldownReductionPercent?: number;
@@ -203,6 +205,8 @@ export interface StatusEffect {
   preventResurrect?: boolean;
   preventFieldSpells?: boolean;
   fearDirection?: { x: number; y: number; z: number };
+  lastInRangeAt?: number;
+  songProximityBuff?: boolean;
 }
 
 export interface StatusEffectDefinition {
@@ -259,6 +263,7 @@ export const STATUS_EFFECT_DEFS: Partial<Record<StatusEffectType, StatusEffectDe
   [StatusEffectType.BUFF_BLOCK_CHANCE]: { type: StatusEffectType.BUFF_BLOCK_CHANCE, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_BLOCKING_STANCE]: { type: StatusEffectType.BUFF_BLOCKING_STANCE, duration: 999999999, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK]: { type: StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_GUARDED]: { type: StatusEffectType.BUFF_GUARDED, duration: 300000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_MOVE_SPEED]: { type: StatusEffectType.BUFF_MOVE_SPEED, duration: 2000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.SONG_GREEN]: { type: StatusEffectType.SONG_GREEN, duration: 999999999, tickInterval: 3000, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.SONG_BLUE]: { type: StatusEffectType.SONG_BLUE, duration: 999999999, tickInterval: 3000, potency: 0, isDoT: false, isCC: false },
@@ -288,7 +293,7 @@ export function getEffectiveStats(
   baseStats: { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number },
   statPoints: { STR: number; AGI: number; INT: number; SPI: number; DEX: number; STA: number },
   statusEffects: StatusEffect[]
-): { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number; physicalDamageReduction: number; dodgeBonus: number; accuracyBonus: number; castTimeReduction: number; attackSpeedMultiplier: number; damageTakenMultiplier: number; castSpeedPenalty: number } {
+): { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number; speedMultiplier: number; physicalDamageReduction: number; dodgeBonus: number; accuracyBonus: number; castTimeReduction: number; attackSpeedMultiplier: number; damageTakenMultiplier: number; castSpeedPenalty: number } {
   let attack = baseStats.attack;
   let defense = baseStats.defense;
   let magicAttack = baseStats.magicAttack;
@@ -382,7 +387,7 @@ export function getEffectiveStats(
       const reduction = effect.potency || 0;
       defense = Math.floor(defense * (1 - reduction));
     }
-    if (effect.type === StatusEffectType.DEBUFF_SPEED_DOWN) {
+    if (effect.type === StatusEffectType.DEBUFF_SPEED_DOWN || effect.type === StatusEffectType.SLOW) {
       const reduction = effect.potency || 0;
       speed = Math.floor(speed * (1 - reduction));
     }
@@ -404,7 +409,21 @@ export function getEffectiveStats(
     }
   }
 
-  return { attack, defense, magicAttack, maxHealth, maxMana, speed, physicalDamageReduction, dodgeBonus, accuracyBonus, castTimeReduction, attackSpeedMultiplier, damageTakenMultiplier, castSpeedPenalty };
+  let speedMultiplier = 1;
+  for (const effect of statusEffects) {
+    if (effect.appliedAt + effect.duration < Date.now()) continue;
+    if (effect.type === StatusEffectType.SLOW || effect.type === StatusEffectType.DEBUFF_SPEED_DOWN) {
+      speedMultiplier *= (1 - (effect.potency || 0));
+    }
+    if (effect.type === StatusEffectType.BUFF_MOVE_SPEED) {
+      speedMultiplier += (effect.potency || 0);
+    }
+    if (effect.type === StatusEffectType.ROOT || effect.type === StatusEffectType.FREEZE || effect.type === StatusEffectType.STUN) {
+      speedMultiplier = 0;
+    }
+  }
+
+  return { attack, defense, magicAttack, maxHealth, maxMana, speed, speedMultiplier, physicalDamageReduction, dodgeBonus, accuracyBonus, castTimeReduction, attackSpeedMultiplier, damageTakenMultiplier, castSpeedPenalty };
 }
 
 export interface EnhancementBonus {
@@ -525,7 +544,7 @@ export function resolveGreenSongBuff(
 
   if (!matchedSpiTier || !matchedSpiTier.Blessing) return { dodgeChance: firstDodge };
 
-  let matchedBlessing = firstTier.Blessing[0];
+  let matchedBlessing = matchedSpiTier.Blessing[0];
   for (const bt of matchedSpiTier.Blessing) {
     if (casterBlessing >= bt.value) {
       matchedBlessing = bt;

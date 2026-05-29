@@ -71,6 +71,11 @@ export interface SkillUseResult {
   summonObject?: { objectType: string; duration: number; hp?: number; defense?: number; aoeDamage?: number };
   banishObject?: boolean;
   blockOnly?: boolean;
+  songToggledOff?: boolean;
+  defensiveMarchToggledOff?: boolean;
+  guardianToggledOff?: boolean;
+  guardianApplied?: string;
+  guardianRemovedTarget?: string;
 }
 
 interface SkillClassification {
@@ -325,14 +330,49 @@ export class SkillSystem {
       return { success: true, revived: true };
     }
 
-    if (skill.duration > 0 && !isPassiveSkill(skill) && !skill.debuffEffectTable) {
-      const targetType = SKILL_TARGET_RULES[skillName];
-      if (!targetType || targetType === SkillTargetType.SELF) {
-        this.applyBuff(session, skill);
-      } else if (targetType === SkillTargetType.PARTY) {
-        this.applyBuff(session, skill);
-      } else if (targetType === SkillTargetType.SELF_OR_TARGET) {
-        this.applyBuff(session, skill);
+    const hasBuffToApply = (skill.duration > 0 || skill.isSong) && !isPassiveSkill(skill) && !skill.debuffEffectTable;
+    if (hasBuffToApply || (skill.buffEffectTable && skill.duration === 0)) {
+      if (skill.isSong) {
+        const songMap: Record<string, StatusEffectType> = {
+          green: StatusEffectType.SONG_GREEN,
+          blue: StatusEffectType.SONG_BLUE,
+          yellow: StatusEffectType.SONG_YELLOW,
+          red: StatusEffectType.SONG_RED,
+        };
+        const songType = skill.buffEffectTable?.songType as string | undefined;
+        const songEffectType = songType ? songMap[songType] : undefined;
+        if (songEffectType && session.statusEffects?.some(e => e.type === songEffectType)) {
+          session.statusEffects = session.statusEffects.filter(e => e.type !== songEffectType);
+          return { success: true, songToggledOff: true };
+        }
+      }
+
+      if (skill.buffEffectTable?.defensiveMarch) {
+        const existing = session.statusEffects?.find(e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.defensiveMarch && e.skillName === skillName);
+        if (existing) {
+          session.statusEffects = session.statusEffects.filter(e => e !== existing);
+          return { success: true, defensiveMarchToggledOff: true };
+        }
+      }
+
+      if (skill.buffEffectTable?.damageRedirect && targetId) {
+        const existing = session.statusEffects?.find(e => e.type === StatusEffectType.BUFF_DAMAGE_REDIRECT && e.skillName === skillName);
+        if (existing) {
+          const oldTarget = existing.buffData?.damageRedirectTargetId || existing.targetId;
+          session.statusEffects = session.statusEffects.filter(e => e !== existing);
+          return { success: true, guardianToggledOff: true, guardianRemovedTarget: oldTarget };
+        }
+        this.applyGuardianBuff(session, skill, targetId);
+        return { success: true, guardianApplied: targetId };
+      } else {
+        const targetType = SKILL_TARGET_RULES[skillName];
+        if (!targetType || targetType === SkillTargetType.SELF) {
+          this.applyBuff(session, skill);
+        } else if (targetType === SkillTargetType.PARTY) {
+          this.applyBuff(session, skill);
+        } else if (targetType === SkillTargetType.SELF_OR_TARGET) {
+          this.applyBuff(session, skill);
+        }
       }
     }
 
@@ -830,6 +870,26 @@ export class SkillSystem {
     this.applyBuffToTarget(session, session.characterId, skill, session);
   }
 
+  private applyGuardianBuff(session: PlayerSession, skill: SkillDefinition, targetCharacterId: string): void {
+    const now = Date.now();
+    const duration = (skill.duration || 300) * 1000;
+    session.statusEffects = session.statusEffects.filter(e => e.type !== StatusEffectType.BUFF_DAMAGE_REDIRECT);
+    session.statusEffects.push({
+      id: `buff_${Date.now()}_${Math.random().toString(36).slice(2, 6)}_guardian`,
+      type: StatusEffectType.BUFF_DAMAGE_REDIRECT,
+      sourceId: session.characterId,
+      targetId: targetCharacterId,
+      potency: 0,
+      appliedAt: now,
+      duration,
+      tickInterval: 0,
+      lastTickAt: now,
+      stacks: 1,
+      skillName: skill.name,
+      buffData: { damageRedirectTargetId: targetCharacterId },
+    });
+  }
+
   applyBuffToTarget(
     target: PlayerSession,
     sourceId: string,
@@ -1238,6 +1298,11 @@ export class SkillSystem {
     if (!session.statusEffects) return { damage: 0, mpDamage: 0, healed: 0, expired: [] };
 
     for (const effect of session.statusEffects) {
+      if (effect.songProximityBuff && effect.lastInRangeAt && now - effect.lastInRangeAt > 5000) {
+        expired.push(effect);
+        continue;
+      }
+
       if (now - effect.appliedAt >= effect.duration) {
         expired.push(effect);
         continue;

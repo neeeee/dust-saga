@@ -40,131 +40,140 @@
         </div>
       </div>
 
-      <div class="derived-stats">
-        <h3>Derived Stats</h3>
-        <div class="derived-grid">
-          <div class="derived-item" v-for="d in derivedList" :key="d.label">
-            <span class="derived-label">{{ d.label }}</span>
-            <span class="derived-value">{{ d.current }}</span>
-            <span class="derived-new" v-if="d.current !== d.preview">{{ d.preview }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="combat-stats">
-        <h3>Combat Stats</h3>
-        <div class="combat-grid">
-          <div class="combat-item">
-            <span class="combat-label">Accuracy</span>
-            <span class="combat-value">{{ combatStats.accuracy }}</span>
-          </div>
-          <div class="combat-item">
-            <span class="combat-label">Dodge</span>
-            <span class="combat-value">{{ combatStats.dodge }}</span>
-          </div>
-          <div class="combat-item">
-            <span class="combat-label">Atk Spd</span>
-            <span class="combat-value">{{ formatPercent(combatStats.attackSpeed) }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="enhancement-stats" v-if="hasEnhancement">
-        <h3>Enhancement Bonuses</h3>
-        <div class="enhance-grid">
-          <div class="enhance-item" v-if="enhBonuses.attack > 0">
-            <span class="enhance-label">ATK</span>
-            <span class="enhance-value">+{{ enhBonuses.attack }}</span>
-          </div>
-          <div class="enhance-item" v-if="enhBonuses.defense > 0">
-            <span class="enhance-label">DEF</span>
-            <span class="enhance-value">+{{ enhBonuses.defense }}</span>
-          </div>
-          <div class="enhance-item" v-if="enhBonuses.health > 0">
-            <span class="enhance-label">HP</span>
-            <span class="enhance-value">+{{ enhBonuses.health }}</span>
-          </div>
-          <div class="enhance-item" v-if="enhBonuses.magicAttackPercent > 0">
-            <span class="enhance-label">MATK</span>
-            <span class="enhance-value">+{{ enhBonuses.magicAttackPercent }}%</span>
-          </div>
-          <div class="enhance-item" v-if="enhBonuses.dodge > 0">
-            <span class="enhance-label">Dodge</span>
-            <span class="enhance-value">+{{ enhBonuses.dodge }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="resistances">
-        <h3>Elemental Resistances</h3>
-        <div class="resist-grid">
-          <div class="resist-item">
-            <span class="resist-icon fire">F</span>
-            <span class="resist-label">Fire</span>
-            <span class="resist-value">{{ resistances.fire }}</span>
-          </div>
-          <div class="resist-item">
-            <span class="resist-icon ice">I</span>
-            <span class="resist-label">Ice</span>
-            <span class="resist-value">{{ resistances.ice }}</span>
-          </div>
-          <div class="resist-item">
-            <span class="resist-icon lightning">L</span>
-            <span class="resist-label">Lightning</span>
-            <span class="resist-value">{{ resistances.lightning }}</span>
-          </div>
-          <div class="resist-item">
-            <span class="resist-icon poison">P</span>
-            <span class="resist-label">Poison</span>
-            <span class="resist-value">{{ resistances.poison }}</span>
-          </div>
-          <div class="resist-item">
-            <span class="resist-icon dark">D</span>
-            <span class="resist-label">Dark</span>
-            <span class="resist-value">{{ resistances.dark }}</span>
-          </div>
-          <div class="resist-item">
-            <span class="resist-icon dark">H</span>
-            <span class="resist-label">Holy</span>
-            <span class="resist-value">{{ resistances.holy }}</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="resistances">
-        <h3>Status Resistances</h3>
-        <div class="resist-grid">
-          <div class="resist-item" v-for="r in [
-            { key: 'ailment', label: 'Ailment', cls: 'ailment' },
-            { key: 'disorder', label: 'Disorder', cls: 'disorder' },
-            { key: 'stun', label: 'Stun', cls: 'stun' },
-            { key: 'trip', label: 'Trip', cls: 'trip' },
-            { key: 'freeze', label: 'Freeze', cls: 'freeze' },
-            { key: 'burn', label: 'Burn', cls: 'burn' },
-            { key: 'curse', label: 'Curse', cls: 'curse' },
-            { key: 'bleed', label: 'Bleed', cls: 'bleed' },
-            { key: 'sleep', label: 'Sleep', cls: 'sleep' },
-            { key: 'weakness', label: 'Weakness', cls: 'weakness' },
-            { key: 'weaken', label: 'Weaken', cls: 'weaken' },
-            { key: 'knockdown', label: 'Knockdown', cls: 'knockdown' },
-            { key: 'knockback', label: 'Knockback', cls: 'knockback' },
-          ]" :key="r.key">
-            <span class="resist-icon" :class="r.cls">{{ r.label[0] }}</span>
-            <span class="resist-label">{{ r.label }}</span>
-            <span class="resist-value">{{ statusResistances[r.key as keyof typeof statusResistances.value] }}</span>
-          </div>
-        </div>
-      </div>
-
       <div class="stat-actions" v-if="hasPending">
         <button class="confirm-btn" @click="handleConfirm">Confirm</button>
         <button class="cancel-btn" @click="handleCancel">Cancel</button>
       </div>
 
-      <div class="racial-passive" v-if="racialPassive">
-        <span class="passive-name">{{ racialPassive.name }}</span>
-        <span class="passive-desc">{{ racialPassive.description }}</span>
+      <div class="panel-tabs">
+        <button class="panel-tab" :class="{ active: activeTab === 'stats' }" @click="activeTab = 'stats'">Stats</button>
+        <button class="panel-tab" :class="{ active: activeTab === 'resists' }" @click="activeTab = 'resists'">Resists</button>
       </div>
+
+      <template v-if="activeTab === 'stats'">
+        <div class="derived-stats">
+          <h3>Derived Stats</h3>
+          <div class="derived-grid">
+            <div class="derived-item" v-for="d in derivedList" :key="d.label">
+              <span class="derived-label">{{ d.label }}</span>
+              <span class="derived-value">{{ d.current }}</span>
+              <span class="derived-new" v-if="d.current !== d.preview">{{ d.preview }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="combat-stats">
+          <h3>Combat Stats</h3>
+          <div class="combat-grid">
+            <div class="combat-item">
+              <span class="combat-label">Accuracy</span>
+              <span class="combat-value">{{ combatStats.accuracy }}</span>
+            </div>
+            <div class="combat-item">
+              <span class="combat-label">Dodge</span>
+              <span class="combat-value">{{ combatStats.dodge }}</span>
+            </div>
+            <div class="combat-item">
+              <span class="combat-label">Atk Spd</span>
+              <span class="combat-value">{{ formatPercent(combatStats.attackSpeed) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="enhancement-stats" v-if="hasEnhancement">
+          <h3>Enhancement Bonuses</h3>
+          <div class="enhance-grid">
+            <div class="enhance-item" v-if="enhBonuses.attack > 0">
+              <span class="enhance-label">ATK</span>
+              <span class="enhance-value">+{{ enhBonuses.attack }}</span>
+            </div>
+            <div class="enhance-item" v-if="enhBonuses.defense > 0">
+              <span class="enhance-label">DEF</span>
+              <span class="enhance-value">+{{ enhBonuses.defense }}</span>
+            </div>
+            <div class="enhance-item" v-if="enhBonuses.health > 0">
+              <span class="enhance-label">HP</span>
+              <span class="enhance-value">+{{ enhBonuses.health }}</span>
+            </div>
+            <div class="enhance-item" v-if="enhBonuses.magicAttackPercent > 0">
+              <span class="enhance-label">MATK</span>
+              <span class="enhance-value">+{{ enhBonuses.magicAttackPercent }}%</span>
+            </div>
+            <div class="enhance-item" v-if="enhBonuses.dodge > 0">
+              <span class="enhance-label">Dodge</span>
+              <span class="enhance-value">+{{ enhBonuses.dodge }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="racial-passive" v-if="racialPassive">
+          <span class="passive-name">{{ racialPassive.name }}</span>
+          <span class="passive-desc">{{ racialPassive.description }}</span>
+        </div>
+      </template>
+
+      <template v-if="activeTab === 'resists'">
+        <div class="resistances">
+          <h3>Elemental Resistances</h3>
+          <div class="resist-grid">
+            <div class="resist-item">
+              <span class="resist-icon fire">F</span>
+              <span class="resist-label">Fire</span>
+              <span class="resist-value">{{ resistances.fire }}</span>
+            </div>
+            <div class="resist-item">
+              <span class="resist-icon ice">I</span>
+              <span class="resist-label">Ice</span>
+              <span class="resist-value">{{ resistances.ice }}</span>
+            </div>
+            <div class="resist-item">
+              <span class="resist-icon lightning">L</span>
+              <span class="resist-label">Lightning</span>
+              <span class="resist-value">{{ resistances.lightning }}</span>
+            </div>
+            <div class="resist-item">
+              <span class="resist-icon poison">P</span>
+              <span class="resist-label">Poison</span>
+              <span class="resist-value">{{ resistances.poison }}</span>
+            </div>
+            <div class="resist-item">
+              <span class="resist-icon dark">D</span>
+              <span class="resist-label">Dark</span>
+              <span class="resist-value">{{ resistances.dark }}</span>
+            </div>
+            <div class="resist-item">
+              <span class="resist-icon holy">H</span>
+              <span class="resist-label">Holy</span>
+              <span class="resist-value">{{ resistances.holy }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="resistances">
+          <h3>Status Resistances</h3>
+          <div class="resist-grid">
+            <div class="resist-item" v-for="r in [
+              { key: 'ailment', label: 'Ailment', cls: 'ailment' },
+              { key: 'disorder', label: 'Disorder', cls: 'disorder' },
+              { key: 'stun', label: 'Stun', cls: 'stun' },
+              { key: 'trip', label: 'Trip', cls: 'trip' },
+              { key: 'freeze', label: 'Freeze', cls: 'freeze' },
+              { key: 'burn', label: 'Burn', cls: 'burn' },
+              { key: 'curse', label: 'Curse', cls: 'curse' },
+              { key: 'bleed', label: 'Bleed', cls: 'bleed' },
+              { key: 'sleep', label: 'Sleep', cls: 'sleep' },
+              { key: 'weakness', label: 'Weakness', cls: 'weakness' },
+              { key: 'weaken', label: 'Weaken', cls: 'weaken' },
+              { key: 'knockdown', label: 'Knockdown', cls: 'knockdown' },
+              { key: 'knockback', label: 'Knockback', cls: 'knockback' },
+            ]" :key="r.key">
+              <span class="resist-icon" :class="r.cls">{{ r.label[0] }}</span>
+              <span class="resist-label">{{ r.label }}</span>
+              <span class="resist-value">{{ (statusResistances as Record<string, number>)[r.key] }}</span>
+            </div>
+          </div>
+        </div>
+      </template>
     </div>
 </template>
 
@@ -196,6 +205,8 @@ const emit = defineEmits<{
   'allocate': [stat: string];
   'allocate-batch': [allocations: Record<string, number>];
 }>();
+
+const activeTab = ref<'stats' | 'resists'>('stats');
 
 const statList = [
   { key: 'STA', label: 'Stamina' },
@@ -445,9 +456,9 @@ onUnmounted(() => {
   position: absolute;
   background: rgba(20, 20, 40, 0.98);
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-  padding: 1.5rem;
-  width: 440px;
+  border-radius: 10px;
+  padding: 1rem;
+  width: 400px;
   color: white;
   user-select: none;
 }
@@ -456,19 +467,19 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.6rem;
 }
 
 .stat-panel-header h2 {
   margin: 0;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   flex: 1;
 }
 
 .drag-dots {
   cursor: grab;
   color: #666;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   margin-right: 8px;
 }
 
@@ -480,11 +491,11 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.1);
   border: none;
   color: #aaa;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .close-btn:hover {
@@ -494,40 +505,40 @@ onUnmounted(() => {
 
 .points-available {
   text-align: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.6rem;
 }
 
 .points-badge {
   background: #667eea;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 0.85rem;
+  padding: 3px 10px;
+  border-radius: 10px;
+  font-size: 0.8rem;
   font-weight: bold;
 }
 
 .stat-rows {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.25rem;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
 }
 
 .stat-row {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
 
 .stat-name {
-  width: 35px;
-  font-size: 0.8rem;
+  width: 32px;
+  font-size: 0.75rem;
   font-weight: bold;
   color: #aaa;
 }
 
 .stat-bar-container {
   flex: 1;
-  height: 14px;
+  height: 12px;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 3px;
   overflow: hidden;
@@ -541,20 +552,20 @@ onUnmounted(() => {
 }
 
 .stat-values {
-  width: 45px;
+  width: 42px;
   text-align: right;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: bold;
 }
 
 .stat-change {
   color: #4caf50;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
 }
 
 .stat-base {
-  width: 75px;
-  font-size: 0.7rem;
+  width: 70px;
+  font-size: 0.65rem;
   color: #666;
 }
 .bonus-gear {
@@ -565,14 +576,14 @@ onUnmounted(() => {
 }
 
 .stat-minus-btn {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   background: #c62828;
   border: none;
   color: white;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: bold;
 }
 
@@ -586,14 +597,14 @@ onUnmounted(() => {
 }
 
 .stat-plus-btn {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   background: #667eea;
   border: none;
   color: white;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: bold;
 }
 
@@ -607,58 +618,17 @@ onUnmounted(() => {
 }
 
 .cost-tag {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   color: #ffb74d;
   font-weight: 600;
-  min-width: 24px;
+  min-width: 22px;
   text-align: center;
-}
-
-.derived-stats h3 {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  color: #aaa;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.derived-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.4rem;
-  margin-bottom: 1rem;
-}
-
-.derived-item {
-  background: rgba(255, 255, 255, 0.05);
-  padding: 0.4rem 0.6rem;
-  border-radius: 4px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.derived-label {
-  color: #aaa;
-  font-size: 0.75rem;
-}
-
-.derived-value {
-  font-size: 0.8rem;
-  font-weight: bold;
-}
-
-.derived-new {
-  color: #4caf50;
-  font-size: 0.8rem;
-  font-weight: bold;
-  margin-left: 4px;
 }
 
 .stat-actions {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.6rem;
   justify-content: center;
 }
 
@@ -666,10 +636,10 @@ onUnmounted(() => {
   background: #4caf50;
   border: none;
   color: white;
-  padding: 6px 20px;
-  border-radius: 6px;
+  padding: 5px 16px;
+  border-radius: 5px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: bold;
 }
 
@@ -681,10 +651,10 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #ccc;
-  padding: 6px 20px;
-  border-radius: 6px;
+  padding: 5px 16px;
+  border-radius: 5px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .cancel-btn:hover {
@@ -692,50 +662,116 @@ onUnmounted(() => {
   color: white;
 }
 
+.panel-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 0.5rem;
+}
+
+.panel-tab {
+  flex: 1;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.panel-tab:hover { color: #aaa; }
+.panel-tab.active { color: #a8b8ff; border-bottom-color: #667eea; }
+
+.derived-stats h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.derived-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.3rem;
+  margin-bottom: 0.6rem;
+}
+
+.derived-item {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.derived-label {
+  color: #999;
+  font-size: 0.7rem;
+}
+
+.derived-value {
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.derived-new {
+  color: #4caf50;
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-left: 4px;
+}
+
 .racial-passive {
   background: rgba(136, 204, 170, 0.1);
   border: 1px solid rgba(136, 204, 170, 0.3);
-  border-radius: 6px;
-  padding: 0.6rem 0.8rem;
+  border-radius: 5px;
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.5rem;
 }
 
 .passive-name {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: bold;
   color: #88ccaa;
   display: block;
-  margin-bottom: 0.15rem;
+  margin-bottom: 0.1rem;
 }
 
 .passive-desc {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: #aaa;
   line-height: 1.3;
 }
 
 .combat-stats h3,
 .resistances h3 {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  color: #aaa;
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  color: #888;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .combat-stats {
-  margin-bottom: 1rem;
+  margin-bottom: 0.6rem;
 }
 
 .combat-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.4rem;
-  margin-bottom: 0.5rem;
+  gap: 0.3rem;
+  margin-bottom: 0.3rem;
 }
 
 .combat-item {
   background: rgba(255, 255, 255, 0.05);
-  padding: 0.4rem 0.6rem;
+  padding: 0.3rem 0.5rem;
   border-radius: 4px;
   display: flex;
   justify-content: space-between;
@@ -743,23 +779,23 @@ onUnmounted(() => {
 }
 
 .combat-label {
-  color: #aaa;
-  font-size: 0.75rem;
+  color: #999;
+  font-size: 0.7rem;
 }
 
 .combat-value {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: bold;
 }
 
 .enhancement-stats {
-  margin-bottom: 1rem;
+  margin-bottom: 0.6rem;
 }
 
 .enhancement-stats h3 {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  color: #aaa;
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  color: #888;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -767,13 +803,13 @@ onUnmounted(() => {
 .enhance-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.4rem;
+  gap: 0.3rem;
 }
 
 .enhance-item {
   background: rgba(255, 183, 77, 0.1);
   border: 1px solid rgba(255, 183, 77, 0.2);
-  padding: 0.4rem 0.6rem;
+  padding: 0.3rem 0.5rem;
   border-radius: 4px;
   display: flex;
   justify-content: space-between;
@@ -782,42 +818,42 @@ onUnmounted(() => {
 
 .enhance-label {
   color: #ffb74d;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
 }
 
 .enhance-value {
   color: #ffe0b2;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: bold;
 }
 
 .resistances {
-  margin-bottom: 1rem;
+  margin-bottom: 0.6rem;
 }
 
 .resist-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.4rem;
+  gap: 0.3rem;
 }
 
 .resist-item {
   background: rgba(255, 255, 255, 0.05);
-  padding: 0.4rem 0.6rem;
+  padding: 0.3rem 0.5rem;
   border-radius: 4px;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.3rem;
 }
 
 .resist-icon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 3px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   font-weight: bold;
   flex-shrink: 0;
 }
@@ -847,6 +883,11 @@ onUnmounted(() => {
   color: #ab47bc;
 }
 
+.resist-icon.holy {
+  background: rgba(255, 235, 59, 0.3);
+  color: #ffee58;
+}
+
 .resist-icon.ailment { background: rgba(255, 152, 0, 0.3); color: #ffb74d; }
 .resist-icon.disorder { background: rgba(233, 30, 99, 0.3); color: #ec407a; }
 .resist-icon.stun { background: rgba(255, 193, 7, 0.3); color: #ffca28; }
@@ -862,13 +903,13 @@ onUnmounted(() => {
 .resist-icon.weaken { background: rgba(233, 30, 99, 0.3); color: #ec407a; }
 
 .resist-label {
-  color: #aaa;
-  font-size: 0.75rem;
+  color: #999;
+  font-size: 0.7rem;
   flex: 1;
 }
 
 .resist-value {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: bold;
 }
 </style>

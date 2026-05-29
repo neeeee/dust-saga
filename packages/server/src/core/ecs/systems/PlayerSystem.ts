@@ -344,6 +344,7 @@ export class PlayerSystem extends System {
     session.stats.maxHealth = effective.maxHealth;
     session.stats.maxMana = effective.maxMana;
     session.stats.speed = effective.speed;
+    session.stats.speedMultiplier = (1 + gear.speed) * effective.speedMultiplier;
 
     if (session.stats.maxHealth !== oldMaxHealth) {
       session.stats.health = Math.floor(effective.maxHealth * healthRatio);

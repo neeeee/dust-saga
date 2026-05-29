@@ -94,10 +94,7 @@ export class CombatSystem extends System {
         this.deathCallbacks.forEach(cb => cb(targetId, attackerId));
       }
     } else if (!isEnemy && playerRef) {
-      playerRef.stats.health = Math.max(0, playerRef.stats.health - damage);
-      for (const el of elementalDamage) {
-        playerRef.stats.health = Math.max(0, playerRef.stats.health - el.damage);
-      }
+      // player damage is handled by NetworkServer via redirect
     }
   }
 
