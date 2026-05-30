@@ -27,10 +27,10 @@
             :key="eff.id"
             class="effect-icon"
             :class="{ buff: eff.isBuff, debuff: !eff.isBuff }"
-            :title="eff.type + ' (' + eff.remaining + 's)'"
+            :title="eff.remaining ? eff.type + ' (' + eff.remaining + 's)' : eff.type"
           >
             {{ eff.label }}
-            <span class="effect-timer">{{ eff.remaining }}</span>
+            <span class="effect-timer" v-if="eff.remaining">{{ eff.remaining }}</span>
           </div>
         </div>
       </div>
@@ -53,7 +53,7 @@
             :key="eff.id"
             class="effect-icon mini"
             :class="{ buff: eff.isBuff, debuff: !eff.isBuff }"
-            :title="eff.type + ' (' + eff.remaining + 's)'"
+            :title="eff.remaining ? eff.type + ' (' + eff.remaining + 's)' : eff.type"
           >
             {{ eff.label }}
           </div>
@@ -120,6 +120,7 @@ const BUFF_TYPES = new Set([
   StatusEffectType.BUFF_DAMAGE_REDIRECT,
   StatusEffectType.BUFF_BLOCK_CHANCE,
   StatusEffectType.BUFF_BLOCKING_STANCE,
+  StatusEffectType.BUFF_BLOCKING_PROTECTED,
   StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK,
   StatusEffectType.BUFF_GUARDED,
   StatusEffectType.BUFF_MOVE_SPEED,
@@ -227,12 +228,13 @@ const activeEffects = computed(() => {
   void effectNow.value;
   return (props.statusEffects || []).map(e => {
     const remaining = Math.max(0, (e.appliedAt + e.duration - Date.now()) / 1000);
+    const isToggled = e.duration >= 3600000;
     return {
       ...e,
       label: getEffectLabel(e),
       isBuff: BUFF_TYPES.has(e.type),
-      remaining: remaining.toFixed(1),
-      expired: remaining <= 0,
+      remaining: isToggled ? '' : remaining.toFixed(1),
+      expired: isToggled ? false : remaining <= 0,
     };
   }).filter(e => !e.expired);
 });
@@ -241,12 +243,13 @@ const targetEffectsDisplay = computed(() => {
   void effectNow.value;
   return (props.targetStatusEffects || []).map(e => {
     const remaining = Math.max(0, (e.appliedAt + e.duration - Date.now()) / 1000);
+    const isToggled = e.duration >= 3600000;
     return {
       ...e,
       label: getEffectLabel(e),
       isBuff: BUFF_TYPES.has(e.type),
-      remaining: remaining.toFixed(1),
-      expired: remaining <= 0,
+      remaining: isToggled ? '' : remaining.toFixed(1),
+      expired: isToggled ? false : remaining <= 0,
     };
   }).filter(e => !e.expired);
 });

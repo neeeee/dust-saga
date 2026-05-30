@@ -106,6 +106,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 2,
             isAOE: true,
+            aoeRadius: 1,
+            aoeTargetMode: AOETargetMode.SELF_CENTERED
           },
           "Parry": {
             name: "Parry",
@@ -1398,16 +1400,6 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 0,
             description: "Cure sleep/knock out/freeze",
           },
-          "Revive": {
-            name: "Revive",
-            reqPoints: 34,
-            mpCost: 60,
-            castTime: 5,
-            cooldown: 60,
-            duration: 0,
-            isRevive: true,
-            description: "Revive a fallen ally, restoring them with partial HP",
-          },
           "Restoration": {
             name: "Restoration",
             reqPoints: 41,
@@ -1424,7 +1416,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             name: "Healing Aura",
             reqPoints: 54,
             mpCost: 256,
-            castTime: 2,
+            castTime: 1,
             cooldown: 30,
             duration: 0,
             description: "Heal party members in range",

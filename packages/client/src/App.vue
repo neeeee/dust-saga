@@ -651,6 +651,9 @@ onMounted(async () => {
     onCastStart: (skillName, castTime) => {
       skillStore.startCast(skillName, castTime);
     },
+    onCastCancel: (skillName) => {
+      skillStore.endCast();
+    },
     onCastComplete: (skillName) => {
       skillStore.endCast();
     },

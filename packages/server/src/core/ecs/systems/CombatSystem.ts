@@ -312,10 +312,6 @@ export class CombatSystem extends System {
     enemy: EnemyInstance,
     target: PlayerSession
   ): DamageInfo | null {
-    const now = Date.now();
-    const cooldown = GAME_CONFIG.ATTACK_COOLDOWN;
-    if (now - enemy.lastAttackTime < cooldown) return null;
-
     const def = getEnemyDefinition(enemy.enemyType);
     const attackRange = def?.attackRange || 2;
 
@@ -324,8 +320,6 @@ export class CombatSystem extends System {
       (enemy.position.z - target.position.z) ** 2
     );
     if (dist > attackRange) return null;
-
-    enemy.lastAttackTime = now;
 
     const targetDodge = target.statBreakdown?.totalDodge ?? 0;
     const enemyAccuracy = enemy.level + 7;
@@ -363,8 +357,6 @@ export class CombatSystem extends System {
 
     const racialResult = processRacialOnDamage(target, finalDamage, 'physical');
     finalDamage = racialResult.finalDamage;
-
-    target.stats.health = Math.max(0, target.stats.health - finalDamage);
 
     return {
       attackerId: enemy.id,

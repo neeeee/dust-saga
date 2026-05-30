@@ -207,6 +207,16 @@ export class SkillSystem {
       }
     }
 
+    const isBlockStancing = session.statusEffects?.some(e =>
+      e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance
+    );
+    if (isBlockStancing) {
+      const allowedWhileBlocking = ['Shield Bash', 'Shield Tackle', 'Auto-guard', 'Defensive March', 'Defender', 'Blocking'];
+      if (!allowedWhileBlocking.includes(skillName)) {
+        return { canUse: false, error: 'blocking' };
+      }
+    }
+
     if (skill.shieldRequired) {
       const hasShield = !!session.equipment?.shield;
       if (!hasShield) {
@@ -371,7 +381,7 @@ export class SkillSystem {
         const songType = skill.buffEffectTable?.songType as string | undefined;
         const songEffectType = songType ? songMap[songType] : undefined;
         if (songEffectType && session.statusEffects?.some(e => e.type === songEffectType)) {
-          session.statusEffects = session.statusEffects.filter(e => e.type !== songEffectType);
+          session.statusEffects = session.statusEffects.filter(e => e.type !== songEffectType && e.skillName !== skill.name);
           return { success: true, songToggledOff: true };
         }
       }
@@ -885,7 +895,7 @@ export class SkillSystem {
     casterSession?: PlayerSession | null
   ): void {
     const now = Date.now();
-    const duration = (skill.duration || 300) * 1000;
+    const duration = skill.isSong ? 5000 : (skill.duration || 300) * 1000;
     const bt = skill.buffEffectTable;
 
     const effects: StatusEffect[] = [];
@@ -1048,6 +1058,8 @@ export class SkillSystem {
 
     if (bt.blockingStance) {
       target.statusEffects = target.statusEffects.filter(e => e.type !== StatusEffectType.BUFF_BLOCKING_STANCE);
+      const clearOnBlock = [StatusEffectType.STUN, StatusEffectType.SLEEP, StatusEffectType.KNOCKDOWN];
+      target.statusEffects = target.statusEffects.filter(e => !clearOnBlock.includes(e.type));
       pushEffect(StatusEffectType.BUFF_BLOCKING_STANCE, 0, { blockingStance: true, blockingRange: bt.blockingRange || 6 });
     }
 
@@ -1121,6 +1133,10 @@ export class SkillSystem {
       if (songEffectType) {
         target.statusEffects = target.statusEffects.filter(e => ![StatusEffectType.SONG_GREEN, StatusEffectType.SONG_BLUE, StatusEffectType.SONG_YELLOW, StatusEffectType.SONG_RED].includes(e.type));
         pushEffect(songEffectType, 0, { songType: bt.songType, songRadius: 3 });
+        effects[effects.length - 1].duration = 999999999;
+        effects[effects.length - 1].lastPulseAt = 0;
+        target.statusEffects.push(...effects);
+        return;
       }
     }
 

@@ -32,6 +32,7 @@ export interface GameCallbacks {
   onZoneChange: (zoneId: string, zoneName: string) => void;
   onEnemyListUpdate: (enemies: any[]) => void;
   onCastStart: (skillName: string, castTime: number) => void;
+  onCastCancel: (skillName: string) => void;
   onCastComplete: (skillName: string) => void;
   onSkillUsed: (skillName: string, mpCost: number, cooldownRemaining: number) => void;
   onSkillError: (skillName: string, error: string) => void;
@@ -123,11 +124,13 @@ export class GameClient {
       this.lastClickTime = now;
 
       if (entity?.type === 'enemy') {
+        if (this.targetId !== entityId) this.autoAttacking = false;
         this.targetId = entityId;
         this.engine.setTargetIndicator(entityId);
         const enemyData = this.enemies.get(entityId);
         this.callbacks.onTargetChange?.(entityId, enemyData ? { name: enemyData.name || 'Enemy', level: enemyData.level || 1, health: enemyData.health || 0, maxHealth: enemyData.maxHealth || 1, type: 'enemy' } : null);
       } else if (entity?.type === 'npc') {
+        this.autoAttacking = false;
         this.targetId = entityId;
         this.engine.setTargetIndicator(entityId);
         this.callbacks.onTargetChange?.(entityId, { name: entity.data.name || 'NPC', level: 0, health: 0, maxHealth: 0, type: 'npc' });
@@ -135,6 +138,7 @@ export class GameClient {
           this.network.interactNPC(entityId);
         }
       } else if (entity?.type === 'player') {
+        this.autoAttacking = false;
         this.targetId = entityId;
         this.engine.setTargetIndicator(entityId);
         this.callbacks.onTargetChange?.(entityId, {
@@ -691,6 +695,8 @@ export class GameClient {
       const data = packet.data;
       if (data.type === 'cast_start') {
         this.callbacks.onCastStart?.(data.skillName, data.castTime);
+      } else if (data.type === 'cast_cancel') {
+        this.callbacks.onCastCancel?.(data.skillName);
       } else if (data.type === 'used') {
         this.callbacks.onSkillUsed?.(data.skillName, data.mpCost || 0, data.cooldownRemaining || 0);
         this.playSkillAnimation(data.skillName);
@@ -1009,6 +1015,9 @@ export class GameClient {
   }
 
   setTarget(targetId: string | null): void {
+    if (this.targetId !== targetId) {
+      this.autoAttacking = false;
+    }
     this.targetId = targetId;
     this.engine.setTargetIndicator(targetId);
     this.callbacks.onTargetChange?.(targetId);
@@ -1098,6 +1107,7 @@ export class GameClient {
     const nextIdx = ((currentIdx + direction) % enemies.length + enemies.length) % enemies.length;
     const nextId = enemies[nextIdx];
     const entity = this.knownEntities.get(nextId);
+    this.autoAttacking = false;
     this.targetId = nextId;
     this.engine.setTargetIndicator(nextId);
     if (entity?.type === 'enemy') {

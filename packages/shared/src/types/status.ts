@@ -43,6 +43,7 @@ export enum StatusEffectType {
   BUFF_DAMAGE_REDIRECT = 'buff_damage_redirect',
   BUFF_BLOCK_CHANCE = 'buff_block_chance',
   BUFF_BLOCKING_STANCE = 'buff_blocking_stance',
+  BUFF_BLOCKING_PROTECTED = 'buff_blocking_protected',
   BUFF_CONSUMABLE_ON_ATTACK = 'buff_consumable_on_attack',
   BUFF_GUARDED = 'buff_guarded',
   SONG_ACTIVE = 'song_active',
@@ -223,6 +224,7 @@ export interface BuffData {
   debuffResistPercent?: number;
   damageRedirectTargetId?: string;
   guardedBy?: string;
+  blockingProtectedBy?: string;
   blockChancePercent?: number;
   consumableOnAttack?: boolean;
   cooldownReductionPercent?: number;
@@ -271,6 +273,7 @@ export interface StatusEffect {
   fearDirection?: { x: number; y: number; z: number };
   lastInRangeAt?: number;
   songProximityBuff?: boolean;
+  lastPulseAt?: number;
 }
 
 export interface StatusEffectDefinition {
@@ -326,6 +329,7 @@ export const STATUS_EFFECT_DEFS: Partial<Record<StatusEffectType, StatusEffectDe
   [StatusEffectType.BUFF_DAMAGE_REDIRECT]: { type: StatusEffectType.BUFF_DAMAGE_REDIRECT, duration: 300000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_BLOCK_CHANCE]: { type: StatusEffectType.BUFF_BLOCK_CHANCE, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_BLOCKING_STANCE]: { type: StatusEffectType.BUFF_BLOCKING_STANCE, duration: 999999999, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_BLOCKING_PROTECTED]: { type: StatusEffectType.BUFF_BLOCKING_PROTECTED, duration: 999999999, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK]: { type: StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_GUARDED]: { type: StatusEffectType.BUFF_GUARDED, duration: 300000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_MOVE_SPEED]: { type: StatusEffectType.BUFF_MOVE_SPEED, duration: 2000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
@@ -476,6 +480,14 @@ export function getEffectiveStats(
       case StatusEffectType.FREEZE:
       case StatusEffectType.STUN:
         s.speedMultiplier = 0;
+        break;
+      case StatusEffectType.SONG_GREEN:
+      case StatusEffectType.SONG_BLUE:
+      case StatusEffectType.SONG_YELLOW:
+      case StatusEffectType.SONG_RED:
+        if (!effect.songProximityBuff) {
+          s.speedMultiplier *= 0.15;
+        }
         break;
     }
   }

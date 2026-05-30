@@ -11,6 +11,7 @@ import {
   PartyVisibility, LootRule, MAX_LOOT_POOL,
   GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
   StatusEffectType, StatusEffect, EnemyInstance,
+  BuffData, resolveSpiTieredValue,
   getEffectiveStats,
   computeAilmentResist, computeDisorderResist, computeDebuffAccuracy, rollDebuffApplication,
   calculateWeaponElementalDamage,
@@ -239,13 +240,13 @@ export class NetworkServer {
       const result = this.combat.processEnemyAttack(enemy, target);
       if (!result) return;
 
-      const redirected = this.applyPlayerDamage(target, result.damage, enemyId, 'physical', result.isCritical || false, target.zoneId);
+      const dmgResult = this.applyPlayerDamage(target, result.damage, enemyId, 'physical', result.isCritical || false, target.zoneId, enemy.position);
 
-      if (!redirected) {
+      if (!dmgResult.redirected) {
         this.sendToPlayer(targetId, {
           type: PacketType.DAMAGE,
           timestamp: Date.now(),
-          data: { attackerId: enemyId, targetId, damage: result.damage, isCritical: result.isCritical, damageType: 'physical' }
+          data: { attackerId: enemyId, targetId, damage: dmgResult.damageTaken, isCritical: result.isCritical, damageType: 'physical' }
         });
 
         this.sendToPlayer(targetId, {
@@ -257,7 +258,7 @@ export class NetworkServer {
         this.broadcastInZone(target.zoneId, {
           type: PacketType.DAMAGE,
           timestamp: Date.now(),
-          data: { attackerId: enemyId, targetId, damage: result.damage, isCritical: result.isCritical, damageType: 'physical' }
+          data: { attackerId: enemyId, targetId, damage: dmgResult.damageTaken, isCritical: result.isCritical, damageType: 'physical' }
         }, targetId);
 
         this.broadcastInZone(target.zoneId, {
@@ -1050,6 +1051,7 @@ export class NetworkServer {
       );
       if (blockingEffect) {
         session.statusEffects = session.statusEffects.filter(e => e !== blockingEffect);
+        this.removeBlockingProtectedBuffs(session.characterId);
         this.playerSys.recalcStats(session);
         this.sendToPlayer(session.characterId, {
           type: PacketType.STATUS_EFFECT_UPDATE,
@@ -1105,13 +1107,13 @@ export class NetworkServer {
 
       if (player && data.targetId !== characterId) {
         const totalAutoDmg = damageInfo.damage + (damageInfo.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
-        const autoRedirected = this.applyPlayerDamage(player, totalAutoDmg, characterId, damageInfo.damageType || 'physical', damageInfo.isCritical || false, session.zoneId);
+        const autoDmgResult = this.applyPlayerDamage(player, totalAutoDmg, characterId, damageInfo.damageType || 'physical', damageInfo.isCritical || false, session.zoneId, session.position);
         this.broadcastInZone(session.zoneId, {
           type: PacketType.DAMAGE,
           timestamp: Date.now(),
-          data: { ...damageInfo, damage: autoRedirected ? 0 : damageInfo.damage, missed: autoRedirected ? true : damageInfo.missed }
+          data: { ...damageInfo, damage: autoDmgResult.redirected ? 0 : autoDmgResult.damageTaken, missed: autoDmgResult.redirected ? true : damageInfo.missed }
         });
-        if (!autoRedirected) {
+        if (!autoDmgResult.redirected) {
           this.sendToPlayer(data.targetId, {
             type: PacketType.STATS_UPDATE,
             timestamp: Date.now(),
@@ -1164,13 +1166,13 @@ export class NetworkServer {
 
       if (pTarget && info.targetId !== characterId) {
         const manualTotal = info.damage + (info.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
-        const manualRedirected = this.applyPlayerDamage(pTarget, manualTotal, characterId, info.damageType || 'physical', info.isCritical || false, session.zoneId);
+        const manualDmgResult = this.applyPlayerDamage(pTarget, manualTotal, characterId, info.damageType || 'physical', info.isCritical || false, session.zoneId, session.position);
         this.broadcastInZone(session.zoneId, {
           type: PacketType.DAMAGE,
           timestamp: Date.now(),
-          data: { ...info, damage: manualRedirected ? 0 : info.damage, missed: manualRedirected ? true : info.missed }
+          data: { ...info, damage: manualDmgResult.redirected ? 0 : manualDmgResult.damageTaken, missed: manualDmgResult.redirected ? true : info.missed }
         });
-        if (!manualRedirected) {
+        if (!manualDmgResult.redirected) {
           this.sendToPlayer(info.targetId, {
             type: PacketType.STATS_UPDATE,
             timestamp: Date.now(),
@@ -1226,7 +1228,7 @@ export class NetworkServer {
     const skillTargetRule = SKILL_TARGET_RULES[skillName];
     const earlySkillDef = this.skillSys.findSkillDefinition(skillName);
     const isHarmfulSkill = !skillTargetRule || skillTargetRule === SkillTargetType.OTHER_ONLY;
-    const isBuffSkill = earlySkillDef?.isBuff || !!earlySkillDef?.buffEffectTable;
+    const isBuffSkill = earlySkillDef?.isBuff || !!earlySkillDef?.buffEffectTable || earlySkillDef?.isRevive;
     if (isHarmfulSkill && !isBuffSkill && targetId && this.state.players.has(targetId) && this.isPartyMember(characterId, targetId)) {
       this.sendToPlayer(characterId, {
         type: PacketType.SKILL_USE,
@@ -1306,6 +1308,27 @@ export class NetworkServer {
     const result = this.skillSys.executeSkill(session, skillName, firstTargetId, (id) => this.getTargetStatsForEntity(id));
     this.sendDamageDebug(session, result);
     this.playerSys.recalcStats(session);
+
+    if (result.songToggledOff) {
+      this.removeSongProximityBuffs(session);
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATUS_EFFECT_UPDATE,
+        timestamp: Date.now(),
+        data: { effects: session.statusEffects }
+      });
+      this.sendToPlayer(characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+      });
+      this.sendToPlayer(characterId, {
+        type: PacketType.COOLDOWN_UPDATE,
+        timestamp: Date.now(),
+        data: { skillName, type: 'used', mpCost: skill?.mpCost || 0, cooldownRemaining: 0 }
+      });
+      this.broadcastEntityEffects(session);
+      return;
+    }
 
     this.sendToPlayer(characterId, {
       type: PacketType.STATS_UPDATE,
@@ -1675,7 +1698,73 @@ export class NetworkServer {
     return party.members.some(m => m.characterId === targetId);
   }
 
-  private applyPlayerDamage(target: PlayerSession, damage: number, attackerId: string, damageType: string, isCritical: boolean, zoneId: string): boolean {
+  private applyPlayerDamage(target: PlayerSession, damage: number, attackerId: string, damageType: string, isCritical: boolean, zoneId: string, attackerPosition?: { x: number; y: number; z: number }): { redirected: boolean; damageTaken: number } {
+    const protectedEffect = target.statusEffects?.find(
+      e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy
+    );
+    if (protectedEffect) {
+      const blockerId = protectedEffect.buffData!.blockingProtectedBy!;
+      const blocker = this.state.players.get(blockerId);
+      const blockStance = blocker?.statusEffects?.find(e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE);
+      if (blocker && !blocker.isDead && blockStance) {
+        const reducedDamage = Math.floor(damage * 0.4);
+        blocker.stats.health = Math.max(0, blocker.stats.health - reducedDamage);
+        this.sendToPlayer(blocker.characterId, {
+          type: PacketType.DAMAGE,
+          timestamp: Date.now(),
+          data: { attackerId, targetId: blocker.characterId, damage: reducedDamage, isCritical: false, damageType, blockedFrom: target.characterId }
+        });
+        this.sendToPlayer(blocker.characterId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { characterId: blocker.characterId, stats: blocker.stats, statBreakdown: blocker.statBreakdown, skillProficiencies: blocker.skillProficiencies, skillAdeptness: blocker.skillAdeptness }
+        });
+        this.broadcastInZone(zoneId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { entityId: blocker.characterId, health: blocker.stats.health, maxHealth: blocker.stats.maxHealth }
+        });
+        if (blocker.stats.health <= 0) {
+          this.handlePlayerDeath(blocker);
+        } else {
+          this.tryInterruptCast(blocker);
+        }
+        if (attackerId && this.spawnMgr.getEnemy(attackerId) && Math.random() < 0.5) {
+          blocker.statusEffects.push({
+            id: `block_kd_${Date.now()}`,
+            type: StatusEffectType.KNOCKDOWN,
+            sourceId: attackerId,
+            targetId: blocker.characterId,
+            potency: 0,
+            appliedAt: Date.now(),
+            duration: 2000,
+            tickInterval: 0,
+            lastTickAt: Date.now(),
+            stacks: 1,
+            skillName: 'Blocking',
+            debuffCategory: 'knockdown',
+          });
+          this.sendToPlayer(blocker.characterId, {
+            type: PacketType.STATUS_EFFECT_UPDATE,
+            timestamp: Date.now(),
+            data: { effects: blocker.statusEffects }
+          });
+          this.broadcastEntityEffects(blocker);
+        }
+        return { redirected: true, damageTaken: 0 };
+      }
+    }
+
+    const selfBlock = target.statusEffects?.find(
+      e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance
+    );
+    if (selfBlock) {
+      const reducedDamage = Math.floor(damage * 0.4);
+      target.stats.health = Math.max(0, target.stats.health - reducedDamage);
+      this.tryInterruptCast(target);
+      return { redirected: false, damageTaken: reducedDamage };
+    }
+
     const guardian = this.findGuardian(target.characterId);
     if (guardian && !guardian.isDead) {
       guardian.stats.health = Math.max(0, guardian.stats.health - damage);
@@ -1696,11 +1785,32 @@ export class NetworkServer {
       });
       if (guardian.stats.health <= 0) {
         this.handlePlayerDeath(guardian);
+      } else {
+        this.tryInterruptCast(guardian);
       }
-      return true;
+      return { redirected: true, damageTaken: 0 };
     } else {
       target.stats.health = Math.max(0, target.stats.health - damage);
-      return false;
+      this.tryInterruptCast(target);
+      return { redirected: false, damageTaken: damage };
+    }
+  }
+
+  private tryInterruptCast(target: PlayerSession): void {
+    if (!target.activeCast) return;
+    const baseStats = target.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+    const gearSpi = target.statBreakdown?.gear?.SPI || 0;
+    const buffSpi = target.statBreakdown?.buffs?.SPI || 0;
+    const totalSPI = (target.statPoints.SPI || 0) + baseStats.SPI + gearSpi + buffSpi;
+    const interruptChance = Math.max(0.05, 0.5 - totalSPI * 0.002);
+    if (Math.random() < interruptChance) {
+      const skillName = target.activeCast.skillName;
+      target.activeCast = null;
+      this.sendToPlayer(target.characterId, {
+        type: PacketType.COOLDOWN_UPDATE,
+        timestamp: Date.now(),
+        data: { skillName, type: 'cast_cancel' }
+      });
     }
   }
 
@@ -3194,11 +3304,17 @@ export class NetworkServer {
             timestamp: Date.now(),
             data: { effects: session.statusEffects }
           });
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+          });
           this.broadcastEntityEffects(session);
           return;
         }
 
         if (result.defensiveMarchToggledOff) {
+          this.removeBlockingProtectedBuffs(session.characterId);
           this.sendToPlayer(session.characterId, {
             type: PacketType.STATUS_EFFECT_UPDATE,
             timestamp: Date.now(),
@@ -3393,8 +3509,8 @@ export class NetworkServer {
             const playerTarget = this.state.players.get(castResult.targetId);
             if (playerTarget) {
               const totalDmg = result.damage + (result.elementalDamage?.reduce((s, e) => s + e.damage, 0) || 0);
-              const pvpRedirected = this.applyPlayerDamage(playerTarget, totalDmg, session.characterId, result.damageType || 'physical', result.isCritical || false, session.zoneId);
-              if (!pvpRedirected) {
+              const pvpDmgResult = this.applyPlayerDamage(playerTarget, totalDmg, session.characterId, result.damageType || 'physical', result.isCritical || false, session.zoneId);
+              if (!pvpDmgResult.redirected) {
                 this.sendToPlayer(castResult.targetId, {
                   type: PacketType.STATS_UPDATE,
                   timestamp: Date.now(),
@@ -3413,7 +3529,7 @@ export class NetworkServer {
               this.broadcastInZone(session.zoneId, {
                 type: PacketType.DAMAGE,
                 timestamp: Date.now(),
-                data: { attackerId: session.characterId, targetId: castResult.targetId, damage: pvpRedirected ? 0 : result.damage, isCritical: result.isCritical || false, damageType: result.damageType || 'physical', skillName: castResult.skillName, elementalDamage: pvpRedirected ? [] : result.elementalDamage, missed: pvpRedirected ? true : undefined }
+                data: { attackerId: session.characterId, targetId: castResult.targetId, damage: pvpDmgResult.redirected ? 0 : pvpDmgResult.damageTaken, isCritical: result.isCritical || false, damageType: result.damageType || 'physical', skillName: castResult.skillName, elementalDamage: pvpDmgResult.redirected ? [] : result.elementalDamage, missed: pvpDmgResult.redirected ? true : undefined }
               });
               this.consumeDebuffsOnHit(playerTarget);
             }
@@ -3645,12 +3761,12 @@ export class NetworkServer {
       if (session.statusEffects && session.statusEffects.length > 0) {
         const tick = this.skillSys.tickStatusEffects(session, now);
         if (tick.damage > 0) {
-          const dotRedirected = this.applyPlayerDamage(session, tick.damage, '', 'magical', false, session.zoneId);
-          if (!dotRedirected) {
+          const dotDmgResult = this.applyPlayerDamage(session, tick.damage, '', 'magical', false, session.zoneId);
+          if (!dotDmgResult.redirected) {
             this.sendToPlayer(session.characterId, {
               type: PacketType.DAMAGE,
               timestamp: Date.now(),
-              data: { attackerId: '', targetId: session.characterId, damage: tick.damage, isCritical: false, damageType: 'magical', skillName: 'dot' }
+              data: { attackerId: '', targetId: session.characterId, damage: dotDmgResult.damageTaken, isCritical: false, damageType: 'magical', skillName: 'dot' }
             });
             if (session.stats.health <= 0) {
               this.handlePlayerDeath(session);
@@ -3718,6 +3834,43 @@ export class NetworkServer {
         }
       }
 
+      const blockStanceEffect = session.statusEffects?.find(
+        e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance
+      );
+      if (blockStanceEffect) {
+        const lastDrain = (blockStanceEffect as any).lastMpDrainAt || blockStanceEffect.appliedAt;
+        if (now - lastDrain >= 2000) {
+          (blockStanceEffect as any).lastMpDrainAt = now;
+          session.stats.mana = Math.max(0, session.stats.mana - 2);
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+          });
+          if (session.stats.mana <= 0) {
+            session.statusEffects = session.statusEffects.filter(e => e !== blockStanceEffect);
+            this.removeBlockingProtectedBuffs(session.characterId);
+            this.playerSys.recalcStats(session);
+            this.sendToPlayer(session.characterId, {
+              type: PacketType.CHAT_MESSAGE,
+              timestamp: Date.now(),
+              data: { sender: 'System', message: 'Blocking ended - out of MP', channel: 'system' }
+            });
+            this.sendToPlayer(session.characterId, {
+              type: PacketType.STATUS_EFFECT_UPDATE,
+              timestamp: Date.now(),
+              data: { effects: session.statusEffects }
+            });
+            this.sendToPlayer(session.characterId, {
+              type: PacketType.STATS_UPDATE,
+              timestamp: Date.now(),
+              data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+            });
+            this.broadcastEntityEffects(session);
+          }
+        }
+      }
+
       // Guardian distance check
       const guardianRedirectFx = session.statusEffects?.find(
         e => e.type === StatusEffectType.BUFF_DAMAGE_REDIRECT && e.buffData?.damageRedirectTargetId
@@ -3765,6 +3918,7 @@ export class NetworkServer {
     const now2 = Date.now();
     this.tickAOEZones(now2);
     this.tickSongProximity(now2);
+    this.tickBlockingProximity(now2);
 
     this.spawnMgr.getAllEnemies().forEach((enemy, enemyId) => {
       if (enemy.state === 'dead') return;
@@ -4155,19 +4309,19 @@ export class NetworkServer {
       if (playerTarget && targetId !== characterId) {
         for (const hit of hits) {
           const hitTotal = hit.damage + (hit.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
-          const coneRedirected = this.applyPlayerDamage(playerTarget, hitTotal, characterId, result.damageType || 'physical', hit.isCritical, session.zoneId);
+          const coneDmgResult = this.applyPlayerDamage(playerTarget, hitTotal, characterId, result.damageType || 'physical', hit.isCritical, session.zoneId);
           this.broadcastInZone(session.zoneId, {
             type: PacketType.DAMAGE,
             timestamp: Date.now(),
             data: {
               attackerId: characterId,
               targetId,
-              damage: coneRedirected ? 0 : hit.damage,
+              damage: coneDmgResult.redirected ? 0 : coneDmgResult.damageTaken,
               isCritical: hit.isCritical,
               damageType: result.damageType || 'physical',
               skillName,
-              elementalDamage: coneRedirected ? [] : hit.elementalDamage,
-              missed: coneRedirected ? true : undefined,
+              elementalDamage: coneDmgResult.redirected ? [] : hit.elementalDamage,
+              missed: coneDmgResult.redirected ? true : undefined,
             }
           });
         }
@@ -4220,22 +4374,22 @@ export class NetworkServer {
     const playerTarget = this.state.players.get(targetId);
     if (playerTarget && targetId !== characterId) {
       const totalPvpDmg = (result.damage || 0) + (result.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
-      const skillPvpRedirected = this.applyPlayerDamage(playerTarget, totalPvpDmg, characterId, result.damageType || 'physical', result.isCritical || false, session.zoneId);
+      const skillPvpDmgResult = this.applyPlayerDamage(playerTarget, totalPvpDmg, characterId, result.damageType || 'physical', result.isCritical || false, session.zoneId);
       this.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
         data: {
           attackerId: characterId,
           targetId,
-          damage: skillPvpRedirected ? 0 : result.damage,
+          damage: skillPvpDmgResult.redirected ? 0 : skillPvpDmgResult.damageTaken,
           isCritical: result.isCritical || false,
           damageType: result.damageType || 'physical',
           skillName,
-          elementalDamage: skillPvpRedirected ? [] : result.elementalDamage,
-          missed: skillPvpRedirected ? true : undefined,
+          elementalDamage: skillPvpDmgResult.redirected ? [] : result.elementalDamage,
+          missed: skillPvpDmgResult.redirected ? true : undefined,
         }
       });
-      if (!skillPvpRedirected) {
+      if (!skillPvpDmgResult.redirected) {
         this.sendToPlayer(targetId, {
           type: PacketType.STATS_UPDATE,
           timestamp: Date.now(),
@@ -4335,22 +4489,22 @@ export class NetworkServer {
         const playerTarget = this.state.players.get(target.id);
         if (playerTarget && target.id !== characterId) {
           const coneTotalDmg = targetResult.damage + (targetResult.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
-          const coneRedirect = this.applyPlayerDamage(playerTarget, coneTotalDmg, characterId, targetResult.damageType || 'physical', targetResult.isCritical || false, session.zoneId);
+          const coneDmgRslt = this.applyPlayerDamage(playerTarget, coneTotalDmg, characterId, targetResult.damageType || 'physical', targetResult.isCritical || false, session.zoneId);
           this.broadcastInZone(session.zoneId, {
             type: PacketType.DAMAGE,
             timestamp: Date.now(),
             data: {
               attackerId: characterId,
               targetId: target.id,
-              damage: coneRedirect ? 0 : targetResult.damage,
+              damage: coneDmgRslt.redirected ? 0 : coneDmgRslt.damageTaken,
               isCritical: targetResult.isCritical || false,
               damageType: targetResult.damageType || 'physical',
               skillName,
-              elementalDamage: coneRedirect ? [] : targetResult.elementalDamage,
-              missed: coneRedirect ? true : undefined,
+              elementalDamage: coneDmgRslt.redirected ? [] : targetResult.elementalDamage,
+              missed: coneDmgRslt.redirected ? true : undefined,
             }
           });
-          if (!coneRedirect) {
+          if (!coneDmgRslt.redirected) {
             this.sendToPlayer(target.id, {
               type: PacketType.STATS_UPDATE,
               timestamp: Date.now(),
@@ -4532,6 +4686,9 @@ export class NetworkServer {
     }
   }
 
+  private static SONG_PULSE_INTERVAL = 4000;
+  private static SONG_BUFF_DURATION = 5000;
+
   private tickSongProximity(now: number): void {
     const songTypes = [
       StatusEffectType.SONG_GREEN,
@@ -4539,69 +4696,243 @@ export class NetworkServer {
       StatusEffectType.SONG_YELLOW,
       StatusEffectType.SONG_RED,
     ];
+    const PULSE = NetworkServer.SONG_PULSE_INTERVAL;
+    const BUFF_DUR = NetworkServer.SONG_BUFF_DURATION;
 
     for (const [charId, caster] of this.state.players) {
       if (caster.isDead) continue;
       if (!caster.statusEffects?.length) continue;
 
-      const songEffect = caster.statusEffects.find(e => songTypes.includes(e.type));
+      const songEffect = caster.statusEffects.find(e => songTypes.includes(e.type) && !e.songProximityBuff);
       if (!songEffect) continue;
+
+      const lastPulse = songEffect.lastPulseAt || songEffect.appliedAt || 0;
+      if (now - lastPulse < PULSE) continue;
+
+      songEffect.lastPulseAt = now;
 
       const skill = this.skillSys.findSkillDefinition(songEffect.skillName || '');
       if (!skill?.buffEffectTable) continue;
-      const songRadius = skill.buffEffectTable.songRadius || 3;
+      const songRadius = skill.aoeRadius || 3;
+
+      const pulseTargets: PlayerSession[] = [caster];
 
       for (const [targetId, target] of this.state.players) {
         if (targetId === charId) continue;
         if (target.isDead) continue;
         if (target.zoneId !== caster.zoneId) continue;
+        if (!target.position || !caster.position) continue;
 
         const dx = caster.position.x - target.position.x;
         const dz = caster.position.z - target.position.z;
         const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist <= songRadius) {
+          pulseTargets.push(target);
+        }
+      }
 
-        const existingSongBuff = target.statusEffects.find(e =>
-          songTypes.includes(e.type) && e.songProximityBuff && e.sourceId === charId
+      for (const target of pulseTargets) {
+        const isCaster = target.characterId === charId;
+        this.applySongPulse(target, caster, skill, now, BUFF_DUR, isCaster);
+      }
+    }
+  }
+
+  private applySongPulse(
+    target: PlayerSession,
+    caster: PlayerSession,
+    skill: NonNullable<ReturnType<typeof this.skillSys.findSkillDefinition>>,
+    now: number,
+    buffDuration: number,
+    isCaster: boolean
+  ): void {
+    const bt = skill.buffEffectTable;
+    if (!bt) return;
+
+    const sourceId = caster.characterId;
+    const targetId = target.characterId;
+
+    const existing = target.statusEffects.filter(e =>
+      e.songProximityBuff && e.sourceId === sourceId && e.skillName === skill.name
+    );
+    if (existing.length > 0) {
+      for (const e of existing) {
+        e.appliedAt = now;
+        e.duration = buffDuration;
+        e.lastInRangeAt = now;
+      }
+      this.sendToPlayer(targetId, {
+        type: PacketType.STATUS_EFFECT_UPDATE,
+        timestamp: Date.now(),
+        data: { effects: target.statusEffects }
+      });
+      return;
+    }
+
+    const effects: StatusEffect[] = [];
+    const pushSongBuff = (type: StatusEffectType, potency: number, buffData?: BuffData) => {
+      effects.push({
+        id: `song_${now}_${Math.random().toString(36).slice(2, 6)}_${type}`,
+        type,
+        sourceId,
+        targetId,
+        potency,
+        appliedAt: now,
+        duration: buffDuration,
+        tickInterval: 0,
+        lastTickAt: now,
+        stacks: 1,
+        skillName: skill.name,
+        songProximityBuff: true,
+        lastInRangeAt: now,
+        buffData,
+      });
+    };
+
+    if (bt.songCooldownReduction) {
+      pushSongBuff(StatusEffectType.BUFF_CAST_SPEED, bt.songCooldownReduction);
+    }
+    if (bt.magicalDamageBonus) {
+      pushSongBuff(StatusEffectType.BUFF_GENERIC, 0, { magicalDamageBonusPercent: bt.magicalDamageBonus });
+    }
+
+    if (bt.spiValues) {
+      const totalSpi = (caster.baseStats?.SPI || 0) + (caster.statPoints?.SPI || 0);
+      const casterBlessing = caster.skillAdeptness?.['Blessing'] || 0;
+      const skillName = skill.name.toLowerCase();
+      if (skillName === 'green song' || skillName === 'speedy gale') {
+        const result = resolveSpiTieredValue(bt.spiValues, totalSpi, casterBlessing, 'dodgeChance');
+        if (result) {
+          pushSongBuff(StatusEffectType.BUFF_DODGE, result.dodgeChance ?? 0);
+        }
+      }
+    }
+
+    if (effects.length === 0) return;
+
+    target.statusEffects.push(...effects);
+    this.playerSys.recalcStats(target);
+    this.sendToPlayer(targetId, {
+      type: PacketType.STATUS_EFFECT_UPDATE,
+      timestamp: Date.now(),
+      data: { effects: target.statusEffects }
+    });
+    this.sendToPlayer(targetId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: { characterId: targetId, stats: target.stats, statBreakdown: target.statBreakdown, skillProficiencies: target.skillProficiencies, skillAdeptness: target.skillAdeptness }
+    });
+    this.broadcastEntityEffects(target);
+  }
+
+  private tickBlockingProximity(now: number): void {
+    for (const [blockerId, blocker] of this.state.players) {
+      if (blocker.isDead) continue;
+      const blockStance = blocker.statusEffects?.find(
+        e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance
+      );
+      if (!blockStance || !blocker.position) continue;
+
+      const blockRange = blockStance.buffData?.blockingRange || 6;
+      const protRange = Math.max(2, blockRange * 0.4);
+
+      let blockerFacing = 0;
+      const rot = blocker.rotation as any;
+      if (typeof rot === 'object' && rot.w !== undefined) {
+        const sinY = 2 * (rot.w * rot.y - rot.z * rot.x);
+        const cosY = 1 - 2 * (rot.y * rot.y + rot.z * rot.z);
+        blockerFacing = Math.atan2(sinY, cosY);
+      }
+
+      for (const [targetId, target] of this.state.players) {
+        if (targetId === blockerId) continue;
+        if (target.isDead) continue;
+        if (target.zoneId !== blocker.zoneId) continue;
+        if (!target.position) continue;
+
+        const dx = target.position.x - blocker.position.x;
+        const dz = target.position.z - blocker.position.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+
+        const existingProt = target.statusEffects.find(
+          e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
         );
 
-        if (dist <= songRadius) {
-          if (!existingSongBuff || existingSongBuff.type !== songEffect.type) {
-            this.ensureSongBuff(target, caster, skill, songEffect, now);
-          } else {
-            existingSongBuff.lastInRangeAt = now;
+        let behindBlocker = false;
+        if (dist <= protRange && dist > 0.01) {
+          const angleToTarget = Math.atan2(dx, dz);
+          let angleDiff = angleToTarget - blockerFacing;
+          while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+          while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+          const behindAngle = Math.abs(angleDiff) - Math.PI;
+          behindBlocker = Math.abs(behindAngle) < Math.PI / 4;
+        }
+
+        if (behindBlocker) {
+          if (!existingProt) {
+            target.statusEffects.push({
+              id: `block_prot_${blockerId}_${Date.now()}`,
+              type: StatusEffectType.BUFF_BLOCKING_PROTECTED,
+              sourceId: blockerId,
+              targetId,
+              potency: 0,
+              appliedAt: now,
+              duration: 999999999,
+              tickInterval: 0,
+              lastTickAt: now,
+              stacks: 1,
+              skillName: 'Blocking',
+              buffData: { blockingProtectedBy: blockerId },
+            });
+            this.playerSys.recalcStats(target);
+            this.sendToPlayer(targetId, {
+              type: PacketType.STATUS_EFFECT_UPDATE,
+              timestamp: Date.now(),
+              data: { effects: target.statusEffects }
+            });
+            this.broadcastEntityEffects(target);
           }
         } else {
-          if (existingSongBuff) {
-            const lastInRange = existingSongBuff.lastInRangeAt || 0;
-            if (now - lastInRange > 5000) {
-              target.statusEffects = target.statusEffects.filter(e => e !== existingSongBuff);
-              this.playerSys.recalcStats(target);
-              this.sendToPlayer(targetId, {
-                type: PacketType.STATUS_EFFECT_UPDATE,
-                timestamp: Date.now(),
-                data: { effects: target.statusEffects }
-              });
-              this.sendToPlayer(targetId, {
-                type: PacketType.STATS_UPDATE,
-                timestamp: Date.now(),
-                data: { characterId: targetId, stats: target.stats }
-              });
-              this.broadcastEntityEffects(target);
-            }
+          if (existingProt) {
+            target.statusEffects = target.statusEffects.filter(e => e !== existingProt);
+            this.playerSys.recalcStats(target);
+            this.sendToPlayer(targetId, {
+              type: PacketType.STATUS_EFFECT_UPDATE,
+              timestamp: Date.now(),
+              data: { effects: target.statusEffects }
+            });
+            this.broadcastEntityEffects(target);
           }
         }
       }
     }
   }
 
+  private removeBlockingProtectedBuffs(blockerId: string): void {
+    for (const [targetId, target] of this.state.players) {
+      const prot = target.statusEffects.find(
+        e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
+      );
+      if (prot) {
+        target.statusEffects = target.statusEffects.filter(e => e !== prot);
+        this.playerSys.recalcStats(target);
+        this.sendToPlayer(targetId, {
+          type: PacketType.STATUS_EFFECT_UPDATE,
+          timestamp: Date.now(),
+          data: { effects: target.statusEffects }
+        });
+        this.broadcastEntityEffects(target);
+      }
+    }
+  }
+
   private removeSongProximityBuffs(caster: PlayerSession): void {
-    const allSongTypes = [StatusEffectType.SONG_GREEN, StatusEffectType.SONG_BLUE, StatusEffectType.SONG_YELLOW, StatusEffectType.SONG_RED];
     for (const [targetId, target] of this.state.players) {
       if (targetId === caster.characterId) continue;
       if (!target.statusEffects?.length) continue;
 
       const toRemove = target.statusEffects.filter(e =>
-        allSongTypes.includes(e.type) && e.songProximityBuff && e.sourceId === caster.characterId
+        e.songProximityBuff && e.sourceId === caster.characterId
       );
       if (toRemove.length === 0) continue;
 
@@ -4615,56 +4946,10 @@ export class NetworkServer {
       this.sendToPlayer(targetId, {
         type: PacketType.STATS_UPDATE,
         timestamp: Date.now(),
-        data: { characterId: targetId, stats: target.stats }
+        data: { characterId: targetId, stats: target.stats, statBreakdown: target.statBreakdown, skillProficiencies: target.skillProficiencies, skillAdeptness: target.skillAdeptness }
       });
       this.broadcastEntityEffects(target);
     }
-  }
-
-  private ensureSongBuff(
-    target: PlayerSession,
-    caster: PlayerSession,
-    skill: NonNullable<ReturnType<typeof this.skillSys.findSkillDefinition>>,
-    songEffect: StatusEffect,
-    now: number
-  ): void {
-    const songType = skill.buffEffectTable?.songType;
-    const songMap: Record<string, StatusEffectType> = {
-      green: StatusEffectType.SONG_GREEN,
-      blue: StatusEffectType.SONG_BLUE,
-      yellow: StatusEffectType.SONG_YELLOW,
-      red: StatusEffectType.SONG_RED,
-    };
-    const songBuffType = songType ? songMap[songType] : null;
-    if (!songBuffType || !skill) return;
-
-    const allSongTypes = [StatusEffectType.SONG_GREEN, StatusEffectType.SONG_BLUE, StatusEffectType.SONG_YELLOW, StatusEffectType.SONG_RED];
-    const existingFromThisCaster = target.statusEffects.find(e =>
-      allSongTypes.includes(e.type) && e.songProximityBuff && e.sourceId === caster.characterId
-    );
-    if (existingFromThisCaster) return;
-
-    this.skillSys.applyBuffToTarget(target, caster.characterId, skill, caster);
-    const applied = target.statusEffects.find(e => e.type === songBuffType && !e.songProximityBuff && e.sourceId === caster.characterId);
-    if (applied) {
-      applied.songProximityBuff = true;
-      applied.lastInRangeAt = now;
-      applied.duration = 999999999;
-      applied.appliedAt = now;
-    }
-
-    this.playerSys.recalcStats(target);
-    this.sendToPlayer(target.characterId, {
-      type: PacketType.STATUS_EFFECT_UPDATE,
-      timestamp: Date.now(),
-      data: { effects: target.statusEffects }
-    });
-    this.sendToPlayer(target.characterId, {
-      type: PacketType.STATS_UPDATE,
-      timestamp: Date.now(),
-      data: { characterId: target.characterId, stats: target.stats }
-    });
-    this.broadcastEntityEffects(target);
   }
 
   private checkEntityAOEEntries(entityId: string, position: { x: number; y: number; z: number }): void {

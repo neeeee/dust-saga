@@ -136,6 +136,8 @@ export interface ClassSpecificSkill {
   pulseInterval?: number;
   onHitEffects?: OnHitEffect[];
   healing?: HealingEffect;
+  consumableItem?: string;
+  consumableItemQuantity?: number;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;

@@ -76,6 +76,7 @@ const BUFF_TYPES = new Set([
   StatusEffectType.BUFF_ACCURACY,
   StatusEffectType.BUFF_ATTACK_SPEED,
   StatusEffectType.BUFF_GUARDED,
+  StatusEffectType.BUFF_BLOCKING_PROTECTED,
 ]);
 
 const props = defineProps<{
