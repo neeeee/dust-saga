@@ -1,0 +1,443 @@
+import { Socket } from 'socket.io';
+import {
+  Packet, PacketType, PlayerSession,
+  SKILL_TARGET_RULES, SkillTargetType, SkillType,
+  GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
+  StatusEffectType, StatusEffect,
+} from '@dust-saga/shared';
+import { NetworkContext, PacketHandler } from '../NetworkContext';
+
+export function registerHandlers(registry: Map<PacketType, PacketHandler>): void {
+  registry.set(PacketType.SKILL_USE, handleSkillUse);
+}
+
+function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
+  const characterId = ctx.findCharacterBySocket(socket.id);
+  if (!characterId) return;
+
+  const session = ctx.state.players.get(characterId);
+  if (!session) return;
+
+  const { skillName, targetId, aoePosition } = data;
+  if (!skillName) return;
+
+  if (aoePosition && GROUND_TARGETED_AOE_SKILLS.has(skillName)) {
+    handleGroundAOESkillUse(ctx, session, skillName, aoePosition);
+    return;
+  }
+
+  const check = ctx.skillSys.canUseSkill(session, skillName, targetId || null);
+  if (!check.canUse) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.SKILL_USE,
+      timestamp: Date.now(),
+      data: { skillName, error: check.error }
+    });
+    return;
+  }
+
+  const skillTargetRule = SKILL_TARGET_RULES[skillName];
+  const earlySkillDef = ctx.skillSys.findSkillDefinition(skillName);
+  const isHarmfulSkill = !skillTargetRule || skillTargetRule === SkillTargetType.OTHER_ONLY;
+  const isBuffSkill = earlySkillDef?.isBuff || !!earlySkillDef?.buffEffectTable || earlySkillDef?.isRevive || earlySkillDef?.skillType === SkillType.REVIVE;
+  if (isHarmfulSkill && !isBuffSkill && targetId && ctx.state.players.has(targetId) && ctx.isPartyMember(characterId, targetId)) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.SKILL_USE,
+      timestamp: Date.now(),
+      data: { skillName, error: 'party_member' }
+    });
+    return;
+  }
+
+  if (skillName === 'Guardian' && targetId) {
+    const party = ctx.partySys.getPartyForMember(characterId);
+    if (!party || !party.members.some(m => m.characterId === targetId)) {
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.SKILL_USE,
+        timestamp: Date.now(),
+        data: { skillName, error: 'not_in_party' }
+      });
+      return;
+    }
+  }
+
+  const skillDef = ctx.skillSys.findSkillDefinition(skillName);
+  if (skillDef?.consumableItem) {
+    const needed = skillDef.consumableItemQuantity || 1;
+    const count = session.inventory.filter(i => i.itemId === skillDef.consumableItem).reduce((s, i) => s + i.quantity, 0);
+    if (count < needed) {
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.SKILL_USE,
+        timestamp: Date.now(),
+        data: { skillName, error: 'no_materials' }
+      });
+      return;
+    }
+    let remaining = needed;
+    for (let i = session.inventory.length - 1; i >= 0 && remaining > 0; i--) {
+      if (session.inventory[i].itemId === skillDef.consumableItem) {
+        const take = Math.min(session.inventory[i].quantity, remaining);
+        session.inventory[i].quantity -= take;
+        remaining -= take;
+        if (session.inventory[i].quantity <= 0) session.inventory.splice(i, 1);
+      }
+    }
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.INVENTORY_UPDATE,
+      timestamp: Date.now(),
+      data: { inventory: session.inventory }
+    });
+  }
+
+  const { started, castTime } = ctx.skillSys.beginCast(session, skillName, targetId || null);
+  if (!started) return;
+
+  if (castTime > 0) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.COOLDOWN_UPDATE,
+      timestamp: Date.now(),
+      data: { skillName, castTime, type: 'cast_start' }
+    });
+    return;
+  }
+
+  const skill = ctx.skillSys.findSkillDefinition(skillName);
+  const aoeRadius = skill?.aoeRadius || DEFAULT_AOE_RADIUS;
+  let firstTargetId: string | null = targetId || null;
+
+  if (skill?.isAOE && aoePosition) {
+    const firstTarget = ctx.findClosestEntityToPosition(
+      session, aoePosition, aoeRadius
+    );
+    firstTargetId = firstTarget?.id || targetId || null;
+  }
+
+  const result = ctx.skillSys.executeSkill(session, skillName, firstTargetId, (id) => ctx.getTargetStatsForEntity(id));
+  ctx.sendDamageDebug(session, result);
+  ctx.playerSys.recalcStats(session);
+
+  if (skill?.isSong && !result.songToggledOff) {
+    ctx.applySongPulseImmediate(session);
+  }
+
+  if (result.songToggledOff) {
+    ctx.removeSongProximityBuffs(session);
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.STATUS_EFFECT_UPDATE,
+      timestamp: Date.now(),
+      data: { effects: session.statusEffects }
+    });
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+    });
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.COOLDOWN_UPDATE,
+      timestamp: Date.now(),
+      data: { skillName, type: 'used', mpCost: skill?.mpCost || 0, cooldownRemaining: 0 }
+    });
+    ctx.broadcastEntityEffects(session);
+    return;
+  }
+
+  ctx.sendToPlayer(characterId, {
+    type: PacketType.STATS_UPDATE,
+    timestamp: Date.now(),
+    data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+  });
+
+  if (ctx.skillSys.lastProficiencyGain) {
+    const pg = ctx.skillSys.lastProficiencyGain;
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.CHAT_MESSAGE,
+      timestamp: Date.now(),
+      data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
+    });
+    ctx.skillSys.lastProficiencyGain = undefined;
+  }
+
+  ctx.sendToPlayer(characterId, {
+    type: PacketType.COOLDOWN_UPDATE,
+    timestamp: Date.now(),
+    data: {
+      skillName,
+      type: 'used',
+      mpCost: skill?.mpCost || 0,
+      cooldownRemaining: session.skillCooldowns.find(c => c.skillName === skillName)?.readyAt
+        ? Math.max(0, (session.skillCooldowns.find(c => c.skillName === skillName)!.readyAt - Date.now()))
+        : 0
+    }
+  });
+
+  if (result.createdItems && result.createdItems.length > 0) {
+    for (const ci of result.createdItems) {
+      if (ci.consumeItems) {
+        let canCraft = true;
+        for (const mat of ci.consumeItems) {
+          const count = session.inventory.filter(i => i.itemId === mat.itemId).reduce((s, i) => s + i.quantity, 0);
+          if (count < mat.quantity) { canCraft = false; break; }
+        }
+        if (!canCraft) continue;
+        for (const mat of ci.consumeItems) {
+          let remaining = mat.quantity;
+          for (let i = session.inventory.length - 1; i >= 0 && remaining > 0; i--) {
+            if (session.inventory[i].itemId === mat.itemId) {
+              const take = Math.min(session.inventory[i].quantity, remaining);
+              session.inventory[i].quantity -= take;
+              remaining -= take;
+              if (session.inventory[i].quantity <= 0) session.inventory.splice(i, 1);
+            }
+          }
+        }
+      }
+      ctx.playerSys.addItemToInventory(session, ci.itemId, ci.quantity);
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: `Created: ${ci.itemId} x${ci.quantity}` }
+      });
+    }
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.INVENTORY_UPDATE,
+      timestamp: Date.now(),
+      data: { inventory: session.inventory }
+    });
+  }
+
+  if (result.sacrificeHeal && result.targetId) {
+    const target = ctx.state.players.get(result.targetId);
+    if (target) {
+      session.stats.health = 0;
+      session.isDead = true;
+      target.stats.health = target.stats.maxHealth;
+    }
+  }
+
+  if (result.mpDamage && result.mpDamage > 0 && firstTargetId) {
+    const mpTarget = ctx.spawnMgr.getEnemy(firstTargetId);
+    if (mpTarget) {
+      ctx.broadcastInZone(session.zoneId, {
+        type: PacketType.DAMAGE,
+        timestamp: Date.now(),
+        data: { attackerId: characterId, targetId: firstTargetId, damage: result.mpDamage, damageType: 'mp', skillName }
+      });
+    } else {
+      const playerTarget = ctx.state.players.get(firstTargetId);
+      if (playerTarget) {
+        playerTarget.stats.mana = Math.max(0, playerTarget.stats.mana - result.mpDamage);
+      }
+    }
+    ctx.broadcastInZone(session.zoneId, {
+      type: PacketType.DAMAGE,
+      timestamp: Date.now(),
+      data: { attackerId: characterId, targetId: firstTargetId, damage: result.mpDamage, damageType: 'mp', skillName }
+    });
+  }
+
+  if (result.fear && aoePosition) {
+    const fearTargets = ctx.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
+    for (const ft of fearTargets) {
+      const enemy = ctx.spawnMgr.getEnemy(ft.id);
+      if (enemy && enemy.state !== 'dead') {
+        const angle = Math.random() * Math.PI * 2;
+        enemy.position.x += Math.cos(angle) * 10;
+        enemy.position.z += Math.sin(angle) * 10;
+      }
+    }
+  }
+
+  if (result.dispelBuff && firstTargetId) {
+    const playerTarget = ctx.state.players.get(firstTargetId);
+    if (playerTarget) {
+      playerTarget.statusEffects = playerTarget.statusEffects.filter(e => !e.buffData);
+    }
+  }
+
+  if (result.dispelDebuff && firstTargetId) {
+    const playerTarget = ctx.state.players.get(firstTargetId);
+    if (playerTarget) {
+      playerTarget.statusEffects = playerTarget.statusEffects.filter(e => !e.debuffCategory);
+    }
+  }
+
+  if (result.summonObject && aoePosition) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.NOTIFICATION,
+      timestamp: Date.now(),
+      data: { message: `Summoned ${result.summonObject.objectType}` }
+    });
+  }
+
+  if (result.banishObject) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.NOTIFICATION,
+      timestamp: Date.now(),
+      data: { message: 'Banished summoned object' }
+    });
+  }
+
+  if (result.damage) {
+    if (aoePosition) {
+      ctx.applyAOEDamageToTargets(session, skillName, aoePosition, aoeRadius, result);
+    } else if (firstTargetId) {
+      ctx.applySingleTargetSkillDamage(session, skillName, firstTargetId, result);
+    }
+  }
+
+  if (result.statusEffects && result.statusEffects.length > 0) {
+    if (aoePosition) {
+      const targets = ctx.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
+      for (const target of targets) {
+        const enemy = ctx.spawnMgr.getEnemy(target.id);
+        if (enemy && enemy.state !== 'dead') {
+          for (const effect of result.statusEffects) {
+            if (!ctx.shouldApplyDebuff(effect, target.id, characterId)) continue;
+            if (ctx.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
+            const cloned = { ...effect, targetId: target.id };
+            enemy.statusEffects.push(cloned);
+          }
+          ctx.broadcastInZone(session.zoneId, {
+            type: PacketType.ENTITY_STATUS_EFFECTS,
+            timestamp: Date.now(),
+            data: { entityId: target.id, effects: enemy.statusEffects }
+          });
+        }
+        const playerTarget = ctx.state.players.get(target.id);
+        if (playerTarget && target.id !== characterId) {
+          for (const effect of result.statusEffects) {
+            if (!ctx.shouldApplyDebuff(effect, target.id, characterId)) continue;
+            if (ctx.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
+            const cloned = { ...effect, targetId: target.id };
+            playerTarget.statusEffects.push(cloned);
+          }
+          ctx.playerSys.recalcStats(playerTarget);
+          ctx.sendToPlayer(target.id, {
+            type: PacketType.STATUS_EFFECT_UPDATE,
+            timestamp: Date.now(),
+            data: { effects: playerTarget.statusEffects }
+          });
+          ctx.sendToPlayer(target.id, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: target.id, stats: playerTarget.stats }
+          });
+        }
+      }
+    } else if (firstTargetId) {
+      const enemy = ctx.spawnMgr.getEnemy(firstTargetId);
+      if (enemy && enemy.state !== 'dead') {
+        for (const effect of result.statusEffects) {
+          if (!ctx.shouldApplyDebuff(effect, firstTargetId, characterId)) continue;
+          if (ctx.hasActiveDebuff(firstTargetId, effect.type, effect.skillName)) continue;
+          const cloned = { ...effect, targetId: firstTargetId };
+          enemy.statusEffects.push(cloned);
+        }
+        ctx.broadcastInZone(session.zoneId, {
+          type: PacketType.ENTITY_STATUS_EFFECTS,
+          timestamp: Date.now(),
+          data: { entityId: firstTargetId, effects: enemy.statusEffects }
+        });
+      }
+      const playerTarget = ctx.state.players.get(firstTargetId);
+      if (playerTarget && firstTargetId !== characterId) {
+        for (const effect of result.statusEffects) {
+          if (!ctx.shouldApplyDebuff(effect, firstTargetId, characterId)) continue;
+          if (ctx.hasActiveDebuff(firstTargetId, effect.type, effect.skillName)) continue;
+          const cloned = { ...effect, targetId: firstTargetId };
+          playerTarget.statusEffects.push(cloned);
+        }
+        ctx.playerSys.recalcStats(playerTarget);
+        ctx.sendToPlayer(firstTargetId, {
+          type: PacketType.STATUS_EFFECT_UPDATE,
+          timestamp: Date.now(),
+          data: { effects: playerTarget.statusEffects }
+        });
+        ctx.sendToPlayer(firstTargetId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { characterId: firstTargetId, stats: playerTarget.stats }
+        });
+        ctx.broadcastEntityEffects(playerTarget);
+      }
+    }
+  }
+
+  if (result.healing) {
+    session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + result.healing);
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.HEAL,
+      timestamp: Date.now(),
+      data: { targetId: characterId, amount: result.healing }
+    });
+  }
+
+  if (session.statusEffects.length > 0) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.STATUS_EFFECT_UPDATE,
+      timestamp: Date.now(),
+      data: { effects: session.statusEffects }
+    });
+  }
+}
+
+function handleGroundAOESkillUse(
+  ctx: NetworkContext,
+  session: PlayerSession,
+  skillName: string,
+  aoePosition: { x: number; y: number; z: number }
+): void {
+  const characterId = session.characterId;
+
+  const check = ctx.skillSys.canUseSkill(session, skillName, null);
+  if (!check.canUse) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.SKILL_USE,
+      timestamp: Date.now(),
+      data: { skillName, error: check.error }
+    });
+    return;
+  }
+
+  const groundSkillDef = ctx.skillSys.findSkillDefinition(skillName);
+  if (groundSkillDef?.consumableItem) {
+    const needed = groundSkillDef.consumableItemQuantity || 1;
+    const count = session.inventory.filter(i => i.itemId === groundSkillDef.consumableItem).reduce((s, i) => s + i.quantity, 0);
+    if (count < needed) {
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.SKILL_USE,
+        timestamp: Date.now(),
+        data: { skillName, error: 'no_materials' }
+      });
+      return;
+    }
+    let remaining = needed;
+    for (let i = session.inventory.length - 1; i >= 0 && remaining > 0; i--) {
+      if (session.inventory[i].itemId === groundSkillDef.consumableItem) {
+        const take = Math.min(session.inventory[i].quantity, remaining);
+        session.inventory[i].quantity -= take;
+        remaining -= take;
+        if (session.inventory[i].quantity <= 0) session.inventory.splice(i, 1);
+      }
+    }
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.INVENTORY_UPDATE,
+      timestamp: Date.now(),
+      data: { inventory: session.inventory }
+    });
+  }
+
+  const { started, castTime } = ctx.skillSys.beginCast(session, skillName, null, aoePosition);
+  if (!started) return;
+
+  if (castTime > 0) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.COOLDOWN_UPDATE,
+      timestamp: Date.now(),
+      data: { skillName, castTime, type: 'cast_start', aoePosition }
+    });
+    return;
+  }
+
+  ctx.executeAOESkillInternal(session, skillName, aoePosition);
+}

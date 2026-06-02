@@ -716,6 +716,24 @@ export class GameClient {
       this.callbacks.onEntityStatusEffects?.(entityId, effects || []);
     });
 
+    this.network.onPacket(PacketType.SONG_PULSE, (packet: any) => {
+      const { entityId, songType } = packet.data;
+      const engine = this.getEngine();
+      const entity = this.knownEntities.get(entityId);
+      if (entity && engine) {
+        const pos = entity.mesh?.position;
+        if (pos) {
+          engine.createSongPulse(entityId, songType, { x: pos.x, y: pos.y, z: pos.z });
+        }
+      }
+      if (entityId === this.playerId && engine) {
+        const playerPos = engine.getPlayerPosition();
+        if (playerPos) {
+          engine.createSongPulse(entityId, songType, playerPos);
+        }
+      }
+    });
+
     this.network.onPacket(PacketType.ENTER_ZONE, (packet: any) => {
       this.currentZoneId = packet.data.zoneId;
     });

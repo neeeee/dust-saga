@@ -252,6 +252,10 @@ export class SkillSystem {
         if (targetId === session.characterId) {
           return { canUse: false, error: 'no_self_target' };
         }
+      } else if (targetType !== SkillTargetType.SELF && targetType !== SkillTargetType.SELF_OR_TARGET) {
+        if (targetId === session.characterId) {
+          return { canUse: false, error: 'no_self_target' };
+        }
       }
     }
 
@@ -1122,6 +1126,10 @@ export class SkillSystem {
       pushEffect(StatusEffectType.BUFF_GENERIC, 0, { magicalDamageBonusPercent: bt.magicalDamageBonus });
     }
 
+    if (bt.auraDamageIncrease) {
+      pushEffect(StatusEffectType.BUFF_GENERIC, 0, { auraDamageIncreasePercent: bt.auraDamageIncrease });
+    }
+
     if (bt.songType) {
       const songMap: Record<string, StatusEffectType> = {
         green: StatusEffectType.SONG_GREEN,
@@ -1132,6 +1140,7 @@ export class SkillSystem {
       const songEffectType = songMap[bt.songType];
       if (songEffectType) {
         target.statusEffects = target.statusEffects.filter(e => ![StatusEffectType.SONG_GREEN, StatusEffectType.SONG_BLUE, StatusEffectType.SONG_YELLOW, StatusEffectType.SONG_RED].includes(e.type));
+        effects.length = 0;
         pushEffect(songEffectType, 0, { songType: bt.songType, songRadius: 3 });
         effects[effects.length - 1].duration = 999999999;
         effects[effects.length - 1].lastPulseAt = 0;
@@ -1164,9 +1173,15 @@ export class SkillSystem {
           this.lastBuffDebug = `[Lapis Mediow] SPI=${totalSpi} (${casterSession?.baseStats?.SPI || 0} base + ${casterSession?.statPoints?.SPI || 0} alloc) Blessing=${casterBlessing}/${casterSession?.skillProficiencies?.['Blessing'] || 0} baseDef=${target.stats.defense} +${result.def} def`;
         }
       } else if (skillName === 'green song' || skillName === 'speedy gale') {
-        const result = resolveSpiTieredValue(bt.spiValues, totalSpi, casterBlessing, 'dodgeChance');
-        if (result) {
-          pushEffect(StatusEffectType.BUFF_DODGE, result.dodgeChance ?? 0);
+        const dodgeResult = resolveSpiTieredValue(bt.spiValues, totalSpi, casterBlessing, 'dodgeChance');
+        if (dodgeResult) {
+          pushEffect(StatusEffectType.BUFF_DODGE, dodgeResult.dodgeChance ?? 0);
+        }
+        if (skillName === 'green song') {
+          const accuracyResult = resolveSpiTieredValue(bt.spiValues, totalSpi, casterBlessing, 'accuracy');
+          if (accuracyResult && accuracyResult.accuracy) {
+            pushEffect(StatusEffectType.BUFF_ACCURACY, accuracyResult.accuracy);
+          }
         }
       }
     }

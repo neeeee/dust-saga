@@ -88,15 +88,15 @@ export function isRooted(activeEffects: StatusEffect[]): boolean {
 
 export interface SpiValueTier {
   value: number;
-  Blessing?: Array<{ value: number; def?: number; dodgeChance?: number }>;
+  Blessing?: Array<{ value: number; def?: number; dodgeChance?: number; accuracy?: number }>;
 }
 
 export function resolveSpiTieredValue(
   spiValues: SpiValueTier[],
   casterSpi: number,
   casterBlessing: number,
-  resultKey: 'def' | 'dodgeChance'
-): { def?: number; dodgeChance?: number } | null {
+  resultKey: 'def' | 'dodgeChance' | 'accuracy'
+): { def?: number; dodgeChance?: number; accuracy?: number } | null {
   const firstTier = spiValues[0];
   if (!firstTier?.Blessing?.length) return null;
   const firstValue = firstTier.Blessing[0][resultKey];
@@ -147,6 +147,7 @@ export interface BuffEffectTable {
   critResist?: number;
   critDamageReduce?: number;
   auraDamageReduce?: number;
+  auraDamageIncrease?: number;
   manaShield?: boolean;
   spellInterruptResist?: number;
   debuffResist?: number;
@@ -219,6 +220,7 @@ export interface BuffData {
   critResistPercent?: number;
   critDamageReducePercent?: number;
   auraDamageReducePercent?: number;
+  auraDamageIncreasePercent?: number;
   manaShield?: boolean;
   spellInterruptResistPercent?: number;
   debuffResistPercent?: number;
@@ -448,6 +450,16 @@ export function getEffectiveStats(
           if (bd.accuracyFlat) s.accuracyBonus += bd.accuracyFlat;
           if (bd.castTimeReductionPercent) s.castTimeReduction += bd.castTimeReductionPercent;
           if (bd.attackSpeedPercent) s.attackSpeedMultiplier *= (1 + bd.attackSpeedPercent);
+          if (bd.magicalDamageBonusPercent) s.magicAttack = Math.floor(s.magicAttack * (1 + bd.magicalDamageBonusPercent));
+          if (bd.auraDamageIncreasePercent) {
+            for (const effect2 of statusEffects) {
+              if (effect2.buffData?.weaponAura && effect2.buffData.weaponAura.minDamage) {
+                const multiplier = 1 + bd.auraDamageIncreasePercent;
+                effect2.buffData.weaponAura.minDamage = Math.floor(effect2.buffData.weaponAura.minDamage * multiplier);
+                effect2.buffData.weaponAura.maxDamage = Math.floor(effect2.buffData.weaponAura.maxDamage * multiplier);
+              }
+            }
+          }
         }
         break;
       case StatusEffectType.DEBUFF_DAMAGE_DOWN:
@@ -550,6 +562,7 @@ export interface StatBonusBreakdown {
   totalDodge?: number;
   totalAilmentResist?: number;
   totalDisorderResist?: number;
+  buffCooldownReduction?: number;
 }
 
 export function computeStatBreakdown(

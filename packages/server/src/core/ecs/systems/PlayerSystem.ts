@@ -378,6 +378,7 @@ export class PlayerSystem extends System {
     const totalDex = (session.statPoints.DEX || 0) + baseStats.DEX + DEX + (session.statBreakdown.buffs?.DEX || 0);
     session.statBreakdown.totalDodge = calculateDodge(session.stats.level, totalAgi, effective.dodgeBonus + dodge);
     session.statBreakdown.totalAccuracy = calculateAccuracy(session.stats.level, totalDex, effective.accuracyBonus + accuracy);
+    session.statBreakdown.buffCooldownReduction = Math.floor(effective.castTimeReduction * 100);
     const totalSTA = (session.statPoints.STA || 0) + baseStats.STA + STA + (session.statBreakdown.buffs?.STA || 0);
     const totalSPI = (session.statPoints.SPI || 0) + baseStats.SPI + SPI + (session.statBreakdown.buffs?.SPI || 0);
     session.statBreakdown.totalAilmentResist = computeAilmentResist(totalSTA, ailmentResist);

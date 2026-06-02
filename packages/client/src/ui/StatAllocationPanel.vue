@@ -77,6 +77,10 @@
               <span class="combat-label">Atk Spd</span>
               <span class="combat-value">{{ formatPercent(combatStats.attackSpeed) }}</span>
             </div>
+            <div class="combat-item">
+              <span class="combat-label">CD Reduction</span>
+              <span class="combat-value">-{{ combatStats.cooldownReduction }}%</span>
+            </div>
           </div>
         </div>
 
@@ -381,11 +385,15 @@ const racialPassive = computed(() => {
 
 const combatStats = computed(() => {
   const gc = props.statBreakdown?.gearCombat;
+  const totalINT = (props.statPoints?.INT || 0) + (props.statBreakdown?.baseStats?.INT || 0);
+  const baseCdReduction = Math.floor(totalINT / 10) * 2;
+  const buffCdReduction = props.statBreakdown?.buffCooldownReduction || 0;
   return {
     accuracy: props.statBreakdown?.totalAccuracy ?? gc?.accuracy ?? 0,
     dodge: props.statBreakdown?.totalDodge ?? gc?.dodge ?? 0,
     attackSpeed: gc?.attackSpeed || 0,
     castSpeed: ((props.stats?.castSpeed ?? 100) - 100) / 100,
+    cooldownReduction: baseCdReduction + buffCdReduction,
   };
 });
 

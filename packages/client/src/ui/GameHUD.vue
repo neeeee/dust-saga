@@ -236,7 +236,7 @@ const activeEffects = computed(() => {
       remaining: isToggled ? '' : remaining.toFixed(1),
       expired: isToggled ? false : remaining <= 0,
     };
-  }).filter(e => !e.expired);
+  }).filter(e => !e.expired && !e.songProximityBuff);
 });
 
 const targetEffectsDisplay = computed(() => {

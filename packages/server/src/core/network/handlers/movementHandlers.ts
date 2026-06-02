@@ -1,0 +1,64 @@
+import { Socket } from 'socket.io';
+import {
+  Packet, PacketType, StatusEffectType, Validator,
+} from '@dust-saga/shared';
+import { NetworkContext, PacketHandler } from '../NetworkContext';
+
+export function registerHandlers(registry: Map<PacketType, PacketHandler>): void {
+  registry.set(PacketType.PLAYER_MOVE, handlePlayerMove);
+}
+
+function handlePlayerMove(ctx: NetworkContext, socket: Socket, data: any): void {
+  const characterId = ctx.findCharacterBySocket(socket.id);
+  if (!characterId) return;
+
+  const session = ctx.state.players.get(characterId);
+  if (!session) return;
+
+  if (!Validator.validatePosition(data.position)) return;
+
+  const prevPos = session.position;
+  const moved = prevPos && (
+    Math.abs(data.position.x - prevPos.x) > 0.01 ||
+    Math.abs(data.position.y - prevPos.y) > 0.01 ||
+    Math.abs(data.position.z - prevPos.z) > 0.01
+  );
+
+  session.position = data.position;
+  if (data.rotation) {
+    session.rotation = data.rotation;
+  }
+
+  if (moved) {
+    const blockingEffect = session.statusEffects?.find(
+      (e: any) => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance && !e.buffData?.defensiveMarch
+    );
+    if (blockingEffect) {
+      session.statusEffects = session.statusEffects.filter((e: any) => e !== blockingEffect);
+      ctx.removeBlockingProtectedBuffs(session.characterId);
+      ctx.playerSys.recalcStats(session);
+      ctx.sendToPlayer(session.characterId, {
+        type: PacketType.STATUS_EFFECT_UPDATE,
+        timestamp: Date.now(),
+        data: { effects: session.statusEffects }
+      });
+      ctx.sendToPlayer(session.characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+      });
+      ctx.broadcastEntityEffects(session);
+    }
+  }
+
+  ctx.broadcastInZone(session.zoneId, {
+    type: PacketType.PLAYER_POSITION_UPDATE,
+    timestamp: Date.now(),
+    data: {
+      socketId: socket.id,
+      characterId,
+      position: data.position,
+      rotation: data.rotation || session.rotation
+    }
+  }, characterId);
+}

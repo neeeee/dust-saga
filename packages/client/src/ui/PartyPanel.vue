@@ -108,7 +108,7 @@ function getMemberEffects(characterId: string): any[] {
   const effects = props.entityStatusEffects[characterId];
   if (!effects) return [];
   const now = Date.now();
-  return effects.filter(e => (e.appliedAt + e.duration - now) > 0);
+  return effects.filter(e => (e.appliedAt + e.duration - now) > 0 && !e.songProximityBuff);
 }
 
 function isBuff(e: any): boolean {

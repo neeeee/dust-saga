@@ -58,6 +58,7 @@ export class GameEngine {
   private moveIndicatorMat: StandardMaterial | null = null;
   private moveIndicatorCallback: ((worldPos: V3) => void) | null = null;
   private songIndicator: { disc: AbstractMesh; material: StandardMaterial } | null = null;
+  private songPulseEffects: Map<string, { disc: AbstractMesh; material: StandardMaterial; startTime: number }> = new Map();
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -146,6 +147,7 @@ export class GameEngine {
           const pos = this.playerMesh.position;
           this.updateSongIndicator({ x: pos.x, y: pos.y, z: pos.z }, now);
         }
+        this.updateSongPulses(now);
         this.scene.render();
       }
     });
@@ -1127,13 +1129,54 @@ export class GameEngine {
     this.songIndicator.material.alpha = 0.15 + 0.1 * Math.sin(now * 0.003);
   }
 
+  createSongPulse(entityId: string, songType: string, position: { x: number; y: number; z: number }): void {
+    if (!this.scene) return;
+
+    const disc = MeshBuilder.CreateDisc(`song_pulse_${entityId}_${Date.now()}`, { radius: 0.5, tessellation: 64 }, this.scene);
+    const mat = new StandardMaterial(`song_pulse_${entityId}_${Date.now()}_mat`, this.scene);
+    const colors = this.getSongColor(songType);
+    mat.diffuseColor = colors.diffuse;
+    mat.emissiveColor = colors.emissive;
+    mat.disableLighting = true;
+    mat.alpha = 0.6;
+    mat.backFaceCulling = false;
+    disc.material = mat;
+    disc.rotation.x = Math.PI / 2;
+    disc.position.set(position.x, 0.05, position.z);
+    disc.isPickable = false;
+
+    this.songPulseEffects.set(entityId, { disc, material: mat, startTime: Date.now() });
+  }
+
+  updateSongPulses(now: number): void {
+    const duration = 800;
+    const toRemove: string[] = [];
+    for (const [entityId, entry] of this.songPulseEffects) {
+      const elapsed = now - entry.startTime;
+      if (elapsed > duration) {
+        entry.disc.dispose();
+        entry.material.dispose();
+        toRemove.push(entityId);
+      } else {
+        const t = elapsed / duration;
+        entry.disc.scaling.set(1 + t * 3, 1, 1 + t * 3);
+        entry.material.alpha = 0.6 * (1 - t);
+      }
+    }
+    for (const id of toRemove) {
+      this.songPulseEffects.delete(id);
+    }
+  }
+
   dispose(): void {
     if (this.isRotating) document.exitPointerLock();
     this.canvas?.removeEventListener('pointerdown', this.handlePointerDown);
     this.canvas?.removeEventListener('pointerup', this.handlePointerUp);
     this.canvas?.removeEventListener('pointermove', this.handlePointerMoveForCamera);
-    this.hideAOETargetCircle();
-    this.removeSongIndicator();
+     this.hideAOETargetCircle();
+     this.removeSongIndicator();
+     this.songPulseEffects.forEach(entry => { entry.disc.dispose(); entry.material.dispose(); });
+     this.songPulseEffects.clear();
     this.aoeZoneMeshes.forEach((entry) => {
       entry.disc.dispose();
       entry.material.dispose();
