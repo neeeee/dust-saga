@@ -123,6 +123,7 @@ const BUFF_TYPES = new Set([
   StatusEffectType.BUFF_BLOCKING_PROTECTED,
   StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK,
   StatusEffectType.BUFF_GUARDED,
+  StatusEffectType.BUFF_DAMAGE_NEGATION,
   StatusEffectType.BUFF_MOVE_SPEED,
   StatusEffectType.SONG_GREEN,
   StatusEffectType.SONG_BLUE,

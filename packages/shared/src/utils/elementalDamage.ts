@@ -23,7 +23,8 @@ export function calculateWeaponElementalDamage(
   attackerLevel: number,
   targetResists: Record<string, number | undefined>,
   enhancementElement?: string | null,
-  enhancementLevel?: number
+  enhancementLevel?: number,
+  auraDamageMultiplier?: number
 ): ElementalDamageLine[] {
   const lines: ElementalDamageLine[] = [];
 
@@ -57,10 +58,12 @@ export function calculateWeaponElementalDamage(
     }
   }
 
+  const auraMultiplier = auraDamageMultiplier ?? 1;
+
   for (const effect of statusEffects) {
     if (effect.type === StatusEffectType.WEAPON_AURA && effect.buffData?.weaponAura) {
       const { element, minDamage, maxDamage } = effect.buffData.weaponAura;
-      let damage = minDamage + Math.floor(Math.random() * (maxDamage - minDamage + 1));
+      let damage = Math.floor(minDamage * auraMultiplier) + Math.floor(Math.random() * (Math.floor(maxDamage * auraMultiplier) - Math.floor(minDamage * auraMultiplier) + 1));
       damage = applyResistance(damage, element, targetResists);
       if (damage > 0) {
         lines.push({ element, damage });

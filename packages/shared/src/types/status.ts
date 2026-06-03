@@ -46,6 +46,7 @@ export enum StatusEffectType {
   BUFF_BLOCKING_PROTECTED = 'buff_blocking_protected',
   BUFF_CONSUMABLE_ON_ATTACK = 'buff_consumable_on_attack',
   BUFF_GUARDED = 'buff_guarded',
+  BUFF_DAMAGE_NEGATION = 'buff_damage_negation',
   SONG_ACTIVE = 'song_active',
   SONG_GREEN = 'song_green',
   SONG_BLUE = 'song_blue',
@@ -245,6 +246,7 @@ export interface BuffData {
   songType?: 'green' | 'blue' | 'yellow' | 'red';
   songRadius?: number;
   damageNegation?: { base: number; spiScale: number; proficiencyCap: number };
+  damageNegationThreshold?: number;
 }
 
 export interface StatusEffect {
@@ -334,6 +336,7 @@ export const STATUS_EFFECT_DEFS: Partial<Record<StatusEffectType, StatusEffectDe
   [StatusEffectType.BUFF_BLOCKING_PROTECTED]: { type: StatusEffectType.BUFF_BLOCKING_PROTECTED, duration: 999999999, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK]: { type: StatusEffectType.BUFF_CONSUMABLE_ON_ATTACK, duration: 120000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_GUARDED]: { type: StatusEffectType.BUFF_GUARDED, duration: 300000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BUFF_DAMAGE_NEGATION]: { type: StatusEffectType.BUFF_DAMAGE_NEGATION, duration: 5000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.BUFF_MOVE_SPEED]: { type: StatusEffectType.BUFF_MOVE_SPEED, duration: 2000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.SONG_GREEN]: { type: StatusEffectType.SONG_GREEN, duration: 999999999, tickInterval: 3000, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.SONG_BLUE]: { type: StatusEffectType.SONG_BLUE, duration: 999999999, tickInterval: 3000, potency: 0, isDoT: false, isCC: false },
@@ -370,6 +373,7 @@ interface EffectiveStats {
   damageTakenMultiplier: number;
   castSpeedPenalty: number;
   speedMultiplier: number;
+  auraDamageMultiplier: number;
 }
 
 const ROOT_TYPES = new Set([StatusEffectType.ROOT, StatusEffectType.FREEZE, StatusEffectType.STUN]);
@@ -378,7 +382,7 @@ export function getEffectiveStats(
   baseStats: { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number },
   statPoints: { STR: number; AGI: number; INT: number; SPI: number; DEX: number; STA: number },
   statusEffects: StatusEffect[]
-): { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number; speedMultiplier: number; physicalDamageReduction: number; dodgeBonus: number; accuracyBonus: number; castTimeReduction: number; attackSpeedMultiplier: number; damageTakenMultiplier: number; castSpeedPenalty: number } {
+): { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number; speedMultiplier: number; physicalDamageReduction: number; dodgeBonus: number; accuracyBonus: number; castTimeReduction: number; attackSpeedMultiplier: number; damageTakenMultiplier: number; castSpeedPenalty: number; auraDamageMultiplier: number } {
   const s: EffectiveStats = {
     attack: baseStats.attack,
     defense: baseStats.defense,
@@ -394,6 +398,7 @@ export function getEffectiveStats(
     damageTakenMultiplier: 1.0,
     castSpeedPenalty: 0,
     speedMultiplier: 1,
+    auraDamageMultiplier: 1,
   };
 
   const now = Date.now();
@@ -451,15 +456,7 @@ export function getEffectiveStats(
           if (bd.castTimeReductionPercent) s.castTimeReduction += bd.castTimeReductionPercent;
           if (bd.attackSpeedPercent) s.attackSpeedMultiplier *= (1 + bd.attackSpeedPercent);
           if (bd.magicalDamageBonusPercent) s.magicAttack = Math.floor(s.magicAttack * (1 + bd.magicalDamageBonusPercent));
-          if (bd.auraDamageIncreasePercent) {
-            for (const effect2 of statusEffects) {
-              if (effect2.buffData?.weaponAura && effect2.buffData.weaponAura.minDamage) {
-                const multiplier = 1 + bd.auraDamageIncreasePercent;
-                effect2.buffData.weaponAura.minDamage = Math.floor(effect2.buffData.weaponAura.minDamage * multiplier);
-                effect2.buffData.weaponAura.maxDamage = Math.floor(effect2.buffData.weaponAura.maxDamage * multiplier);
-              }
-            }
-          }
+          if (bd.auraDamageIncreasePercent) s.auraDamageMultiplier *= (1 + bd.auraDamageIncreasePercent);
         }
         break;
       case StatusEffectType.DEBUFF_DAMAGE_DOWN:
@@ -519,6 +516,7 @@ export function getEffectiveStats(
     attackSpeedMultiplier: s.attackSpeedMultiplier,
     damageTakenMultiplier: s.damageTakenMultiplier,
     castSpeedPenalty: s.castSpeedPenalty,
+    auraDamageMultiplier: s.auraDamageMultiplier,
   };
 }
 

@@ -59,14 +59,14 @@ function handleChatCommand(ctx: NetworkContext, socket: Socket, session: PlayerS
   } else if (cmd === '/giveitem') {
     handleGiveItem(ctx, session, parts);
   } else if (cmd === '/spawn_dummy') {
-    (ctx as any).spawnDummy(session);
+    ctx.spawnDummy(session);
   } else if (cmd === '/despawn_dummy' || cmd === '/kill_dummy') {
     const dummyId = parts[1];
     if (!dummyId) {
       ctx.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: 'Usage: /despawn_dummy <id> or /kill_dummy <id>', channel: 'system' } });
       return;
     }
-    (ctx as any).despawnDummy(dummyId, session);
+    ctx.despawnDummy(dummyId, session);
   } else if (cmd === '/dummy_set') {
     const dummyId = parts[1];
     const prop = parts[2];
@@ -75,7 +75,7 @@ function handleChatCommand(ctx: NetworkContext, socket: Socket, session: PlayerS
       ctx.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: 'Usage: /dummy_set <id> <prop> <value>', channel: 'system' } });
       return;
     }
-    (ctx as any).setDummyProperty(dummyId, prop, value, session);
+    ctx.setDummyProperty(dummyId, prop, value, session);
   } else if (cmd === '/dummy_class') {
     const dummyId = parts[1];
     const jobId = parts[2];
@@ -83,7 +83,7 @@ function handleChatCommand(ctx: NetworkContext, socket: Socket, session: PlayerS
       ctx.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: 'Usage: /dummy_class <id> <jobId>', channel: 'system' } });
       return;
     }
-    (ctx as any).setDummyClass(dummyId, jobId, session);
+    ctx.setDummyClass(dummyId, jobId, session);
   } else if (cmd === '/dummy_gear') {
     const dummyId = parts[1];
     const preset = parts[2];
@@ -91,31 +91,31 @@ function handleChatCommand(ctx: NetworkContext, socket: Socket, session: PlayerS
       ctx.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: 'Usage: /dummy_gear <id> <naked|common|rare|legendary>', channel: 'system' } });
       return;
     }
-    (ctx as any).setDummyGear(dummyId, preset, session);
+    ctx.setDummyGear(dummyId, preset, session);
   } else if (cmd === '/dummy_pvp') {
     const dummyId = parts[1];
     if (!dummyId) {
       ctx.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: 'Usage: /dummy_pvp <id>', channel: 'system' } });
       return;
     }
-    (ctx as any).toggleDummyPvp(dummyId, session);
+    ctx.toggleDummyPvp(dummyId, session);
   } else if (cmd === '/dummy_walk') {
     const dummyId = parts[1];
     if (!dummyId) {
       ctx.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: 'Usage: /dummy_walk <id>', channel: 'system' } });
       return;
     }
-    (ctx as any).toggleDummyWalk(dummyId, session);
+    ctx.toggleDummyWalk(dummyId, session);
   } else if (cmd === '/dummy_party') {
     const dummyId = parts[1];
     if (!dummyId) {
       ctx.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: 'Usage: /dummy_party <id>', channel: 'system' } });
       return;
     }
-    (ctx as any).toggleDummyParty(dummyId, session);
+    ctx.toggleDummyParty(dummyId, session);
   } else if (cmd === '/dummy_list') {
     const dummies: string[] = [];
-    for (const [id, meta] of (ctx as any).dummyMeta) {
+    for (const [id, meta] of ctx.dummyMeta) {
       if (meta.ownerId === session.characterId) {
         const d = ctx.state.players.get(id);
         dummies.push(`${id} Lv${d?.stats.level || 0} ${d?.jobId || '?'} ${meta.isPvp ? 'PvP' : 'Friendly'}${meta.isWalking ? ' Walking' : ''}${meta.inParty ? ' Party' : ''}`);

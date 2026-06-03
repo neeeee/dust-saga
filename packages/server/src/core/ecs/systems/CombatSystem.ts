@@ -176,7 +176,8 @@ export class CombatSystem extends System {
       attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
       totalSPI, totalINT, attacker.stats.level, targetResists,
       (attacker.equipment?.weapon as any)?.enhancementElement,
-      (attacker.equipment?.weapon as any)?.enhancementLevel
+      (attacker.equipment?.weapon as any)?.enhancementLevel,
+      effective.auraDamageMultiplier
     );
 
     this.applyDamageToTarget(targetId, damage, elementalDamage, isEnemy, enemyRef, playerRef, attacker.characterId);
@@ -284,7 +285,8 @@ export class CombatSystem extends System {
         attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
         totalSPI, totalINT, attacker.stats.level, targetResists,
         (attacker.equipment?.weapon as any)?.enhancementElement,
-        (attacker.equipment?.weapon as any)?.enhancementLevel
+        (attacker.equipment?.weapon as any)?.enhancementLevel,
+        effective.auraDamageMultiplier
       );
       const scaledElemental = elementalDamage.map(el => ({
         element: el.element,

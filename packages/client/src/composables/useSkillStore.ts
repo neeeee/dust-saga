@@ -14,6 +14,8 @@ import {
   SkillSubCategory,
   SUB_CATEGORY_TO_CATEGORY,
   meetsRequirements,
+  getMaxPotential,
+  getDesignJobId,
 } from '@dust-saga/shared';
 
 export interface SkillCooldownState {
@@ -51,6 +53,7 @@ export interface SubCategoryInfo {
   name: string;
   currentPoints: number;
   currentAdeptness: number;
+  maxPoints: number;
   skills: AvailableSkill[];
   category: string;
 }
@@ -414,6 +417,7 @@ export function useSkillStore() {
           name: sub.name,
           currentPoints: proficiencies[sub.name] || 0,
           currentAdeptness: adeptness[sub.name] || 0,
+          maxPoints: getMaxPotential(getDesignJobId(state.jobId), sub.name),
           skills: subSkills,
           category: cat,
         });

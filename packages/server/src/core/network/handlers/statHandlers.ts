@@ -53,13 +53,25 @@ function handleSkillAllocate(ctx: NetworkContext, socket: Socket, data: any): vo
   const session = ctx.state.players.get(characterId);
   if (!session) return;
 
-  const subCategoryName = data.subCategoryName as string;
-  const count = typeof data.count === 'number' ? Math.floor(data.count) : 1;
+  let anySuccess = false;
 
-  if (!subCategoryName) return;
+  if (data.allocations && typeof data.allocations === 'object') {
+    const alloc = data.allocations as Record<string, number>;
+    for (const [subCat, count] of Object.entries(alloc)) {
+      const n = Math.floor(count);
+      if (ctx.playerSys.allocateSkillPoint(session, subCat, n)) {
+        anySuccess = true;
+      }
+    }
+  } else {
+    const subCategoryName = data.subCategoryName as string;
+    const count = typeof data.count === 'number' ? Math.floor(data.count) : 1;
+    if (subCategoryName) {
+      anySuccess = ctx.playerSys.allocateSkillPoint(session, subCategoryName, count);
+    }
+  }
 
-  const success = ctx.playerSys.allocateSkillPoint(session, subCategoryName, count);
-  if (success) {
+  if (anySuccess) {
     ctx.sendToPlayer(characterId, {
       type: PacketType.STATS_UPDATE,
       timestamp: Date.now(),

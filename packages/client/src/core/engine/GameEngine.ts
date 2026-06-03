@@ -1080,7 +1080,7 @@ export class GameEngine {
     }
   }
 
-  updateMoveIndicator(deltaTime: number): void {
+  updateMoveIndicator(_deltaTime: number): void {
     if (this.moveIndicator && this.moveIndicatorMat && this.moveIndicator.isEnabled()) {
       this.moveIndicatorMat.alpha = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
     }

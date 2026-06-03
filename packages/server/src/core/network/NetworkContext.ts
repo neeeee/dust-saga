@@ -85,4 +85,22 @@ export interface NetworkContext {
   removeBlockingProtectedBuffs(blockerId: string): void;
   removeSongProximityBuffs(caster: PlayerSession): void;
   applySongPulseImmediate(caster: PlayerSession): void;
+
+  spawnDummy(session: PlayerSession): void;
+  despawnDummy(dummyId: string, session: PlayerSession): void;
+  setDummyProperty(dummyId: string, prop: string, value: string, session: PlayerSession): void;
+  setDummyClass(dummyId: string, jobIdStr: string, session: PlayerSession): void;
+  setDummyGear(dummyId: string, preset: string, session: PlayerSession): void;
+  toggleDummyPvp(dummyId: string, session: PlayerSession): void;
+  toggleDummyWalk(dummyId: string, session: PlayerSession): void;
+  toggleDummyParty(dummyId: string, session: PlayerSession): void;
+  readonly dummyMeta: Map<string, {
+    ownerId: string;
+    isPvp: boolean;
+    isWalking: boolean;
+    walkPoints: Array<{ x: number; y: number; z: number }>;
+    walkIndex: number;
+    walkDir: number;
+    inParty: boolean;
+  }>;
 }

@@ -138,6 +138,7 @@ export interface ClassSpecificSkill {
   healing?: HealingEffect;
   consumableItem?: string;
   consumableItemQuantity?: number;
+  isPassive?: boolean;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;

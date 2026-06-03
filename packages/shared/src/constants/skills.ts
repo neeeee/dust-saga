@@ -8,20 +8,21 @@ import {
   MagicalDamageSubType,
   PhysicalDamageSubType,
   DamageType,
-} from '../types/skills';
+  SkillType,
+} from "../types/skills";
 
 export const GROUND_TARGETED_AOE_SKILLS = new Set([
-  'Firestorm',
-  'Ice Storm',
-  'Thunderstorm',
-  'Meteor Storm',
-  'Despair Swamp',
-  'Ice Tempest',
-  'Wasteland',
-  'Holy Rays',
-  'Pestilence',
-  'Dark Frenzy',
-  'Arrow Rain',
+  "Firestorm",
+  "Ice Storm",
+  "Thunderstorm",
+  "Meteor Storm",
+  "Despair Swamp",
+  "Ice Tempest",
+  "Wasteland",
+  "Holy Rays",
+  "Pestilence",
+  "Dark Frenzy",
+  "Arrow Rain",
 ]);
 
 export const DEFAULT_AOE_RADIUS = 5;
@@ -67,21 +68,21 @@ export const SKILL_CATEGORIES: Record<number, SkillCategoryData> = {
   },
   22: {
     name: "Special",
-    skills: [
-      { id: 23, name: "Racial", skills: {} },
-      { id: 24, name: "Horsemanship", skills: {} },
-    ],
+    skills: [{ id: 24, name: "Horsemanship", skills: {} }],
   },
 };
 
-export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skills'] }> = {
+export const CLASS_SKILL_DATA: Record<
+  number,
+  { skills: SkillCategoryData["skills"] }
+> = {
   0: {
     skills: [
       {
         id: 1,
         name: "Slash",
         skills: {
-          "Slice": {
+          Slice: {
             name: "Slice",
             reqPoints: 8,
             mpCost: 15,
@@ -107,9 +108,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             basePower: 2,
             isAOE: true,
             aoeRadius: 1,
-            aoeTargetMode: AOETargetMode.SELF_CENTERED
+            aoeTargetMode: AOETargetMode.SELF_CENTERED,
           },
-          "Parry": {
+          Parry: {
             name: "Parry",
             reqPoints: 21,
             mpCost: 9,
@@ -118,9 +119,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 2,
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
-            description: "Block enemy attacks and stun target if blocked (2H weapons, dagger)",
+            description:
+              "Block enemy attacks and stun target if blocked (2H weapons, dagger)",
           },
-          "Concentration": {
+          Concentration: {
             name: "Concentration",
             reqPoints: 26,
             mpCost: 18,
@@ -146,7 +148,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 1,
           },
-          "Swing": {
+          Swing: {
             name: "Swing",
             reqPoints: [
               { skillName: "Slash", points: 60 },
@@ -156,7 +158,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 0,
             duration: 0,
-            description: "360 AOE melee attack (no knockback) that grants +100 dodge for a short duration (sword)",
+            description:
+              "360 AOE melee attack (no knockback) that grants +100 dodge for a short duration (sword)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 1,
@@ -169,17 +172,19 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 0,
             duration: 0,
-            description: "Increased damage with swords and daggers (sword, dagger)",
+            description:
+              "Increased damage with swords and daggers (sword, dagger)",
             isPassive: true,
           },
-          "Dice": {
+          Dice: {
             name: "Dice",
             reqPoints: 71,
             mpCost: 15,
             castTime: 0,
             cooldown: 10,
             duration: 0,
-            description: "Replaces Slice, dealing three swift strikes with a chance to bleed (1H weapons and 2H swords)",
+            description:
+              "Replaces Slice, dealing three swift strikes with a chance to bleed (1H weapons and 2H swords)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 1,
@@ -192,7 +197,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 15,
             duration: 0,
-            description: "Replaces Brutal Strike, higher damage with chance to knockdown (melee weapons)",
+            description:
+              "Replaces Brutal Strike, higher damage with chance to knockdown (melee weapons)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 1,
@@ -204,7 +210,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 15,
             duration: 0,
-            description: "Replaces Whirling Strike, higher damage and wider range (2H swords)",
+            description:
+              "Replaces Whirling Strike, higher damage and wider range (2H swords)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 2,
@@ -217,7 +224,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 180,
             duration: 0,
-            description: "Strong single-target attack with a long cooldown and high MP cost",
+            description:
+              "Strong single-target attack with a long cooldown and high MP cost",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 4,
@@ -228,7 +236,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 2,
         name: "Thrust",
         skills: {
-          "Heave": {
+          Heave: {
             name: "Heave",
             reqPoints: 8,
             mpCost: 16,
@@ -261,7 +269,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 90,
             duration: 60,
-            description: "Attack with a buff that gives a chance to dismount target",
+            description:
+              "Attack with a buff that gives a chance to dismount target",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.THRUST,
             basePower: 2,
@@ -285,7 +294,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 16,
             duration: 0,
-            description: "Quadruple attack (spear), bonus damage if comboed with Triple Stab",
+            description:
+              "Quadruple attack (spear), bonus damage if comboed with Triple Stab",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.THRUST,
             basePower: 2,
@@ -338,25 +348,27 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 7,
             duration: 0,
-            description: "Bonus damage vs mounted enemies and chance to dismount enemies (speaer)",
+            description:
+              "Bonus damage vs mounted enemies and chance to dismount enemies (speaer)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.THRUST,
             basePower: 1,
           },
-          "Assault": {
+          Assault: {
             name: "Assault",
             reqPoints: 81,
             mpCost: 24,
             castTime: 0,
             cooldown: 15,
             duration: 0,
-            description: "Rush forward and deal multiple hits of damage in a frontal cone AOE",
+            description:
+              "Rush forward and deal multiple hits of damage in a frontal cone AOE",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.THRUST,
             basePower: 1,
             isAOE: true,
           },
-          "Godlike": {
+          Godlike: {
             name: "Godlike",
             reqPoints: 90,
             mpCost: 52,
@@ -374,31 +386,33 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 3,
         name: "Cleave",
         skills: {
-          "Clobber": {
+          Clobber: {
             name: "Clobber",
             reqPoints: 8,
             mpCost: 19,
             castTime: 0,
             cooldown: 25,
             duration: 0,
-            description: "Attack + increased chance of a critical hit (axe, unusable by ascetics)",
+            description:
+              "Attack + increased chance of a critical hit (axe, unusable by ascetics)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.CLEAVE,
             basePower: 1,
           },
-          "Riposte": {
+          Riposte: {
             name: "Riposte",
             reqPoints: 12,
             mpCost: 12,
             castTime: 0.5,
             cooldown: 10,
             duration: 2,
-            description: "Immobile defensive stance that counter attacks if hit during the duration (2H weapons)",
+            description:
+              "Immobile defensive stance that counter attacks if hit during the duration (2H weapons)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 1,
           },
-          "Roar": {
+          Roar: {
             name: "Roar",
             reqPoints: 21,
             mpCost: 30,
@@ -408,7 +422,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Increased critical hit rate (axe)",
             isBuff: true,
           },
-          "Split": {
+          Split: {
             name: "Split",
             reqPoints: 41,
             mpCost: 22,
@@ -431,7 +445,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 10,
             duration: 0,
-            description: "360 AOE melee attack (no knockback) that grants +100 dodge for a short duration (axe)",
+            description:
+              "360 AOE melee attack (no knockback) that grants +100 dodge for a short duration (axe)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.CLEAVE,
             basePower: 1,
@@ -454,7 +469,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 15,
             duration: 0,
-            description: "Attack with a chance to stun target, stuns you on failure",
+            description:
+              "Attack with a chance to stun target, stuns you on failure",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.CLEAVE,
             basePower: 2,
@@ -469,7 +485,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 40,
             duration: 0,
-            description: "Short ranged AOE attack with 100% chance to interrupt casting",
+            description:
+              "Short ranged AOE attack with 100% chance to interrupt casting",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.CLEAVE,
             basePower: 8,
@@ -482,7 +499,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 60,
             duration: 0,
-            description: "Frontal AOE cleave that deals a small amount of damage as recoil",
+            description:
+              "Frontal AOE cleave that deals a small amount of damage as recoil",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.CLEAVE,
             basePower: 5,
@@ -495,7 +513,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 300,
             duration: 0,
-            description: "A strong 360 AOE attack that deals damage as recoil if missed",
+            description:
+              "A strong 360 AOE attack that deals damage as recoil if missed",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.CLEAVE,
             basePower: 7,
@@ -507,7 +526,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 4,
         name: "Bash",
         skills: {
-          "Stun": {
+          Stun: {
             name: "Stun",
             reqPoints: 8,
             mpCost: 15,
@@ -526,7 +545,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 18,
             duration: 0,
-            description: "Attack + chance to interrupt casting (blunt, axe, wand)",
+            description:
+              "Attack + chance to interrupt casting (blunt, axe, wand)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.BASH,
             basePower: 2,
@@ -554,7 +574,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 15,
             duration: 0,
-            description: "Attack with a chance to break enemy armor and interrupt casting (blunt, 2H blunt, wand)",
+            description:
+              "Attack with a chance to break enemy armor and interrupt casting (blunt, 2H blunt, wand)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.BASH,
             basePower: 2,
@@ -570,7 +591,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.BASH,
           },
-          "Subvert": {
+          Subvert: {
             name: "Subvert",
             reqPoints: 71,
             mpCost: 69,
@@ -600,7 +621,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 5,
         name: "Defend",
         skills: {
-          "Blocking": {
+          Blocking: {
             name: "Blocking",
             reqPoints: 8,
             mpCost: 5,
@@ -627,7 +648,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             basePower: 1,
             blockOnly: true,
           },
-          "Parapet": {
+          Parapet: {
             name: "Parapet",
             reqPoints: 21,
             mpCost: 25,
@@ -687,7 +708,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
               blockingRange: 7,
             },
           },
-          "Guardian": {
+          Guardian: {
             name: "Guardian",
             reqPoints: 54,
             mpCost: 16,
@@ -698,7 +719,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             basePower: 1,
             isBuff: true,
             buffEffectTable: {
-              damageRedirect: { targetId: '' },
+              damageRedirect: { targetId: "" },
             },
           },
           "Eternal Dirge": {
@@ -708,7 +729,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 20,
             duration: 0,
-            description: "AOE that prevents all skills from being used while active",
+            description:
+              "AOE that prevents all skills from being used while active",
             isAOE: true,
             aoeTargetMode: AOETargetMode.SELF_CENTERED,
           },
@@ -742,7 +764,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 30,
             duration: 0,
-            description: "Ranged attack with a chance to poison (bow, crossbow)",
+            description:
+              "Ranged attack with a chance to poison (bow, crossbow)",
             damageType: DamageType.PHYSICAL,
             basePower: 1,
             hasDebuff: true,
@@ -825,7 +848,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 30,
             duration: 0,
-            description: "Pin target in place if hit from the back (bow, crossbow)",
+            description:
+              "Pin target in place if hit from the back (bow, crossbow)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.RANGED,
           },
@@ -841,14 +865,15 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageSubType: PhysicalDamageSubType.RANGED,
             basePower: 1,
           },
-          "Cataract": {
+          Cataract: {
             name: "Cataract",
             reqPoints: 90,
             mpCost: 54,
             castTime: 0,
             cooldown: 90,
             duration: 0,
-            description: "Deal increased damage to the front of target, reduce damage taken from the front, but increase damage taken from the back. reduces movement speed",
+            description:
+              "Deal increased damage to the front of target, reduce damage taken from the front, but increase damage taken from the back. reduces movement speed",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.RANGED,
             basePower: 3,
@@ -866,10 +891,20 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 1,
             cooldown: 0,
             duration: 0,
-             description: "Creates Poison vials (Deadly Nightshade x1, Container x1)",
-             createItems: [{ itemId: 'poison_vial', quantity: 1, consumeItems: [{ itemId: 'deadly_nightshade', quantity: 1 }, { itemId: 'container', quantity: 1 }] }],
+            description:
+              "Creates Poison vials (Deadly Nightshade x1, Container x1)",
+            createItems: [
+              {
+                itemId: "poison_vial",
+                quantity: 1,
+                consumeItems: [
+                  { itemId: "deadly_nightshade", quantity: 1 },
+                  { itemId: "container", quantity: 1 },
+                ],
+              },
+            ],
           },
-          "Toxify": {
+          Toxify: {
             name: "Toxify",
             reqPoints: 12,
             mpCost: 15,
@@ -881,20 +916,30 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             selfBuffOnly: true,
             buffEffectTable: {
               weaponAura: {
-                element: 'poison',
-                formula: 'toxify',
+                element: "poison",
+                formula: "toxify",
               },
             },
           },
-          "Serum": {
+          Serum: {
             name: "Serum",
             reqPoints: 26,
             mpCost: 3,
             castTime: 1,
             cooldown: 0,
             duration: 0,
-            description: "Create an antidote to remove poison (Antidote Herb x1, Container x1)",
-            createItems: [{ itemId: 'antidote', quantity: 1, consumeItems: [{ itemId: 'antidote_herb', quantity: 1 }, { itemId: 'container', quantity: 1 }] }],
+            description:
+              "Create an antidote to remove poison (Antidote Herb x1, Container x1)",
+            createItems: [
+              {
+                itemId: "antidote",
+                quantity: 1,
+                consumeItems: [
+                  { itemId: "antidote_herb", quantity: 1 },
+                  { itemId: "container", quantity: 1 },
+                ],
+              },
+            ],
           },
           "Potion Crafting": {
             name: "Potion Crafting",
@@ -903,10 +948,21 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 0,
             duration: 0,
-            description: "Create a mysterious potion to cure disease, silence, and burn (Moonlight Herb x1, Aquilegia x1, Container x1)",
-            createItems: [{ itemId: 'mysterious_potion', quantity: 1, consumeItems: [{ itemId: 'moonlight_herb', quantity: 1 }, { itemId: 'aquilegia', quantity: 1 }, { itemId: 'container', quantity: 1 }] }],
+            description:
+              "Create a mysterious potion to cure disease, silence, and burn (Moonlight Herb x1, Aquilegia x1, Container x1)",
+            createItems: [
+              {
+                itemId: "mysterious_potion",
+                quantity: 1,
+                consumeItems: [
+                  { itemId: "moonlight_herb", quantity: 1 },
+                  { itemId: "aquilegia", quantity: 1 },
+                  { itemId: "container", quantity: 1 },
+                ],
+              },
+            ],
           },
-          "Befuddle": {
+          Befuddle: {
             name: "Befuddle",
             reqPoints: 50,
             mpCost: 31,
@@ -929,7 +985,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Increased damage with poison when using Toxify",
             isPassive: true,
           },
-          "Surveillance": {
+          Surveillance: {
             name: "Surveillance",
             reqPoints: 71,
             mpCost: 44,
@@ -947,20 +1003,22 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 60,
             duration: 30,
-            description: "Drink a mysterious potion to gain a temporary buff, increase accuracy, prevent taking critical hits",
+            description:
+              "Drink a mysterious potion to gain a temporary buff, increase accuracy, prevent taking critical hits",
             basePower: 1,
             isBuff: true,
             selfBuffOnly: true,
           },
-          "Overdose": {
+          Overdose: {
             name: "Overdose",
             reqPoints: 90,
             mpCost: 25,
             castTime: 0,
             cooldown: 45,
             duration: 0,
-             description: "Drinking a potion will heal the party for a large amount",
-             sacrificeHeal: true,
+            description:
+              "Drinking a potion will heal the party for a large amount",
+            sacrificeHeal: true,
           },
         },
       },
@@ -968,7 +1026,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 9,
         name: "Assassination",
         skills: {
-          "Backstab": {
+          Backstab: {
             name: "Backstab",
             reqPoints: 8,
             mpCost: 15,
@@ -992,18 +1050,19 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 1,
           },
-          "Rush": {
+          Rush: {
             name: "Rush",
             reqPoints: 26,
             mpCost: 30,
             castTime: 0,
             cooldown: 90,
             duration: 20,
-            description: "Each attack hits twice, caster takes more damage (dagger, knuckles)",
+            description:
+              "Each attack hits twice, caster takes more damage (dagger, knuckles)",
             isBuff: true,
             selfBuffOnly: true,
           },
-          "Blindside": {
+          Blindside: {
             name: "Blindside",
             reqPoints: 41,
             mpCost: 15,
@@ -1017,8 +1076,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             hasDebuff: true,
             debuffDuration: 2,
             debuffEffectTable: {
-              debuffCategory: 'trip',
-            }
+              debuffCategory: "trip",
+            },
           },
           "Pierce Armor": {
             name: "Pierce Armor",
@@ -1027,7 +1086,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 10,
             duration: 0,
-            description: "Attack that ignores armor, bonus damage against knocked down targets",
+            description:
+              "Attack that ignores armor, bonus damage against knocked down targets",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 1,
@@ -1039,7 +1099,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 55,
             duration: 0,
-            description: "Attack back of target to reset all skill cooldowns (dagger, knuckles), only against other players",
+            description:
+              "Attack back of target to reset all skill cooldowns (dagger, knuckles), only against other players",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 3,
@@ -1051,12 +1112,13 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 15,
             duration: 0,
-            description: "Can be used while hiding, deals a heavy blow from behind",
+            description:
+              "Can be used while hiding, deals a heavy blow from behind",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.SLASH,
             basePower: 3,
           },
-          "Overkill": {
+          Overkill: {
             name: "Overkill",
             reqPoints: 90,
             mpCost: 70,
@@ -1074,7 +1136,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 10,
         name: "Trap",
         skills: {
-          "Disarm": {
+          Disarm: {
             name: "Disarm",
             reqPoints: 8,
             mpCost: 10,
@@ -1098,7 +1160,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             debuffEffectTable: {
               debuffCategory: "stun",
             },
-            consumableItem: 'trap',
+            consumableItem: "trap",
             consumableItemQuantity: 1,
           },
           "Plant Mine": {
@@ -1114,7 +1176,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageType: DamageType.MAGICAL,
             damageSubType: MagicalDamageSubType.FIRE,
             basePower: 2,
-            consumableItem: 'trap',
+            consumableItem: "trap",
             consumableItemQuantity: 1,
           },
           "Worm Bomb": {
@@ -1124,11 +1186,12 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 3,
             cooldown: 5,
             duration: 0,
-            description: "Trap that crawls forward and explodes on target (Trap x1)",
+            description:
+              "Trap that crawls forward and explodes on target (Trap x1)",
             damageType: DamageType.MAGICAL,
             damageSubType: MagicalDamageSubType.FIRE,
             basePower: 2,
-            consumableItem: 'trap',
+            consumableItem: "trap",
             consumableItemQuantity: 1,
           },
           "Safe Zone": {
@@ -1138,7 +1201,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 1.5,
             cooldown: 8,
             duration: 0,
-            description: "Create a field that prevents field spells from being used or doing damage",
+            description:
+              "Create a field that prevents field spells from being used or doing damage",
             isAOE: true,
             aoeRadius: 2,
             isBuff: true,
@@ -1151,10 +1215,11 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 1.5,
             cooldown: 3,
             duration: 0,
-            description: "Create a stone prison around mounted target (Trap x1)",
+            description:
+              "Create a stone prison around mounted target (Trap x1)",
             isAOE: true,
             aoeTargetMode: AOETargetMode.GROUND_TARGETED,
-            consumableItem: 'trap',
+            consumableItem: "trap",
             consumableItemQuantity: 1,
           },
           "Mind Warp": {
@@ -1171,7 +1236,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
               mpDamage: 50,
               mpDamageDirect: true,
             },
-            consumableItem: 'trap',
+            consumableItem: "trap",
             consumableItemQuantity: 1,
           },
           "Poison Bomb": {
@@ -1181,14 +1246,15 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 8,
             cooldown: 3,
             duration: 0,
-            description: "Trap that explodes on target, deals damage and poisons (Trap x1)",
+            description:
+              "Trap that explodes on target, deals damage and poisons (Trap x1)",
             damageType: DamageType.MAGICAL,
             basePower: 2,
             hasDebuff: true,
             debuffEffectTable: {
-                dot: 'poison',
+              dot: "poison",
             },
-            consumableItem: 'trap',
+            consumableItem: "trap",
             consumableItemQuantity: 1,
           },
           "Oil Bomb": {
@@ -1198,16 +1264,17 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 6,
             cooldown: 30,
             duration: 0,
-            description: "Trap that moves forward and explodes on target, deals damage (Trap x1)",
+            description:
+              "Trap that moves forward and explodes on target, deals damage (Trap x1)",
             damageType: DamageType.MAGICAL,
             damageSubType: MagicalDamageSubType.FIRE,
             basePower: 3,
             hasDebuff: true,
             debuffDuration: 5,
             debuffEffectTable: {
-              debuffCategory: "burn"
+              debuffCategory: "burn",
             },
-            consumableItem: 'trap',
+            consumableItem: "trap",
             consumableItemQuantity: 1,
           },
         },
@@ -1216,7 +1283,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 11,
         name: "Dodge",
         skills: {
-          "Backstep": {
+          Backstep: {
             name: "Backstep",
             reqPoints: 3,
             mpCost: 5,
@@ -1227,9 +1294,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             isBuff: true,
             buffEffectTable: {
               dodgeChance: 100,
-            }
+            },
           },
-          "Dash": {
+          Dash: {
             name: "Dash",
             reqPoints: 8,
             mpCost: 18,
@@ -1278,7 +1345,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Knockdown/Knockback/Freeze resistance",
             isPassive: true,
           },
-          "Avoidance": {
+          Avoidance: {
             name: "Avoidance",
             reqPoints: 41,
             mpCost: 38,
@@ -1295,10 +1362,11 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             mpCost: 0,
             castTime: 0,
             cooldown: 0,
-            duration: 0, description: "Chance to dodge magic",
+            duration: 0,
+            description: "Chance to dodge magic",
             isPassive: true,
           },
-          "Bolster": {
+          Bolster: {
             name: "Bolster",
             reqPoints: 66,
             mpCost: 29,
@@ -1325,9 +1393,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             buffEffectTable: {
               moveSpeed: 200,
             },
-
           },
-          "Sprint": {
+          Sprint: {
             name: "Sprint",
             reqPoints: 90,
             mpCost: 18,
@@ -1339,7 +1406,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
               moveSpeed: 200,
             },
           },
-          "Spurt": {
+          Spurt: {
             name: "Spurt",
             reqPoints: 90,
             mpCost: 18,
@@ -1369,8 +1436,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 4,
             duration: 0,
             description: "Restore HP based on level, expertise, and INT",
+            skillType: SkillType.HEAL,
+            healing: { type: "single" },
           },
-          "Cleanse": {
+          Cleanse: {
             name: "Cleanse",
             reqPoints: 12,
             mpCost: 15,
@@ -1379,19 +1448,24 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 0,
             description: "Cure Poison",
           },
-          "Regenerate": {
+          Regenerate: {
             name: "Regenerate",
             reqPoints: 21,
             mpCost: 40,
             castTime: 1.5,
             cooldown: 5,
             duration: 120,
-            description: "Every few seconds, restore a party member\'s HP based on SPI and expertise",
+            description:
+              "Every few seconds, restore a party member\'s HP based on SPI and expertise",
             buffEffectTable: {
-              healingOverTime: { base: 15, spiScale: 0.1, proficiencyStat: 'Grace' },
+              healingOverTime: {
+                base: 15,
+                spiScale: 0.8,
+                proficiencyStat: "Grace",
+              },
             },
           },
-          "Vivify": {
+          Vivify: {
             name: "Vivify",
             reqPoints: 26,
             mpCost: 18,
@@ -1400,16 +1474,21 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 0,
             description: "Cure sleep/knock out/freeze",
           },
-          "Restoration": {
+          Restoration: {
             name: "Restoration",
             reqPoints: 41,
             mpCost: 90,
             castTime: 3,
             cooldown: 20,
             duration: 120,
-            description: "Restore party HP over time based on level, expertise, and INT",
+            description:
+              "Restore party HP over time based on level, expertise, and INT",
             buffEffectTable: {
-              healingOverTime: { base: 15, spiScale: 0.1, proficiencyStat: 'Grace' },
+              healingOverTime: {
+                base: 15,
+                spiScale: 0.8,
+                proficiencyStat: "Grace",
+              },
             },
           },
           "Healing Aura": {
@@ -1427,29 +1506,31 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
               partyHeal: 500,
             },
           },
-          "Purify": {
+          Purify: {
             name: "Purify",
             reqPoints: 71,
             mpCost: 76,
             castTime: 1.5,
             cooldown: 35,
             duration: 15,
-            description: "Cures all debuffs and increases resistance to debuffs for 15 seconds",
+            description:
+              "Cures all debuffs and increases resistance to debuffs for 15 seconds",
             buffEffectTable: {
               dispelDebuff: true,
               debuffResist: 0.5,
             },
           },
-          "Sacrifice": {
+          Sacrifice: {
             name: "Sacrifice",
             reqPoints: 81,
             mpCost: 0,
             castTime: 0,
             cooldown: 300,
             duration: 0,
-            description: "Sacrifice self to restore a party member's HP, consumes 5 Holy Waters",
+            description:
+              "Sacrifice self to restore a party member's HP, consumes 5 Holy Waters",
             sacrificeHeal: true,
-            consumableItem: 'holy_water',
+            consumableItem: "holy_water",
             consumableItemQuantity: 5,
           },
         },
@@ -1458,7 +1539,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 14,
         name: "Blessing",
         skills: {
-          "Velox": {
+          Velox: {
             name: "Velox",
             reqPoints: 8,
             mpCost: 26,
@@ -1526,7 +1607,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             },
             description: "Increase player's defense",
           },
-          "Impedimentia": {
+          Impedimentia: {
             name: "Impedimentia",
             reqPoints: 21,
             mpCost: 33,
@@ -1547,9 +1628,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 1.5,
             duration: 120,
             buffEffectTable: {
-              physicalDamageReduction: 'formula:(10 + blessing / 5) / 100',
+              physicalDamageReduction: "formula:(10 + blessing / 5) / 100",
             },
-            description: "Physical damage reduction on all party members in range. Reduction based on caster's Blessing proficiency",
+            description:
+              "Physical damage reduction on all party members in range. Reduction based on caster's Blessing proficiency",
             isAOE: true,
           },
           "Aqua Elimus": {
@@ -1560,9 +1642,15 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 0,
             duration: 0,
             description: "Craft one Holy Water (Container x1)",
-            createItems: [{ itemId: 'holy_water', quantity: 1, consumeItems: [{ itemId: 'container', quantity: 1 }] }],
+            createItems: [
+              {
+                itemId: "holy_water",
+                quantity: 1,
+                consumeItems: [{ itemId: "container", quantity: 1 }],
+              },
+            ],
           },
-          "Saltio": {
+          Saltio: {
             name: "Saltio",
             reqPoints: 54,
             mpCost: 37,
@@ -1582,14 +1670,18 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 1.5,
             duration: 480,
             buffEffectTable: {
-              attackPowerMultiplierProficiency: { baseStat: 'blessing', perProficiency: 0.01, proficiencyStat: 'Blessing' },
+              attackPowerMultiplierProficiency: {
+                baseStat: "blessing",
+                perProficiency: 0.01,
+                proficiencyStat: "Blessing",
+              },
               str: 9,
               agi: 9,
               int: 9,
             },
             description: "Increase player's STR, AGI, and INT",
           },
-          "Locomitigation": {
+          Locomitigation: {
             name: "Locomitigation",
             reqPoints: 81,
             mpCost: 100,
@@ -1653,7 +1745,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Embue weapon with holy aura",
             buffEffectTable: {
               weaponAura: {
-                element: 'holy',
+                element: "holy",
                 spiTiers: [
                   { spi: 0, min: 4, max: 5 },
                   { spi: 17, min: 6, max: 7 },
@@ -1668,7 +1760,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
               },
             },
           },
-          "Remedium": {
+          Remedium: {
             name: "Remedium",
             reqPoints: 41,
             mpCost: 26,
@@ -1693,7 +1785,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             pulseCount: 5,
             pulseInterval: 1000,
           },
-          "Banish": {
+          Banish: {
             name: "Banish",
             reqPoints: 61,
             mpCost: 0,
@@ -1704,7 +1796,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Banish a summoned object or monster",
             banishObject: true,
           },
-          "Devotion": {
+          Devotion: {
             name: "Devotion",
             reqPoints: [
               { skillName: "Exorcism", points: 61 },
@@ -1714,9 +1806,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 3,
             cooldown: 0.5,
             duration: 300,
-            description: "All MP costs of targeted party member are taken from your MP pool",
+            description:
+              "All MP costs of targeted party member are taken from your MP pool",
             buffEffectTable: {
-              damageRedirect: { targetId: '' },
+              damageRedirect: { targetId: "" },
             },
           },
           "Silent Void": {
@@ -1729,7 +1822,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             isAOE: true,
             aoeRadius: 5,
             aoeTargetMode: AOETargetMode.GROUND_TARGETED,
-            description: "Create a field that negates all field spells, targeted and non-targeted",
+            description:
+              "Create a field that negates all field spells, targeted and non-targeted",
             negateFieldSpells: true,
             fieldSpellNegationRadius: 5,
           },
@@ -1740,18 +1834,20 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 3,
             cooldown: 10,
             duration: 0,
-            description: "Implant a holy bomb in target, delayed explosion does large damage based on INT",
+            description:
+              "Implant a holy bomb in target, delayed explosion does large damage based on INT",
             basePower: 5,
             delayExplosion: { minSeconds: 3, maxSeconds: 8 },
           },
-          "Abstention": {
+          Abstention: {
             name: "Abstention",
             reqPoints: 90,
             mpCost: 77,
             castTime: 3,
             cooldown: 60,
             duration: 0,
-            description: "Prevent target from using field spells until debuff expires",
+            description:
+              "Prevent target from using field spells until debuff expires",
             debuffEffectTable: {
               preventFieldSpells: true,
             },
@@ -1762,37 +1858,37 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 16,
         name: "Hymn",
         skills: {
-           "Green Song": {
-             name: "Green Song",
-             reqPoints: 8,
-             mpCost: 30,
-             castTime: 0,
-             cooldown: 5,
-              duration: 0,
-              description: "Increase accuracy and dodge for those in song range",
-              isAOE: true,
-              aoeRadius: 3,
-              aoeTargetMode: AOETargetMode.SELF_CENTERED,
-              isSong: true,
-              buffEffectTable: {
-                songType: 'green',
-                spiValues: [
-                  {
-                    value: 33,
-                    Blessing: [
-                      { value: 8, dodgeChance: 1, accuracy: 1 },
-                      { value: 16, dodgeChance: 2, accuracy: 2 },
-                      { value: 24, dodgeChance: 3, accuracy: 3 },
-                      { value: 31, dodgeChance: 4, accuracy: 4 },
-                      { value: 39, dodgeChance: 5, accuracy: 5 },
-                      { value: 47, dodgeChance: 6, accuracy: 6 },
-                      { value: 54, dodgeChance: 7, accuracy: 7 },
-                      { value: 62, dodgeChance: 8, accuracy: 8 },
-                    ],
-                  },
-                ],
-              },
+          "Green Song": {
+            name: "Green Song",
+            reqPoints: 8,
+            mpCost: 30,
+            castTime: 0,
+            cooldown: 5,
+            duration: 0,
+            description: "Increase accuracy and dodge for those in song range",
+            isAOE: true,
+            aoeRadius: 3,
+            aoeTargetMode: AOETargetMode.SELF_CENTERED,
+            isSong: true,
+            buffEffectTable: {
+              songType: "green",
+              spiValues: [
+                {
+                  value: 33,
+                  Blessing: [
+                    { value: 8, dodgeChance: 1, accuracy: 1 },
+                    { value: 16, dodgeChance: 2, accuracy: 2 },
+                    { value: 24, dodgeChance: 3, accuracy: 3 },
+                    { value: 31, dodgeChance: 4, accuracy: 4 },
+                    { value: 39, dodgeChance: 5, accuracy: 5 },
+                    { value: 47, dodgeChance: 6, accuracy: 6 },
+                    { value: 54, dodgeChance: 7, accuracy: 7 },
+                    { value: 62, dodgeChance: 8, accuracy: 8 },
+                  ],
+                },
+              ],
             },
+          },
           "Luminous Chant (Passive)": {
             name: "Luminous Chant (Passive)",
             reqPoints: 12,
@@ -1803,28 +1899,29 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Gain ability to move while chanting",
             isPassive: true,
           },
-           "Blue Song": {
-             name: "Blue Song",
-             reqPoints: [
-               { skillName: "Hymn", points: 30 },
-               { skillName: "Blessing", points: 71 },
-             ],
-             mpCost: 33,
-             castTime: 0,
-             cooldown: 5,
-             duration: 0,
-             description: "Increase magical damage and decrease skill cooldowns for all in song range",
-             isAOE: true,
-             aoeRadius: 3,
-             aoeTargetMode: AOETargetMode.SELF_CENTERED,
-             isSong: true,
-             buffEffectTable: {
-               songType: 'blue',
-               songCooldownReduction: 0.3,
-               magicalDamageBonus: 0.1,
-               auraDamageIncrease: 0.1,
-             },
-           },
+          "Blue Song": {
+            name: "Blue Song",
+            reqPoints: [
+              { skillName: "Hymn", points: 30 },
+              { skillName: "Blessing", points: 71 },
+            ],
+            mpCost: 33,
+            castTime: 0,
+            cooldown: 5,
+            duration: 0,
+            description:
+              "Increase magical damage and decrease skill cooldowns for all in song range",
+            isAOE: true,
+            aoeRadius: 3,
+            aoeTargetMode: AOETargetMode.SELF_CENTERED,
+            isSong: true,
+            buffEffectTable: {
+              songType: "blue",
+              songCooldownReduction: 0.3,
+              magicalDamageBonus: 0.1,
+              auraDamageIncrease: 0.1,
+            },
+          },
           "Yellow Song": {
             name: "Yellow Song",
             reqPoints: [
@@ -1835,14 +1932,19 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 5,
             duration: 0,
-            description: "Players in song range gain immunity to damage below a certain threshold",
+            description:
+              "Players in song range gain immunity to damage below a certain threshold",
             isAOE: true,
             aoeRadius: 3,
             aoeTargetMode: AOETargetMode.SELF_CENTERED,
             isSong: true,
             buffEffectTable: {
-              songType: 'yellow',
-              songDamageNegation: { base: 30, spiScale: 3.8, proficiencyCap: 45 },
+              songType: "yellow",
+              songDamageNegation: {
+                base: 30,
+                spiScale: 3.8,
+                proficiencyCap: 45,
+              },
             },
           },
           "Red Song": {
@@ -1855,13 +1957,15 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 6,
             duration: 0,
-            description: "Damage LP and MP for all enemies in range",
+            description: "Damage LP and MP for all enemies in range each pulse",
             basePower: 2,
             isAOE: true,
             aoeTargetMode: AOETargetMode.SELF_CENTERED,
             aoeRadius: 3,
             isSong: true,
-            mpDamage: true,
+            buffEffectTable: {
+              songType: "red",
+            },
           },
         },
       },
@@ -1873,7 +1977,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 18,
         name: "Elemental",
         skills: {
-          "Hailstone": {
+          Hailstone: {
             name: "Hailstone",
             reqPoints: 8,
             mpCost: 18,
@@ -1891,7 +1995,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 2,
             cooldown: 5,
             duration: 0,
-            description: "Launch a ball of lightning that damages all enemies in range",
+            description:
+              "Launch a ball of lightning that damages all enemies in range",
             damageSubType: MagicalDamageSubType.LIGHTNING,
             basePower: 1.4,
             isAOE: true,
@@ -1907,7 +2012,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageSubType: MagicalDamageSubType.ICE,
             basePower: 3,
           },
-          "Firestorm": {
+          Firestorm: {
             name: "Firestorm",
             reqPoints: 26,
             mpCost: 100,
@@ -1930,7 +2035,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 1.5,
             cooldown: 3.5,
             duration: 20,
-            description: "Reduce fire damage taken, increase ice and lightning damage taken",
+            description:
+              "Reduce fire damage taken, increase ice and lightning damage taken",
             basePower: 0,
             buffEffectTable: {
               resistMods: { fire: 50, ice: -25, lightning: -25 },
@@ -1943,7 +2049,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 1.5,
             cooldown: 3.5,
             duration: 20,
-            description: "Reduce ice damage taken, increase fire and lightning damage taken",
+            description:
+              "Reduce ice damage taken, increase fire and lightning damage taken",
             basePower: 0,
             buffEffectTable: {
               resistMods: { ice: 50, fire: -25, lightning: -25 },
@@ -1956,7 +2063,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 1.5,
             cooldown: 3.5,
             duration: 20,
-            description: "Reduce lightning damage taken, increase fire and ice damage taken",
+            description:
+              "Reduce lightning damage taken, increase fire and ice damage taken",
             basePower: 0,
             buffEffectTable: {
               resistMods: { lightning: 50, fire: -25, ice: -25 },
@@ -1969,7 +2077,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 7.5,
             cooldown: 20,
             duration: 3,
-            description: "Summon a storm of ice that damages all enemies in range",
+            description:
+              "Summon a storm of ice that damages all enemies in range",
             damageSubType: MagicalDamageSubType.ICE,
             basePower: 1,
             isAOE: true,
@@ -1985,10 +2094,11 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 2,
             cooldown: 6,
             duration: 0,
-            description: "Implant a bomb in target, delayed explosion does large damage based on INT",
+            description:
+              "Implant a bomb in target, delayed explosion does large damage based on INT",
             basePower: 2,
           },
-          "Thunderstorm": {
+          Thunderstorm: {
             name: "Thunderstorm",
             reqPoints: [
               { skillName: "Elemental", points: 61 },
@@ -2017,7 +2127,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 20,
             cooldown: 20,
             duration: 0,
-            description: "Unleash a massive meteor storm, dealing heavy damage to all enemies nearby",
+            description:
+              "Unleash a massive meteor storm, dealing heavy damage to all enemies nearby",
             basePower: 4,
             isAOE: true,
             aoeTargetMode: AOETargetMode.GROUND_TARGETED,
@@ -2035,7 +2146,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 21,
             cooldown: 20,
             duration: 0,
-            description: "Summon a swamp that damages, slows, and poisons all enemies in range",
+            description:
+              "Summon a swamp that damages, slows, and poisons all enemies in range",
             damageSubType: MagicalDamageSubType.DARK,
             basePower: 2,
             isAOE: true,
@@ -2051,7 +2163,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 7.5,
             cooldown: 20,
             duration: 0,
-            description: "Summon a storm of ice that damages all enemies in range",
+            description:
+              "Summon a storm of ice that damages all enemies in range",
             damageSubType: MagicalDamageSubType.ICE,
             isAOE: true,
             aoeTargetMode: AOETargetMode.GROUND_TARGETED,
@@ -2060,7 +2173,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             pulseCount: 10,
             pulseInterval: 1000,
           },
-          "Cremation": {
+          Cremation: {
             name: "Cremation",
             reqPoints: 81,
             mpCost: 650,
@@ -2130,7 +2243,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 3.5,
             cooldown: 10,
             duration: 0,
-            description: "Release 3 blades of energy that damage all enemies in their path. Deals bonus damage based on enemy defense",
+            description:
+              "Release 3 blades of energy that damage all enemies in their path. Deals bonus damage based on enemy defense",
             basePower: 2,
             isAOE: true,
             damageVsLowDefense: true,
@@ -2143,7 +2257,12 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             cooldown: 90,
             duration: 180,
             description: "Create a wall that blocks all damage",
-            summonObject: { objectType: 'wall', duration: 180, hp: 5000, defense: 500 },
+            summonObject: {
+              objectType: "wall",
+              duration: 180,
+              hp: 5000,
+              defense: 500,
+            },
           },
           "Summon Sandman": {
             name: "Summon Sandman",
@@ -2152,7 +2271,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 7,
             cooldown: 30,
             duration: 10,
-            description: "Summon a sandstorm that knocks back enemies, sleeping, and damaging them",
+            description:
+              "Summon a sandstorm that knocks back enemies, sleeping, and damaging them",
             basePower: 3,
           },
           "Summon Plant": {
@@ -2162,10 +2282,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 2,
             cooldown: 60,
             duration: 180,
-            description: "Summon an elemental plant that damages all enemies in range. Element depends on weapon enhancement (+5 = 50, +8 = 70)",
+            description:
+              "Summon an elemental plant that damages all enemies in range. Element depends on weapon enhancement (+5 = 50, +8 = 70)",
             isAOE: true,
-            summonObject: { objectType: 'plant', duration: 180, aoeDamage: 50 },
-
+            summonObject: { objectType: "plant", duration: 180, aoeDamage: 50 },
           },
           "Regia Pureizu": {
             name: "Regia Pureizu",
@@ -2186,10 +2306,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 10,
             cooldown: 60,
             duration: 60,
-            description: "Summon a wyvern that damages all enemies in frontal cone, moving freely on the battlefield. Disappears after 60 seconds.",
+            description:
+              "Summon a wyvern that damages all enemies in frontal cone, moving freely on the battlefield. Disappears after 60 seconds.",
             isAOE: true,
-            summonObject: { objectType: 'wyvern', duration: 60, aoeDamage: 80 },
-
+            summonObject: { objectType: "wyvern", duration: 60, aoeDamage: 80 },
           },
           "Summon Turtle": {
             name: "Summon Turtle",
@@ -2198,10 +2318,10 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 15,
             cooldown: 300,
             duration: 60,
-            description: "Summon a turtle that damages all enemies in a circle around it. Disappears after 60 seconds.",
+            description:
+              "Summon a turtle that damages all enemies in a circle around it. Disappears after 60 seconds.",
             isAOE: true,
-            summonObject: { objectType: 'turtle', duration: 60, aoeDamage: 60 },
-
+            summonObject: { objectType: "turtle", duration: 60, aoeDamage: 60 },
           },
         },
       },
@@ -2209,7 +2329,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 20,
         name: "Darkness",
         skills: {
-          "Poison": {
+          Poison: {
             name: "Poison",
             reqPoints: 8,
             mpCost: 24,
@@ -2220,28 +2340,29 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             isDebuff: true,
             debuffDuration: 60,
             debuffEffectTable: {
-              dot: 'poison',
+              dot: "poison",
               dotPotency: 0,
               dotTickInterval: 2000,
               dotSPIBase: 0.05,
-              dotSPIMax: 0.10,
+              dotSPIMax: 0.1,
               dotSPICap: 110,
             },
           },
-          "Gloom": {
+          Gloom: {
             name: "Gloom",
             reqPoints: 12,
             mpCost: 38,
             castTime: 2,
             cooldown: 10,
             duration: 120,
-            description: "Embue weapon with dark aura, damaging yourself with recoil",
+            description:
+              "Embue weapon with dark aura, damaging yourself with recoil",
             damageSubType: MagicalDamageSubType.DARK,
             isBuff: true,
             selfBuffOnly: true,
             buffEffectTable: {
               weaponAura: {
-                element: 'dark',
+                element: "dark",
                 spiTiers: [
                   { spi: 0, min: 16, max: 16 },
                   { spi: 17, min: 26, max: 26 },
@@ -2276,16 +2397,16 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             isDebuff: true,
             debuffDuration: 30,
             debuffEffectTable: {
-              dot: 'severe_poison',
+              dot: "severe_poison",
               dotPotency: 0,
               dotTickInterval: 3000,
               dotMpDrain: 5,
-              dotSPIBase: 0.10,
+              dotSPIBase: 0.1,
               dotSPIMax: 0.15,
               dotSPICap: 110,
             },
           },
-          "Dispel": {
+          Dispel: {
             name: "Dispel",
             reqPoints: 33,
             mpCost: 26,
@@ -2302,14 +2423,15 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 1.5,
             cooldown: 3.5,
             duration: 20,
-            description: "Reduce dark damage taken, greatly reducing charm resistance",
+            description:
+              "Reduce dark damage taken, greatly reducing charm resistance",
             basePower: 2,
             isBuff: true,
             buffEffectTable: {
               resistMods: { dark: 25, charm: -50 },
             },
           },
-          "Undermine": {
+          Undermine: {
             name: "Undermine",
             reqPoints: 41,
             mpCost: 26,
@@ -2324,7 +2446,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
               consumable: true,
             },
           },
-          "Pestilence": {
+          Pestilence: {
             name: "Pestilence",
             reqPoints: 54,
             mpCost: 62,
@@ -2360,7 +2482,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 3,
             cooldown: 10,
             duration: 6,
-            description: "Summon darkness from the abyss to damage all enemies in range",
+            description:
+              "Summon darkness from the abyss to damage all enemies in range",
             damageType: DamageType.MAGICAL,
             damageSubType: MagicalDamageSubType.DARK,
             basePower: 5,
@@ -2375,7 +2498,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
               debuffCategory: "weaken",
             },
           },
-          "Ramkyado": {
+          Ramkyado: {
             name: "Ramkyado",
             reqPoints: [
               { skillName: "Darkness", points: 78 },
@@ -2397,11 +2520,12 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 90,
             duration: 0,
-            description: "Bind targets in large AOE, preventing them from moving",
+            description:
+              "Bind targets in large AOE, preventing them from moving",
             isAOE: true,
             debuffEffectTable: {
               moveSpeedDown: 0.1,
-            }
+            },
           },
           "Sins Genocide": {
             name: "Sins Genocide",
@@ -2410,7 +2534,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 0,
             cooldown: 30,
             duration: 0,
-            description: "Use the magic sword called from the abyss to skewer your opponent",
+            description:
+              "Use the magic sword called from the abyss to skewer your opponent",
             damageType: DamageType.MAGICAL,
             damageSubType: MagicalDamageSubType.DARK,
             basePower: 2,
@@ -2421,7 +2546,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
         id: 21,
         name: "Confusion",
         skills: {
-          "Weakness": {
+          Weakness: {
             name: "Weakness",
             reqPoints: 8,
             mpCost: 18,
@@ -2431,11 +2556,11 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Reduce target's attack",
             isDebuff: true,
             debuffEffectTable: {
-              debuffCategory: 'disorder',
+              debuffCategory: "disorder",
               attackDown: 0.15,
             },
           },
-          "Sandstorm": {
+          Sandstorm: {
             name: "Sandstorm",
             reqPoints: 12,
             mpCost: 51,
@@ -2445,8 +2570,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Summon a sandstorm that puts target to sleep",
             basePower: 3,
             debuffEffectTable: {
-              debuffCategory: "sleep"  
-            }
+              debuffCategory: "sleep",
+            },
           },
           "Psionic Blast": {
             name: "Psionic Blast",
@@ -2459,7 +2584,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             basePower: 1,
             mpDamage: true,
           },
-          "Weaken": {
+          Weaken: {
             name: "Weaken",
             reqPoints: 26,
             mpCost: 18,
@@ -2469,11 +2594,11 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             description: "Reduce target's defense",
             isDebuff: true,
             debuffEffectTable: {
-              debuffCategory: 'disorder',
+              debuffCategory: "disorder",
               defenseDown: 0.15,
             },
           },
-          "Impede": {
+          Impede: {
             name: "Impede",
             reqPoints: 33,
             mpCost: 28,
@@ -2482,9 +2607,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             duration: 120,
             description: "Reduce target's dodge",
             debuffEffectTable: {
-              debuffCategory: 'ailment',
+              debuffCategory: "ailment",
               dodgeDown: 0.5,
-            }
+            },
           },
           "Resist Charm": {
             name: "Resist Charm",
@@ -2493,7 +2618,8 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             castTime: 1.5,
             cooldown: 3.5,
             duration: 7,
-            description: "Increase charm resistance, greatly reducing dark resistance",
+            description:
+              "Increase charm resistance, greatly reducing dark resistance",
             buffEffectTable: {
               resistMods: { charm: 25, dark: -50 },
             },
@@ -2509,33 +2635,34 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             damageSubType: MagicalDamageSubType.ICE,
             basePower: 1,
             debuffEffectTable: {
-              debuffCategory: 'ailment',
+              debuffCategory: "ailment",
               hasFreeze: {
-                duration: 5
+                duration: 5,
               },
-              moveSpeedDown: 0.3
-            }
+              moveSpeedDown: 0.3,
+            },
           },
-          "Wasteland": {
+          Wasteland: {
             name: "Wasteland",
             reqPoints: 54,
             mpCost: 44,
             castTime: 0.5,
             cooldown: 30,
             duration: 30,
-            description: "Summon a poion wasteland that damages and slows all enemies in range",
+            description:
+              "Summon a poion wasteland that damages and slows all enemies in range",
             basePower: 2,
             isAOE: true,
             aoeTargetMode: AOETargetMode.GROUND_TARGETED,
             aoeRadius: 8,
             debuffEffectTable: {
-              dot: 'poison',
+              dot: "poison",
               dotPotency: 0,
               dotTickInterval: 2000,
               dotSPIBase: 0.05,
-              dotSPIMax: 0.10,
+              dotSPIMax: 0.1,
               dotSPICap: 110,
-              moveSpeedDown: 0.5
+              moveSpeedDown: 0.5,
             },
           },
           "Siren Storm": {
@@ -2562,7 +2689,7 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
             basePower: 3,
             preventResurrect: true,
           },
-          "Hallucination": {
+          Hallucination: {
             name: "Hallucination",
             reqPoints: 90,
             mpCost: 65,
@@ -2579,12 +2706,6 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
   },
   22: {
     skills: [
-      {
-        id: 23,
-        name: "Racial",
-        skills: {},
-        hidden: true,
-      },
       {
         id: 24,
         name: "Horsemanship",
@@ -2624,7 +2745,9 @@ export const CLASS_SKILL_DATA: Record<number, { skills: SkillCategoryData['skill
   },
 };
 
-export function findSkillDefinition(skillName: string): import('../types/skills').SkillDefinition | null {
+export function findSkillDefinition(
+  skillName: string,
+): import("../types/skills").SkillDefinition | null {
   for (const category of Object.values(CLASS_SKILL_DATA)) {
     for (const subSkill of category.skills) {
       if (subSkill.skills[skillName]) {

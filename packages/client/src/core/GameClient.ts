@@ -719,17 +719,17 @@ export class GameClient {
     this.network.onPacket(PacketType.SONG_PULSE, (packet: any) => {
       const { entityId, songType } = packet.data;
       const engine = this.getEngine();
-      const entity = this.knownEntities.get(entityId);
-      if (entity && engine) {
-        const pos = entity.mesh?.position;
-        if (pos) {
-          engine.createSongPulse(entityId, songType, { x: pos.x, y: pos.y, z: pos.z });
+      if (!engine) return;
+
+      if (entityId === this.playerId) {
+        const mesh = engine.getPlayerMesh();
+        if (mesh?.position) {
+          engine.createSongPulse(entityId, songType, { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z });
         }
-      }
-      if (entityId === this.playerId && engine) {
-        const playerPos = engine.getPlayerPosition();
-        if (playerPos) {
-          engine.createSongPulse(entityId, songType, playerPos);
+      } else {
+        const group = engine.getMeshGroup(entityId);
+        if (group?.root.position) {
+          engine.createSongPulse(entityId, songType, { x: group.root.position.x, y: group.root.position.y, z: group.root.position.z });
         }
       }
     });
@@ -1087,6 +1087,10 @@ export class GameClient {
 
   allocateSkillPoint(subCategoryName: string, count: number = 1): void {
     this.network.allocateSkillPoint(subCategoryName, count);
+  }
+
+  allocateSkillBatch(allocations: Record<string, number>): void {
+    this.network.allocateSkillBatch(allocations);
   }
 
   getCurrentZoneId(): string | null {

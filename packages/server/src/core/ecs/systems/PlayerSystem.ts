@@ -25,6 +25,7 @@ import {
   getDodgeAgiBonus,
   computeAilmentResist,
   computeDisorderResist,
+  getMaxPotential,
 } from '@dust-saga/shared';
 
 export class PlayerSystem extends System {
@@ -241,6 +242,11 @@ export class PlayerSystem extends System {
     if (!validNames.includes(subCategoryName)) return false;
     if (count <= 0 || !Number.isFinite(count)) return false;
     if (session.unspentSkillPoints < count) return false;
+
+    const designJobId = getDesignJobId(session.jobId);
+    const maxPoints = getMaxPotential(designJobId, subCategoryName);
+    const currentPoints = session.skillProficiencies[subCategoryName] || 0;
+    if (currentPoints + count > maxPoints) return false;
 
     session.skillProficiencies[subCategoryName] = (session.skillProficiencies[subCategoryName] || 0) + count;
     session.unspentSkillPoints -= count;

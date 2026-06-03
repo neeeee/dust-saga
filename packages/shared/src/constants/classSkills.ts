@@ -1,11 +1,11 @@
-import { SkillType } from '../types/skills';
-import type { ClassSpecificSkills } from '../types/skills';
-import { StatusEffectType } from '../types/status';
-import { BaseClass } from '../types/jobs';
+import { SkillType } from "../types/skills";
+import type { ClassSpecificSkills } from "../types/skills";
+import { StatusEffectType } from "../types/status";
+import { BaseClass } from "../types/jobs";
 
 export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
   0: {
-    "Provoke": {
+    Provoke: {
       reqLevel: 5,
       mpCost: 0,
       castTime: 0,
@@ -23,7 +23,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "12% more potion effectiveness",
       skillType: SkillType.PASSIVE,
     },
-    "Lunge": {
+    Lunge: {
       reqLevel: 15,
       mpCost: 25,
       castTime: 0,
@@ -34,7 +34,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   1: {
-    "Provoke": {
+    Provoke: {
       reqLevel: 5,
       mpCost: 0,
       castTime: 0,
@@ -52,7 +52,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "12% more potion effectiveness",
       skillType: SkillType.PASSIVE,
     },
-    "Lunge": {
+    Lunge: {
       reqLevel: 15,
       mpCost: 25,
       castTime: 0,
@@ -105,7 +105,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   2: {
-    "Provoke": {
+    Provoke: {
       reqLevel: 5,
       mpCost: 0,
       castTime: 0,
@@ -123,7 +123,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "12% more potion effectiveness",
       skillType: SkillType.PASSIVE,
     },
-    "Lunge": {
+    Lunge: {
       reqLevel: 15,
       mpCost: 25,
       castTime: 0,
@@ -169,7 +169,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase attack power of next attack",
       skillType: SkillType.BUFF,
     },
-    "Desperado": {
+    Desperado: {
       reqLevel: 45,
       mpCost: 39,
       castTime: 0,
@@ -189,7 +189,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   3: {
-    "Provoke": {
+    Provoke: {
       reqLevel: 5,
       mpCost: 0,
       castTime: 0,
@@ -207,7 +207,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "12% more potion effectiveness",
       skillType: SkillType.PASSIVE,
     },
-    "Lunge": {
+    Lunge: {
       reqLevel: 15,
       mpCost: 25,
       castTime: 0,
@@ -271,7 +271,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Can use skills and charge on horseback",
       skillType: SkillType.PASSIVE,
     },
-    "Charge": {
+    Charge: {
       reqLevel: 50,
       mpCost: 41,
       castTime: 0,
@@ -282,7 +282,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   4: {
-    "Provoke": {
+    Provoke: {
       reqLevel: 5,
       mpCost: 0,
       castTime: 0,
@@ -300,7 +300,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "12% more potion effectiveness",
       skillType: SkillType.PASSIVE,
     },
-    "Lunge": {
+    Lunge: {
       reqLevel: 15,
       mpCost: 25,
       castTime: 0,
@@ -318,7 +318,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Provoke target to attack you",
       skillType: SkillType.DEBUFF,
     },
-    "Providence": {
+    Providence: {
       reqLevel: 28,
       mpCost: 62,
       castTime: 0.5,
@@ -329,7 +329,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   5: {
-    "Provoke": {
+    Provoke: {
       reqLevel: 5,
       mpCost: 0,
       castTime: 0,
@@ -347,7 +347,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "12% more potion effectiveness",
       skillType: SkillType.PASSIVE,
     },
-    "Lunge": {
+    Lunge: {
       reqLevel: 15,
       mpCost: 25,
       castTime: 0,
@@ -365,7 +365,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Provoke target to attack you",
       skillType: SkillType.DEBUFF,
     },
-    "Providence": {
+    Providence: {
       reqLevel: 28,
       mpCost: 62,
       castTime: 0.5,
@@ -380,7 +380,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       castTime: 0,
       cooldown: 0,
       duration: 0,
-      description: "Automatically deflects charge damage when blocking (Shield)",
+      description:
+        "Automatically deflects charge damage when blocking (Shield)",
       skillType: SkillType.PASSIVE,
     },
     "Jousting (Passive)": {
@@ -404,7 +405,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   6: {
-    "Provoke": {
+    Provoke: {
       reqLevel: 5,
       mpCost: 0,
       castTime: 0,
@@ -422,7 +423,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "12% more potion effectiveness",
       skillType: SkillType.PASSIVE,
     },
-    "Lunge": {
+    Lunge: {
       reqLevel: 15,
       mpCost: 25,
       castTime: 0,
@@ -440,7 +441,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Provoke target to attack you",
       skillType: SkillType.DEBUFF,
     },
-    "Providence": {
+    Providence: {
       reqLevel: 28,
       mpCost: 62,
       castTime: 0.5,
@@ -478,7 +479,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   7: {
-    "Invigorate": {
+    Invigorate: {
       reqLevel: 5,
       mpCost: 16,
       castTime: 0,
@@ -487,7 +488,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase movement speed",
       skillType: SkillType.BUFF,
     },
-    "Hide": {
+    Hide: {
       reqLevel: 18,
       mpCost: 24,
       castTime: 0,
@@ -498,7 +499,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   8: {
-    "Invigorate": {
+    Invigorate: {
       reqLevel: 5,
       mpCost: 16,
       castTime: 0,
@@ -507,7 +508,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase movement speed",
       skillType: SkillType.BUFF,
     },
-    "Hide": {
+    Hide: {
       reqLevel: 18,
       mpCost: 24,
       castTime: 0,
@@ -525,7 +526,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase accuracy",
       skillType: SkillType.PASSIVE,
     },
-    "Accelerate": {
+    Accelerate: {
       reqLevel: 28,
       mpCost: 16,
       castTime: 0.5,
@@ -545,7 +546,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   9: {
-    "Invigorate": {
+    Invigorate: {
       reqLevel: 5,
       mpCost: 16,
       castTime: 0,
@@ -554,7 +555,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase movement speed",
       skillType: SkillType.BUFF,
     },
-    "Hide": {
+    Hide: {
       reqLevel: 18,
       mpCost: 24,
       castTime: 0,
@@ -572,7 +573,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase accuracy",
       skillType: SkillType.PASSIVE,
     },
-    "Accelerate": {
+    Accelerate: {
       reqLevel: 28,
       mpCost: 16,
       castTime: 0.5,
@@ -596,7 +597,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       castTime: 2,
       cooldown: 5,
       duration: 0,
-      description: "Attack Power, Accuracy, Range buff while stationary (Bow, Crossbow)",
+      description:
+        "Attack Power, Accuracy, Range buff while stationary (Bow, Crossbow)",
       skillType: SkillType.BUFF,
     },
     "Kindling Arrow": {
@@ -610,7 +612,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   10: {
-    "Invigorate": {
+    Invigorate: {
       reqLevel: 5,
       mpCost: 16,
       castTime: 0,
@@ -619,7 +621,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase movement speed",
       skillType: SkillType.BUFF,
     },
-    "Hide": {
+    Hide: {
       reqLevel: 18,
       mpCost: 24,
       castTime: 0,
@@ -637,7 +639,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase accuracy",
       skillType: SkillType.PASSIVE,
     },
-    "Accelerate": {
+    Accelerate: {
       reqLevel: 28,
       mpCost: 16,
       castTime: 0.5,
@@ -684,7 +686,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   11: {
-    "Invigorate": {
+    Invigorate: {
       reqLevel: 5,
       mpCost: 16,
       castTime: 0,
@@ -693,7 +695,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase movement speed",
       skillType: SkillType.BUFF,
     },
-    "Hide": {
+    Hide: {
       reqLevel: 18,
       mpCost: 24,
       castTime: 0,
@@ -711,7 +713,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Dodge rate buff",
       skillType: SkillType.PASSIVE,
     },
-    "Cloak": {
+    Cloak: {
       reqLevel: 20,
       mpCost: 45,
       castTime: 2,
@@ -731,7 +733,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   12: {
-    "Invigorate": {
+    Invigorate: {
       reqLevel: 5,
       mpCost: 16,
       castTime: 0,
@@ -740,7 +742,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase movement speed",
       skillType: SkillType.BUFF,
     },
-    "Hide": {
+    Hide: {
       reqLevel: 18,
       mpCost: 24,
       castTime: 0,
@@ -758,7 +760,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Dodge rate buff",
       skillType: SkillType.PASSIVE,
     },
-    "Cloak": {
+    Cloak: {
       reqLevel: 20,
       mpCost: 45,
       castTime: 2,
@@ -785,7 +787,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "No cloaked movement penalty, minor MP regen buff",
       skillType: SkillType.PASSIVE,
     },
-    "Counterpunch": {
+    Counterpunch: {
       reqLevel: 50,
       mpCost: 0,
       castTime: 0,
@@ -796,7 +798,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
     },
   },
   13: {
-    "Invigorate": {
+    Invigorate: {
       reqLevel: 5,
       mpCost: 16,
       castTime: 0,
@@ -805,7 +807,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase movement speed",
       skillType: SkillType.BUFF,
     },
-    "Hide": {
+    Hide: {
       reqLevel: 18,
       mpCost: 24,
       castTime: 0,
@@ -823,7 +825,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Dodge rate buff",
       skillType: SkillType.PASSIVE,
     },
-    "Cloak": {
+    Cloak: {
       reqLevel: 20,
       mpCost: 45,
       castTime: 2,
@@ -869,7 +871,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 0,
       description: "Heal target",
       skillType: SkillType.HEAL,
-      healing: { type: 'single' },
+      healing: { type: "single" },
     },
   },
   15: {
@@ -882,7 +884,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase MP regen",
       skillType: SkillType.PASSIVE,
     },
-    "Heal": {
+    Heal: {
       reqLevel: 18,
       mpCost: 62,
       castTime: 2,
@@ -890,7 +892,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 0,
       description: "Heal target",
       skillType: SkillType.HEAL,
-      healing: { type: 'single' },
+      healing: { type: "single" },
     },
     "Inspiration (Passive)": {
       reqLevel: 20,
@@ -919,15 +921,16 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase LP for party, 15% of base LP + 250",
       skillType: SkillType.HP_BUFF,
     },
-    "Revive": {
+    Revive: {
       reqLevel: 35,
       mpCost: 65,
       castTime: 5,
       cooldown: 30,
       duration: 0,
-      description: "Revive a fallen ally, restoring them with partial HP. Consumes 3 Holy Water.",
+      description:
+        "Revive a fallen ally, restoring them with partial HP. Consumes 3 Holy Water.",
       skillType: SkillType.REVIVE,
-      consumableItem: 'Holy Water',
+      consumableItem: "Holy Water",
       consumableItemQuantity: 3,
     },
   },
@@ -941,7 +944,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase MP regen",
       skillType: SkillType.PASSIVE,
     },
-    "Heal": {
+    Heal: {
       reqLevel: 18,
       mpCost: 62,
       castTime: 2,
@@ -949,7 +952,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 0,
       description: "Heal target",
       skillType: SkillType.HEAL,
-      healing: { type: 'single' },
+      healing: { type: "single" },
     },
     "Inspiration (Passive)": {
       reqLevel: 20,
@@ -978,18 +981,19 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase LP for party, 15% of base LP + 250",
       skillType: SkillType.HP_BUFF,
     },
-    "Revive": {
+    Revive: {
       reqLevel: 35,
       mpCost: 65,
       castTime: 5,
       cooldown: 30,
       duration: 0,
-      description: "Revive a fallen ally, restoring them with partial HP. Consumes 3 Holy Water.",
+      description:
+        "Revive a fallen ally, restoring them with partial HP. Consumes 3 Holy Water.",
       skillType: SkillType.REVIVE,
-      consumableItem: 'Holy Water',
+      consumableItem: "Holy Water",
       consumableItemQuantity: 3,
     },
-    "Sanctuary": {
+    Sanctuary: {
       reqLevel: 45,
       mpCost: 87,
       castTime: 5,
@@ -997,7 +1001,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 0,
       description: "AOE LP regen",
       skillType: SkillType.PARTY_HEAL,
-      healing: { type: 'party' },
+      healing: { type: "party" },
     },
     "Merciful Blessing (Passive)": {
       reqLevel: 50,
@@ -1019,7 +1023,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase MP regen",
       skillType: SkillType.PASSIVE,
     },
-    "Heal": {
+    Heal: {
       reqLevel: 18,
       mpCost: 62,
       castTime: 2,
@@ -1027,7 +1031,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 0,
       description: "Heal target",
       skillType: SkillType.HEAL,
-      healing: { type: 'single' },
+      healing: { type: "single" },
     },
     "Inspiration (Passive)": {
       reqLevel: 20,
@@ -1047,18 +1051,19 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase MP regen for party",
       skillType: SkillType.BUFF,
     },
-    "Revive": {
+    Revive: {
       reqLevel: 35,
       mpCost: 65,
       castTime: 5,
       cooldown: 30,
       duration: 0,
-      description: "Revive a fallen ally, restoring them with partial HP. Consumes 3 Holy Water.",
+      description:
+        "Revive a fallen ally, restoring them with partial HP. Consumes 3 Holy Water.",
       skillType: SkillType.REVIVE,
-      consumableItem: 'Holy Water',
+      consumableItem: "Holy Water",
       consumableItemQuantity: 3,
     },
-    "Enchantment": {
+    Enchantment: {
       reqLevel: 45,
       mpCost: 68,
       castTime: 0.5,
@@ -1087,7 +1092,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase MP regen",
       skillType: SkillType.PASSIVE,
     },
-    "Heal": {
+    Heal: {
       reqLevel: 18,
       mpCost: 62,
       castTime: 2,
@@ -1095,7 +1100,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 0,
       description: "Heal target",
       skillType: SkillType.HEAL,
-      healing: { type: 'single' },
+      healing: { type: "single" },
     },
     "Blessed Garments (Passive)": {
       reqLevel: 20,
@@ -1103,7 +1108,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       castTime: 0,
       cooldown: 0,
       duration: 0,
-      description: "Poison, Charm, and Magic resistance increase when gear is enhanced with holy",
+      description:
+        "Poison, Charm, and Magic resistance increase when gear is enhanced with holy",
       skillType: SkillType.PASSIVE,
     },
     "Mana Restore": {
@@ -1184,7 +1190,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase MP regen",
       skillType: SkillType.PASSIVE,
     },
-    "Heal": {
+    Heal: {
       reqLevel: 18,
       mpCost: 62,
       castTime: 2,
@@ -1192,7 +1198,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 0,
       description: "Heal target",
       skillType: SkillType.HEAL,
-      healing: { type: 'single' },
+      healing: { type: "single" },
     },
     "Blessed Garments (Passive)": {
       reqLevel: 20,
@@ -1200,7 +1206,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       castTime: 0,
       cooldown: 0,
       duration: 0,
-      description: "Poison, Charm, and Magic resistance increase when gear is enhanced with holy",
+      description:
+        "Poison, Charm, and Magic resistance increase when gear is enhanced with holy",
       skillType: SkillType.PASSIVE,
     },
     "Mana Restore": {
@@ -1300,7 +1307,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase MP regen",
       skillType: SkillType.PASSIVE,
     },
-    "Heal": {
+    Heal: {
       reqLevel: 18,
       mpCost: 62,
       castTime: 2,
@@ -1308,7 +1315,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 0,
       description: "Heal target",
       skillType: SkillType.HEAL,
-      healing: { type: 'single' },
+      healing: { type: "single" },
     },
     "Blessed Garments (Passive)": {
       reqLevel: 20,
@@ -1316,7 +1323,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       castTime: 0,
       cooldown: 0,
       duration: 0,
-      description: "Poison, Charm, and Magic resistance increase when gear is enhanced with holy",
+      description:
+        "Poison, Charm, and Magic resistance increase when gear is enhanced with holy",
       skillType: SkillType.PASSIVE,
     },
     "Mana Restore": {
@@ -1415,7 +1423,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Fire a bolt of fire at target",
       skillType: SkillType.DAMAGE_MAGICAL,
     },
-    "Shock": {
+    Shock: {
       reqLevel: 12,
       mpCost: 44,
       castTime: 0.5,
@@ -1436,7 +1444,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Fire a bolt of fire at target",
       skillType: SkillType.DAMAGE_MAGICAL,
     },
-    "Shock": {
+    Shock: {
       reqLevel: 12,
       mpCost: 44,
       castTime: 0.5,
@@ -1475,7 +1483,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Fire a bolt of fire at target",
       skillType: SkillType.DAMAGE_MAGICAL,
     },
-    "Shock": {
+    Shock: {
       reqLevel: 12,
       mpCost: 44,
       castTime: 0.5,
@@ -1523,7 +1531,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Fire a bolt of fire at target",
       skillType: SkillType.DAMAGE_MAGICAL,
     },
-    "Shock": {
+    Shock: {
       reqLevel: 12,
       mpCost: 44,
       castTime: 0.5,
@@ -1551,7 +1559,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Strike the target with electricity",
       skillType: SkillType.DAMAGE_MAGICAL,
     },
-    "Teleport": {
+    Teleport: {
       reqLevel: 45,
       mpCost: 24,
       castTime: 2,
@@ -1560,7 +1568,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Create a portal to a memorized a location outside of town",
       skillType: SkillType.UTILITY,
     },
-    "Memorize": {
+    Memorize: {
       reqLevel: 45,
       mpCost: 10,
       castTime: 1,
@@ -1569,7 +1577,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Memorize a location outside of town",
       skillType: SkillType.UTILITY,
     },
-    "Intelleto": {
+    Intelleto: {
       reqLevel: 50,
       mpCost: 0,
       castTime: 0,
@@ -1584,7 +1592,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       castTime: 0,
       cooldown: 0,
       duration: 0,
-      description: "Increases power and reduces cooldown of invocation spells, soul bright is a 5s debuff",
+      description:
+        "Increases power and reduces cooldown of invocation spells, soul bright is a 5s debuff",
       skillType: SkillType.PASSIVE,
     },
   },
@@ -1598,7 +1607,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Fire a bolt of fire at target",
       skillType: SkillType.DAMAGE_MAGICAL,
     },
-    "Shock": {
+    Shock: {
       reqLevel: 12,
       mpCost: 44,
       castTime: 0.5,
@@ -1614,7 +1623,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       castTime: 0,
       cooldown: 0,
       duration: 0,
-      description: "Fire, Ice, and Lightning resistance increase when gear is enhanced with dark",
+      description:
+        "Fire, Ice, and Lightning resistance increase when gear is enhanced with dark",
       skillType: SkillType.PASSIVE,
     },
   },
@@ -1628,7 +1638,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Fire a bolt of fire at target",
       skillType: SkillType.DAMAGE_MAGICAL,
     },
-    "Shock": {
+    Shock: {
       reqLevel: 12,
       mpCost: 44,
       castTime: 0.5,
@@ -1644,7 +1654,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       castTime: 0,
       cooldown: 0,
       duration: 0,
-      description: "Fire, Ice, and Lightning resistance increase when gear is enhanced with dark",
+      description:
+        "Fire, Ice, and Lightning resistance increase when gear is enhanced with dark",
       skillType: SkillType.PASSIVE,
     },
     "Discomfort (Passive)": {
@@ -1667,7 +1678,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Fire a bolt of fire at target",
       skillType: SkillType.DAMAGE_MAGICAL,
     },
-    "Shock": {
+    Shock: {
       reqLevel: 12,
       mpCost: 44,
       castTime: 0.5,
@@ -1683,7 +1694,8 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       castTime: 0,
       cooldown: 0,
       duration: 0,
-      description: "Fire, Ice, and Lightning resistance increase when gear is enhanced with dark",
+      description:
+        "Fire, Ice, and Lightning resistance increase when gear is enhanced with dark",
       skillType: SkillType.PASSIVE,
     },
     "Dark Shield (Passive)": {
@@ -1715,37 +1727,40 @@ const BASE_CLASS_OFFSETS: Record<string, number> = {
 };
 
 export const JOB_TO_CLASS_SKILLS_INDEX: Record<string, number> = {
-  'warrior': 0,
-  'gladiator': 1,
-  'juggernaut': 2,
-  'dragoon': 3,
-  'knight': 4,
-  'warlord': 4,
-  'paladin': 5,
-  'scout': 7,
-  'archer': 8,
-  'sniper': 9,
-  'hunter': 8,
-  'provocateur': 11,
-  'assassin': 13,
-  'saboteur': 11,
-  'shadowblade': 12,
-  'acolyte': 14,
-  'priest': 15,
-  'cleric': 16,
-  'enchanter': 17,
-  'ascetic': 18,
-  'monk': 19,
-  'exorcist': 19,
-  'mage': 21,
-  'wizard': 22,
-  'warlock': 23,
-  'conjurer': 24,
-  'sorcerer': 25,
-  'corruptor': 26,
+  warrior: 0,
+  gladiator: 1,
+  juggernaut: 2,
+  dragoon: 3,
+  knight: 4,
+  warlord: 4,
+  paladin: 5,
+  scout: 7,
+  archer: 8,
+  sniper: 9,
+  hunter: 8,
+  provocateur: 11,
+  assassin: 13,
+  saboteur: 11,
+  shadowblade: 12,
+  acolyte: 14,
+  priest: 15,
+  cleric: 16,
+  enchanter: 17,
+  ascetic: 18,
+  monk: 19,
+  exorcist: 19,
+  mage: 21,
+  wizard: 22,
+  warlock: 23,
+  conjurer: 24,
+  sorcerer: 25,
+  corruptor: 26,
 };
 
-export function getClassSpecificSkillsForJob(jobId: string, baseClass: BaseClass): ClassSpecificSkills {
+export function getClassSpecificSkillsForJob(
+  jobId: string,
+  baseClass: BaseClass,
+): ClassSpecificSkills {
   const index = JOB_TO_CLASS_SKILLS_INDEX[jobId];
   if (index !== undefined && CLASS_SPECIFIC_SKILLS[index]) {
     return CLASS_SPECIFIC_SKILLS[index];

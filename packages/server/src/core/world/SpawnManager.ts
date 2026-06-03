@@ -108,4 +108,11 @@ export class SpawnManager {
     });
     return all;
   }
+
+  findZoneOfEnemy(enemyId: string): string | undefined {
+    for (const [zoneId, enemies] of this.spawnedEnemies) {
+      if (enemies.has(enemyId)) return zoneId;
+    }
+    return undefined;
+  }
 }

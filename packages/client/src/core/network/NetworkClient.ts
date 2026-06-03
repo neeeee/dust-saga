@@ -302,6 +302,14 @@ export class NetworkClient {
     });
   }
 
+  allocateSkillBatch(allocations: Record<string, number>): void {
+    this.sendPacket({
+      type: PacketType.SKILL_ALLOCATE,
+      timestamp: Date.now(),
+      data: { allocations }
+    });
+  }
+
   isSocketConnected(): boolean {
     return this.isConnected;
   }

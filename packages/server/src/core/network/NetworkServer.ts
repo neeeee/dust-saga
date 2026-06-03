@@ -64,7 +64,7 @@ export class NetworkServer implements NetworkContext {
     entitiesInside: Map<string, number>;
   }> = new Map();
 
-  private dummyMeta: Map<string, {
+  readonly dummyMeta: Map<string, {
     ownerId: string;
     isPvp: boolean;
     isWalking: boolean;
@@ -108,11 +108,8 @@ export class NetworkServer implements NetworkContext {
   }
 
   findCharacterBySocket(socketId: string): string | undefined {
-    const playerId = this.state.socketToPlayer.get(socketId);
-    if (!playerId) return undefined;
-
-    for (const [characterId, session] of this.state.players) {
-      if (session.socketId === socketId) return characterId;
+    for (const [characterId, socket] of this.state.playerToSocket) {
+      if (socket === socketId) return characterId;
     }
     return undefined;
   }
@@ -122,9 +119,8 @@ export class NetworkServer implements NetworkContext {
   }
 
   findZoneOfEntity(entityId: string): string {
-    for (const [zoneId, enemies] of this.spawnMgr['spawnedEnemies']) {
-      if (enemies.has(entityId)) return zoneId;
-    }
+    const enemyZone = this.spawnMgr.findZoneOfEnemy(entityId);
+    if (enemyZone) return enemyZone;
     for (const [, session] of this.state.players) {
       if (session.characterId === entityId) return session.zoneId;
     }
@@ -132,10 +128,7 @@ export class NetworkServer implements NetworkContext {
   }
 
   findZoneOfEnemy(enemyId: string): string | undefined {
-    for (const [zoneId, enemies] of this.spawnMgr['spawnedEnemies']) {
-      if (enemies.has(enemyId)) return zoneId;
-    }
-    return undefined;
+    return this.spawnMgr.findZoneOfEnemy(enemyId);
   }
 
   sendToSocket(socketId: string, packet: Packet): void {
@@ -372,6 +365,13 @@ export class NetworkServer implements NetworkContext {
   }
 
   applyPlayerDamage(target: PlayerSession, damage: number, attackerId: string, damageType: string, isCritical: boolean, zoneId: string, attackerPosition?: { x: number; y: number; z: number }): { redirected: boolean; damageTaken: number } {
+    const negationEffect = target.statusEffects?.find(
+      e => e.type === StatusEffectType.BUFF_DAMAGE_NEGATION && e.buffData?.damageNegationThreshold
+    );
+    if (negationEffect && damage <= (negationEffect.buffData!.damageNegationThreshold!)) {
+      return { redirected: false, damageTaken: 0 };
+    }
+
     const protectedEffect = target.statusEffects?.find(
       e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy
     );
@@ -1159,6 +1159,8 @@ export class NetworkServer implements NetworkContext {
 
       for (const e of toRemove) {
         e.lastInRangeAt = Date.now();
+        e.appliedAt = Date.now();
+        e.duration = 5000;
       }
 
       if (targetId !== caster.characterId) {
@@ -1646,11 +1648,18 @@ export class NetworkServer implements NetworkContext {
     if (!songEffect) return;
 
     const skill = this.skillSys.findSkillDefinition(songEffect.skillName || '');
-    if (!skill?.buffEffectTable) return;
+    if (!skill) return;
 
     songEffect.lastPulseAt = Date.now();
 
     const songRadius = skill.aoeRadius || 3;
+
+    if (songEffect.type === StatusEffectType.SONG_RED && skill.basePower) {
+      this.applyRedSongDamage(caster, skill, songRadius);
+      return;
+    }
+
+    if (!skill.buffEffectTable) return;
     const pulseTargets: PlayerSession[] = [caster];
 
     for (const [targetId, target] of this.state.players) {
@@ -1658,6 +1667,7 @@ export class NetworkServer implements NetworkContext {
       if (target.isDead) continue;
       if (target.zoneId !== caster.zoneId) continue;
       if (!target.position || !caster.position) continue;
+      if (!this.isPartyMember(caster.characterId, targetId)) continue;
 
       const dx = caster.position.x - target.position.x;
       const dz = caster.position.z - target.position.z;
@@ -1697,7 +1707,44 @@ export class NetworkServer implements NetworkContext {
       songEffect.lastPulseAt = now;
 
       const skill = this.skillSys.findSkillDefinition(songEffect.skillName || '');
-      if (!skill?.buffEffectTable) continue;
+
+      const mpDrain = Math.ceil((skill?.mpCost || 30) * 0.3);
+      caster.stats.mana = Math.max(0, caster.stats.mana - mpDrain);
+      if (caster.stats.mana <= 0) {
+        caster.statusEffects = caster.statusEffects.filter(e => {
+          if (songTypes.includes(e.type) && !e.songProximityBuff) return false;
+          return true;
+        });
+        this.removeSongProximityBuffs(caster);
+        this.playerSys.recalcStats(caster);
+        this.sendToPlayer(charId, {
+          type: PacketType.STATUS_EFFECT_UPDATE,
+          timestamp: Date.now(),
+          data: { effects: caster.statusEffects }
+        });
+        this.sendToPlayer(charId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { characterId: charId, stats: caster.stats, statBreakdown: caster.statBreakdown, skillProficiencies: caster.skillProficiencies, skillAdeptness: caster.skillAdeptness }
+        });
+        this.sendToPlayer(charId, {
+          type: PacketType.CHAT_MESSAGE,
+          timestamp: Date.now(),
+          data: { sender: 'System', message: 'Song ended - insufficient MP.', channel: 'system' }
+        });
+        this.broadcastEntityEffects(caster);
+        continue;
+      }
+
+      this.sendToPlayer(charId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId: charId, stats: caster.stats }
+      });
+
+      if (!skill) continue;
+
+      if (!skill.buffEffectTable && songEffect.type !== StatusEffectType.SONG_RED) continue;
       const songRadius = skill.aoeRadius || 3;
 
       const pulseTargets: PlayerSession[] = [caster];
@@ -1707,6 +1754,7 @@ export class NetworkServer implements NetworkContext {
         if (target.isDead) continue;
         if (target.zoneId !== caster.zoneId) continue;
         if (!target.position || !caster.position) continue;
+        if (!this.isPartyMember(charId, targetId)) continue;
 
         const dx = caster.position.x - target.position.x;
         const dz = caster.position.z - target.position.z;
@@ -1719,6 +1767,91 @@ export class NetworkServer implements NetworkContext {
       for (const target of pulseTargets) {
         const isCaster = target.characterId === charId;
         this.applySongPulse(target, caster, skill, now, BUFF_DUR, isCaster);
+      }
+
+      if (songEffect.type === StatusEffectType.SONG_RED && skill.basePower) {
+        this.applyRedSongDamage(caster, skill, songRadius);
+      }
+    }
+  }
+
+  private applyRedSongDamage(
+    caster: PlayerSession,
+    skill: NonNullable<ReturnType<typeof this.skillSys.findSkillDefinition>>,
+    songRadius: number
+  ): void {
+    if (!caster.position) return;
+    const basePower = skill.basePower || 2;
+    const totalSpi = (caster.baseStats?.SPI || 0) + (caster.statPoints?.SPI || 0);
+    const exorcismProf = caster.skillProficiencies?.['Exorcism'] || 0;
+    const baseDamage = Math.floor(basePower * (totalSpi * 0.5 + exorcismProf * 0.3 + caster.stats.level * 0.2));
+    const mpDamage = Math.floor(baseDamage * 0.5);
+
+    const enemiesInZone = this.spawnMgr.getEnemiesInZone(caster.zoneId);
+    for (const [enemyId, enemy] of enemiesInZone) {
+      if (enemy.health <= 0) continue;
+      if (!enemy.position) continue;
+
+      const dx = caster.position.x - enemy.position.x;
+      const dz = caster.position.z - enemy.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist > songRadius) continue;
+
+      const variance = 0.9 + Math.random() * 0.2;
+      const hpDamage = Math.max(1, Math.floor(baseDamage * variance));
+
+      const { died } = this.damageEnemy(enemy, hpDamage);
+
+      this.broadcastInZone(caster.zoneId, {
+        type: PacketType.DAMAGE,
+        timestamp: Date.now(),
+        data: {
+          attackerId: caster.characterId,
+          targetId: enemyId,
+          damage: hpDamage,
+          isCritical: false,
+          damageType: 'magical',
+          skillName: skill.name,
+        }
+      });
+
+      if (died) {
+        this.handleEnemyKill(enemyId, caster.characterId);
+      }
+    }
+
+    for (const [targetId, target] of this.state.players) {
+      if (targetId === caster.characterId) continue;
+      if (target.isDead) continue;
+      if (target.zoneId !== caster.zoneId) continue;
+      if (!target.position || !caster.position) continue;
+      if (this.isPartyMember(caster.characterId, targetId)) continue;
+
+      const dx = caster.position.x - target.position.x;
+      const dz = caster.position.z - target.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist > songRadius) continue;
+
+      const variance = 0.9 + Math.random() * 0.2;
+      const hpDmg = Math.max(1, Math.floor(baseDamage * variance));
+      const mpDmg = Math.max(1, Math.floor(mpDamage * variance));
+
+      const dmgResult = this.applyPlayerDamage(target, hpDmg, caster.characterId, 'magical', false, target.zoneId);
+      if (!dmgResult.redirected) {
+        target.stats.mana = Math.max(0, target.stats.mana - mpDmg);
+        this.sendToPlayer(targetId, {
+          type: PacketType.DAMAGE,
+          timestamp: Date.now(),
+          data: { attackerId: caster.characterId, targetId, damage: dmgResult.damageTaken, isCritical: false, damageType: 'magical', skillName: skill.name, mpDamage: mpDmg }
+        });
+        this.sendToPlayer(targetId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { characterId: targetId, stats: target.stats, statBreakdown: target.statBreakdown }
+        });
+        if (target.stats.health <= 0) {
+          this.handlePlayerDeath(target);
+        }
       }
     }
   }
@@ -1800,6 +1933,15 @@ export class NetworkServer implements NetworkContext {
           }
         }
       }
+    }
+
+    if (bt.songDamageNegation) {
+      const dn = bt.songDamageNegation;
+      const totalSpi = (caster.baseStats?.SPI || 0) + (caster.statPoints?.SPI || 0);
+      const hymnProf = caster.skillProficiencies?.['Hymn'] || 0;
+      const profBonus = Math.min(hymnProf, dn.proficiencyCap);
+      const threshold = Math.floor(dn.base + totalSpi * dn.spiScale + profBonus);
+      pushSongBuff(StatusEffectType.BUFF_DAMAGE_NEGATION, 0, { damageNegationThreshold: threshold });
     }
 
     if (effects.length === 0) return;
@@ -2771,7 +2913,7 @@ export class NetworkServer implements NetworkContext {
     });
   }
 
-  private spawnDummy(session: PlayerSession): void {
+  spawnDummy(session: PlayerSession): void {
     this.dummyCounter++;
     const dummyId = `dummy_${Date.now()}_${this.dummyCounter}`;
     const dummyJob: JobId = JobId.WARRIOR;
@@ -2857,7 +2999,7 @@ export class NetworkServer implements NetworkContext {
     });
   }
 
-  private despawnDummy(dummyId: string, session: PlayerSession): void {
+  despawnDummy(dummyId: string, session: PlayerSession): void {
     const meta = this.dummyMeta.get(dummyId);
     if (!meta || meta.ownerId !== session.characterId) {
       this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
@@ -2884,7 +3026,7 @@ export class NetworkServer implements NetworkContext {
     });
   }
 
-  private setDummyProperty(dummyId: string, prop: string, value: string, session: PlayerSession): void {
+  setDummyProperty(dummyId: string, prop: string, value: string, session: PlayerSession): void {
     const meta = this.dummyMeta.get(dummyId);
     if (!meta || meta.ownerId !== session.characterId) {
       this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
@@ -2940,7 +3082,7 @@ export class NetworkServer implements NetworkContext {
     });
   }
 
-  private setDummyClass(dummyId: string, jobIdStr: string, session: PlayerSession): void {
+  setDummyClass(dummyId: string, jobIdStr: string, session: PlayerSession): void {
     const meta = this.dummyMeta.get(dummyId);
     if (!meta || meta.ownerId !== session.characterId) {
       this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
@@ -2995,7 +3137,7 @@ export class NetworkServer implements NetworkContext {
     });
   }
 
-  private setDummyGear(dummyId: string, preset: string, session: PlayerSession): void {
+  setDummyGear(dummyId: string, preset: string, session: PlayerSession): void {
     const meta = this.dummyMeta.get(dummyId);
     if (!meta || meta.ownerId !== session.characterId) {
       this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
@@ -3041,7 +3183,7 @@ export class NetworkServer implements NetworkContext {
     });
   }
 
-  private toggleDummyPvp(dummyId: string, session: PlayerSession): void {
+  toggleDummyPvp(dummyId: string, session: PlayerSession): void {
     const meta = this.dummyMeta.get(dummyId);
     if (!meta || meta.ownerId !== session.characterId) {
       this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
@@ -3069,7 +3211,7 @@ export class NetworkServer implements NetworkContext {
     });
   }
 
-  private toggleDummyWalk(dummyId: string, session: PlayerSession): void {
+  toggleDummyWalk(dummyId: string, session: PlayerSession): void {
     const meta = this.dummyMeta.get(dummyId);
     if (!meta || meta.ownerId !== session.characterId) {
       this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
@@ -3096,7 +3238,7 @@ export class NetworkServer implements NetworkContext {
     });
   }
 
-  private toggleDummyParty(dummyId: string, session: PlayerSession): void {
+  toggleDummyParty(dummyId: string, session: PlayerSession): void {
     const meta = this.dummyMeta.get(dummyId);
     if (!meta || meta.ownerId !== session.characterId) {
       this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });

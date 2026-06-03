@@ -194,6 +194,24 @@ export class SkillSystem {
       return { canUse: false, error: 'passive' };
     }
 
+    const proficiencies = session.skillProficiencies || {};
+    const subCategory = SKILL_TO_SUBCATEGORY[skillName];
+    if (skill.reqLevel && skill.reqLevel > session.stats.level) {
+      return { canUse: false, error: 'insufficient_level' };
+    }
+    if (skill.reqPoints) {
+      if (typeof skill.reqPoints === 'number') {
+        const subPoints = subCategory ? (proficiencies[subCategory] || 0) : 0;
+        if (subPoints < skill.reqPoints) {
+          return { canUse: false, error: 'insufficient_proficiency' };
+        }
+      } else if (Array.isArray(skill.reqPoints)) {
+        if (!meetsRequirements(skill.reqPoints, (name: string) => proficiencies[name] || 0)) {
+          return { canUse: false, error: 'insufficient_proficiency' };
+        }
+      }
+    }
+
     if (session.stats.mana < skill.mpCost) {
       return { canUse: false, error: 'no_mana' };
     }
@@ -493,6 +511,7 @@ export class SkillSystem {
     const isMagical = damageType === 'magical';
     const numHits = skill.baseHits || 1;
     const hitChance = this.calculateAccuracy(session, target);
+    const effectiveStats = getEffectiveStats(session.stats, session.statPoints, session.statusEffects || []);
 
     const basePower = skill.basePower ?? 1;
     const baseStats = session.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
@@ -620,7 +639,8 @@ export class SkillSystem {
         session.stats.level,
         targetResists,
         (session.equipment?.weapon as any)?.enhancementElement,
-        (session.equipment?.weapon as any)?.enhancementLevel
+        (session.equipment?.weapon as any)?.enhancementLevel,
+        effectiveStats.auraDamageMultiplier
       );
 
       hits.push({
