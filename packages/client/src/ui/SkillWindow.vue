@@ -23,7 +23,7 @@
           <div class="search-subcat-label" @click="toggleAccordion(r.subCat.name)">
             <span class="arrow">{{ openAccordions.has(r.subCat.name) ? '&#9660;' : '&#9654;' }}</span>
             <span>{{ r.subCat.name }}</span>
-            <span class="subcat-pts">{{ r.subCat.currentPoints }}/{{ r.subCat.maxPoints }}</span>
+            <span class="subcat-pts">{{ r.subCat.currentPoints + r.subCat.minAdeptness }}/{{ r.subCat.maxPoints }}</span>
           </div>
           <div v-if="openAccordions.has(r.subCat.name)" class="accordion-body">
             <div
@@ -41,7 +41,7 @@
               <div v-if="!iconOnly" class="skill-info">
                 <div class="skill-name">
                   {{ skill.name }}
-                  <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">{{ r.subCat.currentPoints }}/{{ skill.reqPoints }}</span>
+                  <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">{{ r.subCat.currentPoints + r.subCat.minAdeptness }}/{{ skill.reqPoints }}</span>
                   <span class="req-tag cross" v-else-if="!skill.unlocked && skill.crossReqs">{{ formatCrossReqs(skill.crossReqs) }}</span>
                   <span class="req-tag level" v-else-if="!skill.unlocked && skill.reqLevel">Lv {{ skill.reqLevel }}</span>
                   <span class="passive-tag" v-if="skill.isPassive">Passive</span>
@@ -64,11 +64,11 @@
           <div class="accordion-header" @click="toggleAccordion(subCat.name)">
             <span class="arrow">{{ openAccordions.has(subCat.name) ? '&#9660;' : '&#9654;' }}</span>
             <span class="subcat-name">{{ subCat.name }}</span>
-            <span class="subcat-pts">{{ subCat.currentPoints }}<template v-if="subCat.maxPoints > 0">/{{ subCat.maxPoints }}</template></span>
+            <span class="subcat-pts">{{ subCat.currentPoints + subCat.minAdeptness }}<template v-if="subCat.maxPoints > 0">/{{ subCat.maxPoints }}</template></span>
             <div class="alloc-controls" v-if="subCat.maxPoints > 0">
               <button class="alloc-btn minus" :disabled="pendingAlloc[subCat.name] <= 0" @click.stop="removePending(subCat.name)">-</button>
               <span class="alloc-change" v-if="pendingAlloc[subCat.name] > 0">+{{ pendingAlloc[subCat.name] }}</span>
-              <button class="alloc-btn plus" :disabled="effectiveUnspent <= 0 || subCat.currentPoints + (pendingAlloc[subCat.name] || 0) >= subCat.maxPoints" @click.stop="addPending(subCat.name)">+</button>
+              <button class="alloc-btn plus" :disabled="effectiveUnspent <= 0 || subCat.currentPoints + (pendingAlloc[subCat.name] || 0) >= subCat.maxPoints - subCat.minAdeptness" @click.stop="addPending(subCat.name)">+</button>
             </div>
           </div>
           <div v-if="openAccordions.has(subCat.name)" :class="iconOnly ? 'icon-grid' : 'accordion-body'">
@@ -104,7 +104,7 @@
                 <div class="skill-info">
                   <div class="skill-name">
                     {{ skill.name }}
-                     <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">{{ subCat.currentPoints + (pendingAlloc[subCat.name] || 0) }}/{{ skill.reqPoints }}</span>
+                     <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">{{ subCat.currentPoints + subCat.minAdeptness + (pendingAlloc[subCat.name] || 0) }}/{{ skill.reqPoints }}</span>
                      <span class="req-tag cross" v-else-if="!skill.unlocked && skill.crossReqs">{{ formatCrossReqs(skill.crossReqs) }}</span>
                      <span class="req-tag level" v-else-if="!skill.unlocked && skill.reqLevel">Lv {{ skill.reqLevel }}</span>
                     <span class="passive-tag" v-if="skill.isPassive">Passive</span>
@@ -194,7 +194,7 @@ function addPending(name: string): void {
   if (effectiveUnspent.value <= 0) return;
   const sub = allSubCategories.value.find(s => s.name === name);
   if (!sub) return;
-  if ((sub.currentPoints + (pendingAlloc[name] || 0)) >= sub.maxPoints) return;
+  if ((sub.currentPoints + (pendingAlloc[name] || 0)) >= sub.maxPoints - sub.minAdeptness) return;
   pendingAlloc[name] = (pendingAlloc[name] || 0) + 1;
 }
 

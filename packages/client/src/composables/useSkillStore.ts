@@ -15,6 +15,7 @@ import {
   SUB_CATEGORY_TO_CATEGORY,
   meetsRequirements,
   getMaxPotential,
+  getMinAdeptness,
   getDesignJobId,
 } from '@dust-saga/shared';
 
@@ -54,6 +55,7 @@ export interface SubCategoryInfo {
   name: string;
   currentPoints: number;
   currentAdeptness: number;
+  minAdeptness: number;
   maxPoints: number;
   skills: AvailableSkill[];
   category: string;
@@ -326,6 +328,12 @@ export function useSkillStore() {
     const skills: AvailableSkill[] = [];
     const seen = new Set<string>();
     const proficiencies = state.skillProficiencies || {};
+    const designJobId = getDesignJobId(state.jobId);
+
+    const effectiveProficiencies: Record<string, number> = {};
+    for (const subName of Object.keys(SUB_CATEGORY_TO_CATEGORY)) {
+      effectiveProficiencies[subName] = (proficiencies[subName] || 0) + getMinAdeptness(designJobId, subName);
+    }
 
     for (const [, catData] of Object.entries(CLASS_SKILL_DATA)) {
       const categoryData = catData as { skills: SkillSubCategory[] };
@@ -334,7 +342,7 @@ export function useSkillStore() {
           if (seen.has(name)) continue;
           const skillDef = def as SkillDefinition;
           seen.add(name);
-          const unlocked = checkSkillUnlocked(skillDef, sub.name, proficiencies);
+          const unlocked = checkSkillUnlocked(skillDef, sub.name, effectiveProficiencies);
           skills.push({
             name,
             description: skillDef.description,
@@ -369,7 +377,7 @@ export function useSkillStore() {
         unlocked = false;
       }
       if (def.reqPoints && Array.isArray(def.reqPoints)) {
-        unlocked = meetsRequirements(def.reqPoints, (skillName: string) => proficiencies[skillName] || 0);
+        unlocked = meetsRequirements(def.reqPoints, (skillName: string) => effectiveProficiencies[skillName] || 0);
       }
       skills.push({
         name,
@@ -414,12 +422,14 @@ export function useSkillStore() {
         const cat = getCategoryForSubCategory(sub.id);
         const adeptness = state.skillAdeptness || {};
         const subSkills = state.availableSkills.filter(s => s.subCategory === sub.name);
+        const designJobId = getDesignJobId(state.jobId);
         result.push({
           id: sub.id,
           name: sub.name,
           currentPoints: proficiencies[sub.name] || 0,
           currentAdeptness: adeptness[sub.name] || 0,
-          maxPoints: getMaxPotential(getDesignJobId(state.jobId), sub.name),
+          minAdeptness: getMinAdeptness(designJobId, sub.name),
+          maxPoints: getMaxPotential(designJobId, sub.name),
           skills: subSkills,
           category: cat,
         });
@@ -433,6 +443,7 @@ export function useSkillStore() {
         name: 'Class',
         currentPoints: 0,
         currentAdeptness: 0,
+        minAdeptness: 0,
         maxPoints: 0,
         skills: classSkills,
         category: 'class',

@@ -13,6 +13,7 @@ import {
   calculateAccuracy as calcSharedAccuracy,
   calculateHitChance,
   safeFormulaEval,
+  getMinAdeptness, getDesignJobId, SUB_CATEGORY_TO_CATEGORY,
   SkillType, OnHitEffect, HealingEffect, getSkillTargetType,
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
@@ -196,17 +197,24 @@ export class SkillSystem {
 
     const proficiencies = session.skillProficiencies || {};
     const subCategory = SKILL_TO_SUBCATEGORY[skillName];
+    const designJobId = getDesignJobId(session.jobId || 'warrior');
+
+    const effectiveProficiencies: Record<string, number> = {};
+    for (const subName of Object.keys(SUB_CATEGORY_TO_CATEGORY)) {
+      effectiveProficiencies[subName] = (proficiencies[subName] || 0) + getMinAdeptness(designJobId, subName);
+    }
+
     if (skill.reqLevel && skill.reqLevel > session.stats.level) {
       return { canUse: false, error: 'insufficient_level' };
     }
     if (skill.reqPoints) {
       if (typeof skill.reqPoints === 'number') {
-        const subPoints = subCategory ? (proficiencies[subCategory] || 0) : 0;
+        const subPoints = subCategory ? (effectiveProficiencies[subCategory] || 0) : 0;
         if (subPoints < skill.reqPoints) {
           return { canUse: false, error: 'insufficient_proficiency' };
         }
       } else if (Array.isArray(skill.reqPoints)) {
-        if (!meetsRequirements(skill.reqPoints, (name: string) => proficiencies[name] || 0)) {
+        if (!meetsRequirements(skill.reqPoints, (name: string) => effectiveProficiencies[name] || 0)) {
           return { canUse: false, error: 'insufficient_proficiency' };
         }
       }
@@ -253,13 +261,14 @@ export class SkillSystem {
       return { canUse: false, error: 'silenced' };
     }
 
+    const inferredType = skill.skillType ?? this.inferSkillType(skill);
     const isSinging = session.statusEffects?.some(e =>
       e.type === StatusEffectType.SONG_GREEN ||
       e.type === StatusEffectType.SONG_BLUE ||
       e.type === StatusEffectType.SONG_YELLOW ||
       e.type === StatusEffectType.SONG_RED
     );
-    if (isSinging && skill.skillType !== SkillType.SONG) {
+    if (isSinging && inferredType !== SkillType.SONG) {
       return { canUse: false, error: 'singing' };
     }
 
@@ -340,6 +349,22 @@ export class SkillSystem {
     if (!skill) return { success: false, error: 'not_found' };
     const st = skill.skillType ?? this.inferSkillType(skill);
 
+    if (st === SkillType.SONG) {
+      const songMap: Record<string, StatusEffectType> = {
+        green: StatusEffectType.SONG_GREEN,
+        blue: StatusEffectType.SONG_BLUE,
+        yellow: StatusEffectType.SONG_YELLOW,
+        red: StatusEffectType.SONG_RED,
+      };
+      const songType = skill.buffEffectTable?.songType as string | undefined;
+      const songEffectType = songType ? songMap[songType] : undefined;
+      if (songEffectType && session.statusEffects?.some(e => e.type === songEffectType)) {
+        session.statusEffects = session.statusEffects.filter(e => e.type !== songEffectType && e.skillName !== skill.name);
+        session.activeCast = null;
+        return { success: true, songToggledOff: true };
+      }
+    }
+
     session.stats.mana -= skill.mpCost;
 
     const now = Date.now();
@@ -403,21 +428,6 @@ export class SkillSystem {
       || st === SkillType.HP_BUFF || st === SkillType.MP_RESTORE
       || st === SkillType.HEAL_OVER_TIME;
     if ((isBuffLike && skill.duration > 0) || (skill.buffEffectTable && skill.duration === 0)) {
-      if (st === SkillType.SONG) {
-        const songMap: Record<string, StatusEffectType> = {
-          green: StatusEffectType.SONG_GREEN,
-          blue: StatusEffectType.SONG_BLUE,
-          yellow: StatusEffectType.SONG_YELLOW,
-          red: StatusEffectType.SONG_RED,
-        };
-        const songType = skill.buffEffectTable?.songType as string | undefined;
-        const songEffectType = songType ? songMap[songType] : undefined;
-        if (songEffectType && session.statusEffects?.some(e => e.type === songEffectType)) {
-          session.statusEffects = session.statusEffects.filter(e => e.type !== songEffectType && e.skillName !== skill.name);
-          return { success: true, songToggledOff: true };
-        }
-      }
-
       if (skill.buffEffectTable?.defensiveMarch) {
         const existing = session.statusEffects?.find(e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.defensiveMarch && e.skillName === skillName);
         if (existing) {
