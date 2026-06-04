@@ -871,7 +871,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       duration: 0,
       description: "Heal target",
       skillType: SkillType.HEAL,
-      healing: { type: "single" },
+      healing: { type: "single", baseAmount: 0, statMultipliers: { SPI: 0.5, INT: 0.8, prof: 2.0 } },
     },
   },
   15: {

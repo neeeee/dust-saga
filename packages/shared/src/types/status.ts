@@ -247,6 +247,7 @@ export interface BuffData {
   songRadius?: number;
   damageNegation?: { base: number; spiScale: number; proficiencyCap: number };
   damageNegationThreshold?: number;
+  healPercent?: number;
 }
 
 export interface StatusEffect {
@@ -374,6 +375,7 @@ interface EffectiveStats {
   castSpeedPenalty: number;
   speedMultiplier: number;
   auraDamageMultiplier: number;
+  healPercent: number;
 }
 
 const ROOT_TYPES = new Set([StatusEffectType.ROOT, StatusEffectType.FREEZE, StatusEffectType.STUN]);
@@ -382,7 +384,7 @@ export function getEffectiveStats(
   baseStats: { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number },
   statPoints: { STR: number; AGI: number; INT: number; SPI: number; DEX: number; STA: number },
   statusEffects: StatusEffect[]
-): { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number; speedMultiplier: number; physicalDamageReduction: number; dodgeBonus: number; accuracyBonus: number; castTimeReduction: number; attackSpeedMultiplier: number; damageTakenMultiplier: number; castSpeedPenalty: number; auraDamageMultiplier: number } {
+): { attack: number; defense: number; magicAttack: number; maxHealth: number; maxMana: number; speed: number; speedMultiplier: number; physicalDamageReduction: number; dodgeBonus: number; accuracyBonus: number; castTimeReduction: number; attackSpeedMultiplier: number; damageTakenMultiplier: number; castSpeedPenalty: number; auraDamageMultiplier: number; healPercent: number } {
   const s: EffectiveStats = {
     attack: baseStats.attack,
     defense: baseStats.defense,
@@ -399,6 +401,7 @@ export function getEffectiveStats(
     castSpeedPenalty: 0,
     speedMultiplier: 1,
     auraDamageMultiplier: 1,
+    healPercent: 0,
   };
 
   const now = Date.now();
@@ -457,6 +460,7 @@ export function getEffectiveStats(
           if (bd.attackSpeedPercent) s.attackSpeedMultiplier *= (1 + bd.attackSpeedPercent);
           if (bd.magicalDamageBonusPercent) s.magicAttack = Math.floor(s.magicAttack * (1 + bd.magicalDamageBonusPercent));
           if (bd.auraDamageIncreasePercent) s.auraDamageMultiplier *= (1 + bd.auraDamageIncreasePercent);
+          if (bd.healPercent) s.healPercent += bd.healPercent;
         }
         break;
       case StatusEffectType.DEBUFF_DAMAGE_DOWN:
@@ -517,6 +521,7 @@ export function getEffectiveStats(
     damageTakenMultiplier: s.damageTakenMultiplier,
     castSpeedPenalty: s.castSpeedPenalty,
     auraDamageMultiplier: s.auraDamageMultiplier,
+    healPercent: s.healPercent,
   };
 }
 
@@ -561,6 +566,7 @@ export interface StatBonusBreakdown {
   totalAilmentResist?: number;
   totalDisorderResist?: number;
   buffCooldownReduction?: number;
+  healPercent?: number;
 }
 
 export function computeStatBreakdown(

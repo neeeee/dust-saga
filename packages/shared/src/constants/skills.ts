@@ -1437,7 +1437,7 @@ export const CLASS_SKILL_DATA: Record<
             duration: 0,
             description: "Restore HP based on level, expertise, and INT",
             skillType: SkillType.HEAL,
-            healing: { type: "single" },
+            healing: { type: "single", baseAmount: 50, statMultipliers: { SPI: 0.3, INT: 0.6, prof: 0 } },
           },
           Cleanse: {
             name: "Cleanse",

@@ -45,6 +45,7 @@ export interface AvailableSkill {
   subCategoryId: number;
   unlocked: boolean;
   reqPoints: number;
+  reqLevel?: number;
   crossReqs?: Array<{ skillName: string; points: number }>;
 }
 
@@ -382,7 +383,8 @@ export function useSkillStore() {
         subCategory: 'Class',
         subCategoryId: 0,
         unlocked,
-        reqPoints: def.reqLevel || 0,
+        reqPoints: -1,
+        reqLevel: def.reqLevel,
       });
     }
 
@@ -422,6 +424,19 @@ export function useSkillStore() {
           category: cat,
         });
       }
+    }
+
+    const classSkills = state.availableSkills.filter(s => s.subCategory === 'Class');
+    if (classSkills.length > 0) {
+      result.push({
+        id: -1,
+        name: 'Class',
+        currentPoints: 0,
+        currentAdeptness: 0,
+        maxPoints: 0,
+        skills: classSkills,
+        category: 'class',
+      });
     }
 
     return result;

@@ -253,6 +253,16 @@ export class SkillSystem {
       return { canUse: false, error: 'silenced' };
     }
 
+    const isSinging = session.statusEffects?.some(e =>
+      e.type === StatusEffectType.SONG_GREEN ||
+      e.type === StatusEffectType.SONG_BLUE ||
+      e.type === StatusEffectType.SONG_YELLOW ||
+      e.type === StatusEffectType.SONG_RED
+    );
+    if (isSinging && skill.skillType !== SkillType.SONG) {
+      return { canUse: false, error: 'singing' };
+    }
+
     if (session.statusEffects?.some(e =>
       e.type === StatusEffectType.STUN ||
       e.type === StatusEffectType.SLEEP ||
@@ -824,38 +834,35 @@ export class SkillSystem {
   }
 
   private calculateHealing(session: PlayerSession, skill: SkillDefinition): number {
+    const baseStats = session.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
+    const totalSPI = (session.statPoints.SPI || 0) + baseStats.SPI;
+    const totalINT = (session.statPoints.INT || 0) + baseStats.INT;
+    const level = session.stats.level;
+
     if (!skill.healing) {
-      const spi = session.statPoints.SPI;
-      const int = session.statPoints.INT;
-      const level = session.stats.level;
       const multiplier = 1.0 + (skill.mpCost / 30);
-      return Math.floor((spi * 2.0 + int * 1.0 + level * 2) * multiplier);
+      return Math.floor((totalSPI * 2.0 + totalINT * 1.0 + level * 2) * multiplier);
     }
 
     const h = skill.healing;
-    const spi = session.statPoints.SPI;
-    const int = session.statPoints.INT;
-    const level = session.stats.level;
     const proficiencies = session.skillProficiencies || {};
     const profStat = h.proficiencyStat || 'Grace';
     const prof = proficiencies[profStat] || 0;
 
-    if (h.statMultipliers) {
-      const total = { spi, int, level, ...h.statMultipliers };
-      const formula = h.baseAmount || 0;
-      const vars: Record<string, number> = {};
-      for (const [key, val] of Object.entries(total)) vars[key] = val;
-      return Math.floor(safeFormulaEval(formula.toString(), vars));
-    }
+    const baseAmount = h.baseAmount || 0;
+    const spiScale = (h.statMultipliers as Record<string, number> | undefined)?.SPI ?? 0.3;
+    const intScale = (h.statMultipliers as Record<string, number> | undefined)?.INT ?? 0.6;
+    const levelScale = (h.statMultipliers as Record<string, number> | undefined)?.level ?? 1.0;
+    const profScale = (h.statMultipliers as Record<string, number> | undefined)?.prof ?? 2.0;
 
-    const multiplier = h.mpCostScaling
+    const mpMult = h.mpCostScaling
       ? 1.0 + (skill.mpCost / h.mpCostScaling)
       : 1.0 + (skill.mpCost / 30);
 
-    return Math.floor(((h.baseAmount || 0)
-      + (spi * ((h.statMultipliers as Record<string, number> | undefined)?.SPI ?? 0.3))
-      + (int * ((h.statMultipliers as Record<string, number> | undefined)?.INT ?? 0.6))
-      + (prof * 0.5)) * multiplier);
+    const healPercent = session.statBreakdown?.healPercent || 0;
+    const gearMult = 1 + (healPercent / 100);
+
+    return Math.floor((baseAmount + totalSPI * spiScale + totalINT * intScale + level * levelScale + prof * profScale) * mpMult * gearMult);
   }
 
   private calculateMpRegen(session: PlayerSession, skill: SkillDefinition): number {

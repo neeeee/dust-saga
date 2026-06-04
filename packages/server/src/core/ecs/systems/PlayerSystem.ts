@@ -32,7 +32,7 @@ export class PlayerSystem extends System {
   private levelUpCallbacks: Array<(playerId: string, newLevel: number) => void> = [];
 
   private getGearBonuses(session: PlayerSession) {
-    const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0, accuracy: 0, dodge: 0, attackSpeed: 0, castSpeed: 0, fireResist: 0, iceResist: 0, lightningResist: 0, poisonResist: 0, darkResist: 0, holyResist: 0, magicAttackPercent: 0, ailmentResist: 0, disorderResist: 0, criticalChance: 0, stunResist: 0, tripResist: 0, freezeResist: 0, burnResist: 0, curseResist: 0, bleedResist: 0, sleepResist: 0, weaknessResist: 0, weakenResist: 0, knockdownResist: 0, knockbackResist: 0 };
+    const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0, accuracy: 0, dodge: 0, attackSpeed: 0, castSpeed: 0, fireResist: 0, iceResist: 0, lightningResist: 0, poisonResist: 0, darkResist: 0, holyResist: 0, magicAttackPercent: 0, ailmentResist: 0, disorderResist: 0, criticalChance: 0, stunResist: 0, tripResist: 0, freezeResist: 0, burnResist: 0, curseResist: 0, bleedResist: 0, sleepResist: 0, weaknessResist: 0, weakenResist: 0, knockdownResist: 0, knockbackResist: 0, healPercent: 0 };
     for (const slot of Object.values(session.equipment)) {
       if (!slot) continue;
       const def = ITEM_DATABASE[slot.itemId];
@@ -74,6 +74,7 @@ export class PlayerSystem extends System {
       if (s.knockdownResist) bonuses.knockdownResist += s.knockdownResist;
       if (s.knockbackResist) bonuses.knockbackResist += s.knockbackResist;
       if (s.criticalChance) bonuses.criticalChance += s.criticalChance;
+      if (s.healPercent) bonuses.healPercent += s.healPercent;
 
       const enhanceLevel = slot.enhancementLevel || 0;
       if (enhanceLevel > 0) {
@@ -389,6 +390,7 @@ export class PlayerSystem extends System {
     const totalSPI = (session.statPoints.SPI || 0) + baseStats.SPI + SPI + (session.statBreakdown.buffs?.SPI || 0);
     session.statBreakdown.totalAilmentResist = computeAilmentResist(totalSTA, ailmentResist);
     session.statBreakdown.totalDisorderResist = computeDisorderResist(totalSPI, disorderResist);
+    session.statBreakdown.healPercent = gear.healPercent + effective.healPercent;
   }
 
   healPlayer(session: PlayerSession): void {

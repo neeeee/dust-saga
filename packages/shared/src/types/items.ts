@@ -79,6 +79,7 @@ export interface ItemStats {
   knockbackResist?: number;
   weaponElement?: 'fire' | 'ice' | 'lightning' | 'holy' | 'dark' | 'poison';
   weaponElementPower?: number;
+  healPercent?: number;
 }
 
 export interface ItemDefinition {

@@ -43,6 +43,7 @@
                   {{ skill.name }}
                   <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">{{ r.subCat.currentPoints }}/{{ skill.reqPoints }}</span>
                   <span class="req-tag cross" v-else-if="!skill.unlocked && skill.crossReqs">{{ formatCrossReqs(skill.crossReqs) }}</span>
+                  <span class="req-tag level" v-else-if="!skill.unlocked && skill.reqLevel">Lv {{ skill.reqLevel }}</span>
                   <span class="passive-tag" v-if="skill.isPassive">Passive</span>
                 </div>
                 <div class="skill-desc">{{ skill.description }}</div>
@@ -64,7 +65,7 @@
             <span class="arrow">{{ openAccordions.has(subCat.name) ? '&#9660;' : '&#9654;' }}</span>
             <span class="subcat-name">{{ subCat.name }}</span>
             <span class="subcat-pts">{{ subCat.currentPoints }}<template v-if="subCat.maxPoints > 0">/{{ subCat.maxPoints }}</template></span>
-            <div class="alloc-controls">
+            <div class="alloc-controls" v-if="subCat.maxPoints > 0">
               <button class="alloc-btn minus" :disabled="pendingAlloc[subCat.name] <= 0" @click.stop="removePending(subCat.name)">-</button>
               <span class="alloc-change" v-if="pendingAlloc[subCat.name] > 0">+{{ pendingAlloc[subCat.name] }}</span>
               <button class="alloc-btn plus" :disabled="effectiveUnspent <= 0 || subCat.currentPoints + (pendingAlloc[subCat.name] || 0) >= subCat.maxPoints" @click.stop="addPending(subCat.name)">+</button>
@@ -103,8 +104,9 @@
                 <div class="skill-info">
                   <div class="skill-name">
                     {{ skill.name }}
-                    <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">{{ subCat.currentPoints + (pendingAlloc[subCat.name] || 0) }}/{{ skill.reqPoints }}</span>
-                    <span class="req-tag cross" v-else-if="!skill.unlocked && skill.crossReqs">{{ formatCrossReqs(skill.crossReqs) }}</span>
+                     <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">{{ subCat.currentPoints + (pendingAlloc[subCat.name] || 0) }}/{{ skill.reqPoints }}</span>
+                     <span class="req-tag cross" v-else-if="!skill.unlocked && skill.crossReqs">{{ formatCrossReqs(skill.crossReqs) }}</span>
+                     <span class="req-tag level" v-else-if="!skill.unlocked && skill.reqLevel">Lv {{ skill.reqLevel }}</span>
                     <span class="passive-tag" v-if="skill.isPassive">Passive</span>
                   </div>
                   <div class="skill-desc">{{ skill.description }}</div>
@@ -472,6 +474,7 @@ onUnmounted(() => {
   font-weight: 600;
 }
 .req-tag.cross { color: #ffb74d; background: rgba(255, 152, 0, 0.15); }
+.req-tag.level { color: #64b5f6; background: rgba(33, 150, 243, 0.15); }
 
 .passive-tag {
   font-size: 0.58rem;
