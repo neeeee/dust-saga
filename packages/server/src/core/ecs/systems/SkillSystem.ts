@@ -3,7 +3,7 @@ import {
   isPassiveSkill, meetsRequirements, getRequiredProficiency,
   COMBAT_CONFIG, StatusEffect, StatusEffectType, STATUS_EFFECT_DEFS,
   SKILL_TARGET_RULES, SkillTargetType,
-  BuffData, resolveSpiTieredValue, SONG_TYPES,
+  BuffData, resolveStatTieredValue, SONG_TYPES,
   getEffectiveStats,
   recalculateCategoryTotals, calculateProficiencyGain, ProficiencyGainResult,
   DebuffEffectTable,
@@ -1194,29 +1194,31 @@ export class SkillSystem {
       }
     }
 
-    if (bt.spiValues) {
-      const totalSpi = (casterSession?.baseStats?.SPI || 0) + (casterSession?.statPoints?.SPI || target.statPoints.SPI || 0);
-      const totalTargetSpi = target.baseStats?.SPI + target.statPoints.SPI;
-      const casterBlessing = casterSession
-        ? (casterSession.skillAdeptness?.['Blessing'] || 0)
-        : (target.skillAdeptness?.['Blessing'] || 0);
+    if (bt.statTieredValues) {
+      const cfg = bt.statTieredValues;
+      const caster = casterSession || target;
+      const statKey = cfg.stat as keyof typeof caster.baseStats;
+      const totalStat = (caster.baseStats?.[statKey] || 0) + ((caster.statPoints as unknown as Record<string, number>)?.[statKey] || 0);
+      const prof = cfg.proficiencyStat
+        ? (caster.skillAdeptness?.[cfg.proficiencyStat] || 0)
+        : 0;
       const skillName = skill.name.toLowerCase();
 
       if (skillName === 'lapis mediow') {
-        const result = resolveSpiTieredValue(bt.spiValues, totalSpi, casterBlessing, 'def');
-        if (result) {
-          pushEffect(StatusEffectType.BUFF_DEFENSE, 0, { flatDefense: result.def });
-          this.lastBuffDebug = `[Lapis Mediow] SPI=${totalSpi} (${casterSession?.baseStats?.SPI || 0} base + ${casterSession?.statPoints?.SPI || 0} alloc) Blessing=${casterBlessing}/${casterSession?.skillProficiencies?.['Blessing'] || 0} baseDef=${target.stats.defense} +${result.def} def`;
+        const result = resolveStatTieredValue(cfg, totalStat, prof, 'def');
+        if (result != null) {
+          pushEffect(StatusEffectType.BUFF_DEFENSE, 0, { flatDefense: result });
+          this.lastBuffDebug = `[Lapis Mediow] ${cfg.stat}=${totalStat} (${caster.baseStats?.[statKey] || 0} base + ${((caster.statPoints as unknown as Record<string, number>)?.[statKey] || 0)} alloc) ${cfg.proficiencyStat || '?'}=${prof} baseDef=${target.stats.defense} +${result} def`;
         }
       } else if (skillName === 'green song' || skillName === 'speedy gale') {
-        const dodgeResult = resolveSpiTieredValue(bt.spiValues, totalSpi, casterBlessing, 'dodgeChance');
-        if (dodgeResult) {
-          pushEffect(StatusEffectType.BUFF_DODGE, dodgeResult.dodgeChance ?? 0);
+        const dodgeResult = resolveStatTieredValue(cfg, totalStat, prof, 'dodgeChance');
+        if (dodgeResult != null) {
+          pushEffect(StatusEffectType.BUFF_DODGE, dodgeResult);
         }
         if (skillName === 'green song') {
-          const accuracyResult = resolveSpiTieredValue(bt.spiValues, totalSpi, casterBlessing, 'accuracy');
-          if (accuracyResult && accuracyResult.accuracy) {
-            pushEffect(StatusEffectType.BUFF_ACCURACY, accuracyResult.accuracy);
+          const accuracyResult = resolveStatTieredValue(cfg, totalStat, prof, 'accuracy');
+          if (accuracyResult != null) {
+            pushEffect(StatusEffectType.BUFF_ACCURACY, accuracyResult);
           }
         }
       }

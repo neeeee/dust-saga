@@ -11,7 +11,7 @@ import {
   PartyVisibility, LootRule, MAX_LOOT_POOL,
   GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
   StatusEffectType, StatusEffect, EnemyInstance,
-  BuffData, resolveSpiTieredValue,
+  BuffData, resolveStatTieredValue,
   getEffectiveStats,
   computeAilmentResist, computeDisorderResist, computeDebuffAccuracy, rollDebuffApplication,
   calculateWeaponElementalDamage,
@@ -1919,19 +1919,23 @@ export class NetworkServer implements NetworkContext {
       pushSongBuff(StatusEffectType.BUFF_GENERIC, 0, { auraDamageIncreasePercent: bt.auraDamageIncrease });
     }
 
-    if (bt.spiValues) {
-      const totalSpi = (caster.baseStats?.SPI || 0) + (caster.statPoints?.SPI || 0);
-      const casterBlessing = caster.skillAdeptness?.['Blessing'] || 0;
+    if (bt.statTieredValues) {
+      const cfg = bt.statTieredValues;
+      const statKey = cfg.stat as keyof typeof caster.baseStats;
+      const totalStat = (caster.baseStats?.[statKey] || 0) + ((caster.statPoints as unknown as Record<string, number>)?.[statKey] || 0);
+      const prof = cfg.proficiencyStat
+        ? (caster.skillAdeptness?.[cfg.proficiencyStat] || 0)
+        : 0;
       const skillName = skill.name.toLowerCase();
       if (skillName === 'green song' || skillName === 'speedy gale') {
-        const dodgeResult = resolveSpiTieredValue(bt.spiValues, totalSpi, casterBlessing, 'dodgeChance');
-        if (dodgeResult) {
-          pushSongBuff(StatusEffectType.BUFF_DODGE, dodgeResult.dodgeChance ?? 0);
+        const dodgeResult = resolveStatTieredValue(cfg, totalStat, prof, 'dodgeChance');
+        if (dodgeResult != null) {
+          pushSongBuff(StatusEffectType.BUFF_DODGE, dodgeResult);
         }
         if (skillName === 'green song') {
-          const accuracyResult = resolveSpiTieredValue(bt.spiValues, totalSpi, casterBlessing, 'accuracy');
-          if (accuracyResult && accuracyResult.accuracy) {
-            pushSongBuff(StatusEffectType.BUFF_ACCURACY, accuracyResult.accuracy);
+          const accuracyResult = resolveStatTieredValue(cfg, totalStat, prof, 'accuracy');
+          if (accuracyResult != null) {
+            pushSongBuff(StatusEffectType.BUFF_ACCURACY, accuracyResult);
           }
         }
       }

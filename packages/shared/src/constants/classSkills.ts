@@ -1130,52 +1130,56 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase dodge rate",
       isAOE: true,
       buffEffectTable: {
-        spiValues: [
-          {
-            value: 33,
-            Blessing: [
-              { value: 8, dodgeChance: 13 },
-              { value: 16, dodgeChance: 18 },
-              { value: 24, dodgeChance: 24 },
-              { value: 31, dodgeChance: 30 },
-              { value: 39, dodgeChance: 37 },
-              { value: 47, dodgeChance: 43 },
-            ],
-          },
-          {
-            value: 50,
-            Blessing: [
-              { value: 8, dodgeChance: 16 },
-              { value: 16, dodgeChance: 22 },
-              { value: 24, dodgeChance: 28 },
-              { value: 31, dodgeChance: 35 },
-              { value: 39, dodgeChance: 41 },
-              { value: 47, dodgeChance: 48 },
-            ],
-          },
-          {
-            value: 67,
-            Blessing: [
-              { value: 8, dodgeChance: 20 },
-              { value: 16, dodgeChance: 26 },
-              { value: 24, dodgeChance: 33 },
-              { value: 31, dodgeChance: 40 },
-              { value: 39, dodgeChance: 46 },
-              { value: 47, dodgeChance: 53 },
-            ],
-          },
-          {
-            value: 100,
-            Blessing: [
-              { value: 8, dodgeChance: 24 },
-              { value: 16, dodgeChance: 30 },
-              { value: 24, dodgeChance: 37 },
-              { value: 31, dodgeChance: 44 },
-              { value: 39, dodgeChance: 51 },
-              { value: 47, dodgeChance: 58 },
-            ],
-          },
-        ],
+        statTieredValues: {
+          stat: 'SPI',
+          proficiencyStat: 'Blessing',
+          tiers: [
+            {
+              threshold: 33,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 13 } },
+                { threshold: 16, values: { dodgeChance: 18 } },
+                { threshold: 24, values: { dodgeChance: 24 } },
+                { threshold: 31, values: { dodgeChance: 30 } },
+                { threshold: 39, values: { dodgeChance: 37 } },
+                { threshold: 47, values: { dodgeChance: 43 } },
+              ],
+            },
+            {
+              threshold: 50,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 16 } },
+                { threshold: 16, values: { dodgeChance: 22 } },
+                { threshold: 24, values: { dodgeChance: 28 } },
+                { threshold: 31, values: { dodgeChance: 35 } },
+                { threshold: 39, values: { dodgeChance: 41 } },
+                { threshold: 47, values: { dodgeChance: 48 } },
+              ],
+            },
+            {
+              threshold: 67,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 20 } },
+                { threshold: 16, values: { dodgeChance: 26 } },
+                { threshold: 24, values: { dodgeChance: 33 } },
+                { threshold: 31, values: { dodgeChance: 40 } },
+                { threshold: 39, values: { dodgeChance: 46 } },
+                { threshold: 47, values: { dodgeChance: 53 } },
+              ],
+            },
+            {
+              threshold: 100,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 24 } },
+                { threshold: 16, values: { dodgeChance: 30 } },
+                { threshold: 24, values: { dodgeChance: 37 } },
+                { threshold: 31, values: { dodgeChance: 44 } },
+                { threshold: 39, values: { dodgeChance: 51 } },
+                { threshold: 47, values: { dodgeChance: 58 } },
+              ],
+            },
+          ],
+        },
       },
       skillType: SkillType.BUFF,
     },
@@ -1228,52 +1232,56 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase dodge rate",
       isAOE: true,
       buffEffectTable: {
-        spiValues: [
-          {
-            value: 33,
-            Blessing: [
-              { value: 8, dodgeChance: 13 },
-              { value: 16, dodgeChance: 18 },
-              { value: 24, dodgeChance: 24 },
-              { value: 31, dodgeChance: 30 },
-              { value: 39, dodgeChance: 37 },
-              { value: 47, dodgeChance: 43 },
-            ],
-          },
-          {
-            value: 50,
-            Blessing: [
-              { value: 8, dodgeChance: 16 },
-              { value: 16, dodgeChance: 22 },
-              { value: 24, dodgeChance: 28 },
-              { value: 31, dodgeChance: 35 },
-              { value: 39, dodgeChance: 41 },
-              { value: 47, dodgeChance: 48 },
-            ],
-          },
-          {
-            value: 67,
-            Blessing: [
-              { value: 8, dodgeChance: 20 },
-              { value: 16, dodgeChance: 26 },
-              { value: 24, dodgeChance: 33 },
-              { value: 31, dodgeChance: 40 },
-              { value: 39, dodgeChance: 46 },
-              { value: 47, dodgeChance: 53 },
-            ],
-          },
-          {
-            value: 100,
-            Blessing: [
-              { value: 8, dodgeChance: 24 },
-              { value: 16, dodgeChance: 30 },
-              { value: 24, dodgeChance: 37 },
-              { value: 31, dodgeChance: 44 },
-              { value: 39, dodgeChance: 51 },
-              { value: 47, dodgeChance: 58 },
-            ],
-          },
-        ],
+        statTieredValues: {
+          stat: 'SPI',
+          proficiencyStat: 'Blessing',
+          tiers: [
+            {
+              threshold: 33,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 13 } },
+                { threshold: 16, values: { dodgeChance: 18 } },
+                { threshold: 24, values: { dodgeChance: 24 } },
+                { threshold: 31, values: { dodgeChance: 30 } },
+                { threshold: 39, values: { dodgeChance: 37 } },
+                { threshold: 47, values: { dodgeChance: 43 } },
+              ],
+            },
+            {
+              threshold: 50,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 16 } },
+                { threshold: 16, values: { dodgeChance: 22 } },
+                { threshold: 24, values: { dodgeChance: 28 } },
+                { threshold: 31, values: { dodgeChance: 35 } },
+                { threshold: 39, values: { dodgeChance: 41 } },
+                { threshold: 47, values: { dodgeChance: 48 } },
+              ],
+            },
+            {
+              threshold: 67,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 20 } },
+                { threshold: 16, values: { dodgeChance: 26 } },
+                { threshold: 24, values: { dodgeChance: 33 } },
+                { threshold: 31, values: { dodgeChance: 40 } },
+                { threshold: 39, values: { dodgeChance: 46 } },
+                { threshold: 47, values: { dodgeChance: 53 } },
+              ],
+            },
+            {
+              threshold: 100,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 24 } },
+                { threshold: 16, values: { dodgeChance: 30 } },
+                { threshold: 24, values: { dodgeChance: 37 } },
+                { threshold: 31, values: { dodgeChance: 44 } },
+                { threshold: 39, values: { dodgeChance: 51 } },
+                { threshold: 47, values: { dodgeChance: 58 } },
+              ],
+            },
+          ],
+        },
       },
       skillType: SkillType.BUFF,
     },
@@ -1345,52 +1353,56 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       description: "Increase dodge rate",
       isAOE: true,
       buffEffectTable: {
-        spiValues: [
-          {
-            value: 33,
-            Blessing: [
-              { value: 8, dodgeChance: 13 },
-              { value: 16, dodgeChance: 18 },
-              { value: 24, dodgeChance: 24 },
-              { value: 31, dodgeChance: 30 },
-              { value: 39, dodgeChance: 37 },
-              { value: 47, dodgeChance: 43 },
-            ],
-          },
-          {
-            value: 50,
-            Blessing: [
-              { value: 8, dodgeChance: 16 },
-              { value: 16, dodgeChance: 22 },
-              { value: 24, dodgeChance: 28 },
-              { value: 31, dodgeChance: 35 },
-              { value: 39, dodgeChance: 41 },
-              { value: 47, dodgeChance: 48 },
-            ],
-          },
-          {
-            value: 67,
-            Blessing: [
-              { value: 8, dodgeChance: 20 },
-              { value: 16, dodgeChance: 26 },
-              { value: 24, dodgeChance: 33 },
-              { value: 31, dodgeChance: 40 },
-              { value: 39, dodgeChance: 46 },
-              { value: 47, dodgeChance: 53 },
-            ],
-          },
-          {
-            value: 100,
-            Blessing: [
-              { value: 8, dodgeChance: 24 },
-              { value: 16, dodgeChance: 30 },
-              { value: 24, dodgeChance: 37 },
-              { value: 31, dodgeChance: 44 },
-              { value: 39, dodgeChance: 51 },
-              { value: 47, dodgeChance: 58 },
-            ],
-          },
-        ],
+        statTieredValues: {
+          stat: 'SPI',
+          proficiencyStat: 'Blessing',
+          tiers: [
+            {
+              threshold: 33,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 13 } },
+                { threshold: 16, values: { dodgeChance: 18 } },
+                { threshold: 24, values: { dodgeChance: 24 } },
+                { threshold: 31, values: { dodgeChance: 30 } },
+                { threshold: 39, values: { dodgeChance: 37 } },
+                { threshold: 47, values: { dodgeChance: 43 } },
+              ],
+            },
+            {
+              threshold: 50,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 16 } },
+                { threshold: 16, values: { dodgeChance: 22 } },
+                { threshold: 24, values: { dodgeChance: 28 } },
+                { threshold: 31, values: { dodgeChance: 35 } },
+                { threshold: 39, values: { dodgeChance: 41 } },
+                { threshold: 47, values: { dodgeChance: 48 } },
+              ],
+            },
+            {
+              threshold: 67,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 20 } },
+                { threshold: 16, values: { dodgeChance: 26 } },
+                { threshold: 24, values: { dodgeChance: 33 } },
+                { threshold: 31, values: { dodgeChance: 40 } },
+                { threshold: 39, values: { dodgeChance: 46 } },
+                { threshold: 47, values: { dodgeChance: 53 } },
+              ],
+            },
+            {
+              threshold: 100,
+              profTiers: [
+                { threshold: 8, values: { dodgeChance: 24 } },
+                { threshold: 16, values: { dodgeChance: 30 } },
+                { threshold: 24, values: { dodgeChance: 37 } },
+                { threshold: 31, values: { dodgeChance: 44 } },
+                { threshold: 39, values: { dodgeChance: 51 } },
+                { threshold: 47, values: { dodgeChance: 58 } },
+              ],
+            },
+          ],
+        },
       },
       skillType: SkillType.BUFF,
     },

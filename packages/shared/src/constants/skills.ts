@@ -1557,53 +1557,57 @@ export const CLASS_SKILL_DATA: Record<
             cooldown: 1.5,
             duration: 480,
             buffEffectTable: {
-              spiValues: [
-                {
-                  value: 33,
-                  Blessing: [
-                    { value: 24.9, def: 5 },
-                    { value: 25, def: 6 },
-                    { value: 50, def: 7 },
-                    { value: 75, def: 8 },
-                  ],
-                },
-                {
-                  value: 34,
-                  Blessing: [
-                    { value: 24.9, def: 6 },
-                    { value: 25, def: 7 },
-                    { value: 50, def: 8 },
-                    { value: 75, def: 9 },
-                  ],
-                },
-                {
-                  value: 67,
-                  Blessing: [
-                    { value: 24.9, def: 7 },
-                    { value: 25, def: 8 },
-                    { value: 50, def: 9 },
-                    { value: 75, def: 10 },
-                  ],
-                },
-                {
-                  value: 100,
-                  Blessing: [
-                    { value: 24.9, def: 8 },
-                    { value: 25, def: 9 },
-                    { value: 50, def: 10 },
-                    { value: 75, def: 11 },
-                  ],
-                },
-                {
-                  value: 134,
-                  Blessing: [
-                    { value: 24.9, def: 9 },
-                    { value: 25, def: 10 },
-                    { value: 50, def: 11 },
-                    { value: 75, def: 12 },
-                  ],
-                },
-              ],
+              statTieredValues: {
+                stat: 'SPI',
+                proficiencyStat: 'Blessing',
+                tiers: [
+                  {
+                    threshold: 33,
+                    profTiers: [
+                      { threshold: 24.9, values: { def: 5 } },
+                      { threshold: 25, values: { def: 6 } },
+                      { threshold: 50, values: { def: 7 } },
+                      { threshold: 75, values: { def: 8 } },
+                    ],
+                  },
+                  {
+                    threshold: 34,
+                    profTiers: [
+                      { threshold: 24.9, values: { def: 6 } },
+                      { threshold: 25, values: { def: 7 } },
+                      { threshold: 50, values: { def: 8 } },
+                      { threshold: 75, values: { def: 9 } },
+                    ],
+                  },
+                  {
+                    threshold: 67,
+                    profTiers: [
+                      { threshold: 24.9, values: { def: 7 } },
+                      { threshold: 25, values: { def: 8 } },
+                      { threshold: 50, values: { def: 9 } },
+                      { threshold: 75, values: { def: 10 } },
+                    ],
+                  },
+                  {
+                    threshold: 100,
+                    profTiers: [
+                      { threshold: 24.9, values: { def: 8 } },
+                      { threshold: 25, values: { def: 9 } },
+                      { threshold: 50, values: { def: 10 } },
+                      { threshold: 75, values: { def: 11 } },
+                    ],
+                  },
+                  {
+                    threshold: 134,
+                    profTiers: [
+                      { threshold: 24.9, values: { def: 9 } },
+                      { threshold: 25, values: { def: 10 } },
+                      { threshold: 50, values: { def: 11 } },
+                      { threshold: 75, values: { def: 12 } },
+                    ],
+                  },
+                ],
+              },
             },
             description: "Increase player's defense",
           },
@@ -1873,21 +1877,25 @@ export const CLASS_SKILL_DATA: Record<
             isSong: true,
             buffEffectTable: {
               songType: "green",
-              spiValues: [
-                {
-                  value: 33,
-                  Blessing: [
-                    { value: 8, dodgeChance: 1, accuracy: 1 },
-                    { value: 16, dodgeChance: 2, accuracy: 2 },
-                    { value: 24, dodgeChance: 3, accuracy: 3 },
-                    { value: 31, dodgeChance: 4, accuracy: 4 },
-                    { value: 39, dodgeChance: 5, accuracy: 5 },
-                    { value: 47, dodgeChance: 6, accuracy: 6 },
-                    { value: 54, dodgeChance: 7, accuracy: 7 },
-                    { value: 62, dodgeChance: 8, accuracy: 8 },
-                  ],
-                },
-              ],
+              statTieredValues: {
+                stat: 'SPI',
+                proficiencyStat: 'Blessing',
+                tiers: [
+                  {
+                    threshold: 33,
+                    profTiers: [
+                      { threshold: 8, values: { dodgeChance: 1, accuracy: 1 } },
+                      { threshold: 16, values: { dodgeChance: 2, accuracy: 2 } },
+                      { threshold: 24, values: { dodgeChance: 3, accuracy: 3 } },
+                      { threshold: 31, values: { dodgeChance: 4, accuracy: 4 } },
+                      { threshold: 39, values: { dodgeChance: 5, accuracy: 5 } },
+                      { threshold: 47, values: { dodgeChance: 6, accuracy: 6 } },
+                      { threshold: 54, values: { dodgeChance: 7, accuracy: 7 } },
+                      { threshold: 62, values: { dodgeChance: 8, accuracy: 8 } },
+                    ],
+                  },
+                ],
+              },
             },
           },
           "Luminous Chant (Passive)": {

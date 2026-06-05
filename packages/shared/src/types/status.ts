@@ -87,45 +87,52 @@ export function isRooted(activeEffects: StatusEffect[]): boolean {
   return hasStatusEffectType(activeEffects, [StatusEffectType.ROOT, ...CC_TYPES]);
 }
 
-export interface SpiValueTier {
-  value: number;
-  Blessing?: Array<{ value: number; def?: number; dodgeChance?: number; accuracy?: number }>;
+export interface StatValueTier {
+  threshold: number;
+  profTiers?: Array<{ threshold: number; values: Record<string, number> }>;
 }
 
-export function resolveSpiTieredValue(
-  spiValues: SpiValueTier[],
-  casterSpi: number,
-  casterBlessing: number,
-  resultKey: 'def' | 'dodgeChance' | 'accuracy'
-): { def?: number; dodgeChance?: number; accuracy?: number } | null {
-  const firstTier = spiValues[0];
-  if (!firstTier?.Blessing?.length) return null;
-  const firstValue = firstTier.Blessing[0][resultKey];
+export interface StatTieredConfig {
+  stat: string;
+  proficiencyStat?: string;
+  tiers: StatValueTier[];
+}
+
+export function resolveStatTieredValue(
+  config: StatTieredConfig,
+  statValue: number,
+  profValue: number,
+  resultKey: string
+): number | null {
+  const tiers = config.tiers;
+  if (!tiers.length) return null;
+
+  let matchedTier: StatValueTier | null = null;
+  for (const tier of tiers) {
+    if (statValue >= tier.threshold) {
+      matchedTier = tier;
+    } else {
+      break;
+    }
+  }
+
+  if (!matchedTier) return null;
+
+  if (!matchedTier.profTiers?.length) return null;
+
+  const firstValue = matchedTier.profTiers[0].values[resultKey];
   if (firstValue === undefined) return null;
 
-  let matchedSpiTier: SpiValueTier | null = null;
-  for (const tier of spiValues) {
-    if (casterSpi >= tier.value) {
-      matchedSpiTier = tier;
+  let matchedProf = matchedTier.profTiers[0];
+  for (const pt of matchedTier.profTiers) {
+    if (profValue >= pt.threshold) {
+      matchedProf = pt;
     } else {
       break;
     }
   }
 
-  if (!matchedSpiTier || !matchedSpiTier.Blessing) {
-    return { [resultKey]: firstValue } as any;
-  }
-
-  let matchedBlessing = matchedSpiTier.Blessing[0];
-  for (const bt of matchedSpiTier.Blessing) {
-    if (casterBlessing >= bt.value) {
-      matchedBlessing = bt;
-    } else {
-      break;
-    }
-  }
-
-  return { [resultKey]: matchedBlessing[resultKey] ?? firstValue } as any;
+  return matchedProf.values[resultKey] ?? firstValue;
 }
 
 export interface BuffEffectTable {
@@ -192,7 +199,7 @@ export interface BuffEffectTable {
   songCooldownReduction?: number;
   songMagicalDamageBonus?: number;
   songDamageNegation?: { base: number; spiScale: number; proficiencyCap: number };
-  spiValues?: SpiValueTier[];
+  statTieredValues?: StatTieredConfig;
   weaponAura?: {
     element: string;
     spiTiers?: Array<{ spi: number; min: number; max: number }>;
