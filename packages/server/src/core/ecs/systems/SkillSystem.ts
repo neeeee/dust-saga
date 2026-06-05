@@ -14,6 +14,7 @@ import {
   calculateHitChance,
   safeFormulaEval,
   getMinAdeptness, getDesignJobId, SUB_CATEGORY_TO_CATEGORY,
+  getEffectiveProficiencies,
   SkillType, OnHitEffect, HealingEffect, getSkillTargetType,
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
@@ -198,11 +199,7 @@ export class SkillSystem {
     const proficiencies = session.skillProficiencies || {};
     const subCategory = SKILL_TO_SUBCATEGORY[skillName];
     const designJobId = getDesignJobId(session.jobId || 'warrior');
-
-    const effectiveProficiencies: Record<string, number> = {};
-    for (const subName of Object.keys(SUB_CATEGORY_TO_CATEGORY)) {
-      effectiveProficiencies[subName] = (proficiencies[subName] || 0) + getMinAdeptness(designJobId, subName);
-    }
+    const effectiveProficiencies = getEffectiveProficiencies(proficiencies, designJobId);
 
     if (skill.reqLevel && skill.reqLevel > session.stats.level) {
       return { canUse: false, error: 'insufficient_level' };
@@ -651,17 +648,19 @@ export class SkillSystem {
         damage = Math.floor(damage * target.damageTakenMultiplier);
       }
 
-      const elementalDamage = calculateWeaponElementalDamage(
-        session.equipment?.weapon?.itemId,
-        session.statusEffects || [],
-        totalSPI,
-        totalINT,
-        session.stats.level,
-        targetResists,
-        (session.equipment?.weapon as any)?.enhancementElement,
-        (session.equipment?.weapon as any)?.enhancementLevel,
-        effectiveStats.auraDamageMultiplier
-      );
+      const elementalDamage = damageType !== 'magical'
+        ? calculateWeaponElementalDamage(
+          session.equipment?.weapon?.itemId,
+          session.statusEffects || [],
+          totalSPI,
+          totalINT,
+          session.stats.level,
+          targetResists,
+          (session.equipment?.weapon as any)?.enhancementElement,
+          (session.equipment?.weapon as any)?.enhancementLevel,
+          effectiveStats.auraDamageMultiplier
+        )
+        : [];
 
       hits.push({
         damage,

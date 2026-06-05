@@ -365,6 +365,8 @@ export class NetworkServer implements NetworkContext {
   }
 
   applyPlayerDamage(target: PlayerSession, damage: number, attackerId: string, damageType: string, isCritical: boolean, zoneId: string, attackerPosition?: { x: number; y: number; z: number }): { redirected: boolean; damageTaken: number } {
+    if (damage <= 0) return { redirected: false, damageTaken: 0 };
+
     const negationEffect = target.statusEffects?.find(
       e => e.type === StatusEffectType.BUFF_DAMAGE_NEGATION && e.buffData?.damageNegationThreshold
     );

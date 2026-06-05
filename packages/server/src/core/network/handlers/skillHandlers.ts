@@ -4,6 +4,7 @@ import {
   SKILL_TARGET_RULES, SkillTargetType, SkillType,
   GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
   StatusEffectType, StatusEffect,
+  getSkillTargetType,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -38,8 +39,10 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
 
   const skillTargetRule = SKILL_TARGET_RULES[skillName];
   const earlySkillDef = ctx.skillSys.findSkillDefinition(skillName);
-  const isHarmfulSkill = !skillTargetRule || skillTargetRule === SkillTargetType.OTHER_ONLY;
-  const isBuffSkill = earlySkillDef?.isBuff || !!earlySkillDef?.buffEffectTable || earlySkillDef?.isRevive || earlySkillDef?.skillType === SkillType.REVIVE;
+  const effectiveTargetType = earlySkillDef ? getSkillTargetType(earlySkillDef) : undefined;
+  const resolvedTargetType = effectiveTargetType || skillTargetRule;
+  const isHarmfulSkill = !resolvedTargetType || resolvedTargetType === SkillTargetType.OTHER_ONLY;
+  const isBuffSkill = earlySkillDef?.isBuff || !!earlySkillDef?.buffEffectTable || earlySkillDef?.isRevive || earlySkillDef?.skillType === SkillType.REVIVE || earlySkillDef?.skillType === SkillType.HEAL || earlySkillDef?.skillType === SkillType.PARTY_HEAL || !!earlySkillDef?.healing;
   if (isHarmfulSkill && !isBuffSkill && targetId && ctx.state.players.has(targetId) && ctx.isPartyMember(characterId, targetId)) {
     ctx.sendToPlayer(characterId, {
       type: PacketType.SKILL_USE,
@@ -364,12 +367,29 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
   }
 
   if (result.healing) {
-    session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + result.healing);
-    ctx.sendToPlayer(characterId, {
-      type: PacketType.HEAL,
-      timestamp: Date.now(),
-      data: { targetId: characterId, amount: result.healing }
-    });
+    const healTargetId = firstTargetId && firstTargetId !== characterId ? firstTargetId : null;
+    const healTarget = healTargetId ? ctx.state.players.get(healTargetId) : null;
+    if (healTarget && !healTarget.isDead) {
+      healTarget.stats.health = Math.min(healTarget.stats.maxHealth, healTarget.stats.health + result.healing);
+      ctx.playerSys.recalcStats(healTarget);
+      ctx.sendToPlayer(healTargetId!, {
+        type: PacketType.HEAL,
+        timestamp: Date.now(),
+        data: { targetId: healTargetId, amount: result.healing }
+      });
+      ctx.sendToPlayer(healTargetId!, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId: healTargetId, stats: healTarget.stats, statBreakdown: healTarget.statBreakdown }
+      });
+    } else if (!session.isDead) {
+      session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + result.healing);
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.HEAL,
+        timestamp: Date.now(),
+        data: { targetId: characterId, amount: result.healing }
+      });
+    }
   }
 
   if (session.statusEffects.length > 0) {

@@ -1743,6 +1743,7 @@ export const CLASS_SKILL_DATA: Record<
             cooldown: 1.5,
             duration: 480,
             description: "Embue weapon with holy aura",
+            isBuff: true,
             buffEffectTable: {
               weaponAura: {
                 element: "holy",

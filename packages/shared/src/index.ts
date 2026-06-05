@@ -31,6 +31,7 @@ export { CLASS_SPECIFIC_SKILLS, JOB_TO_CLASS_SKILLS_INDEX, getClassSpecificSkill
 export { JOB_SKILL_VALUES, getJobSkillValues, getMinAdeptness, getMaxPotential, getDesignJobId, DESIGN_JOB_IDS } from './constants/jobSkillValues';
 export * from './types/skillBar';
 export * from './types/party';
+export * from './utils/proficiency';
 export * from './utils/skillAnimations';
 export * from './utils/math';
 export * from './utils/validator';

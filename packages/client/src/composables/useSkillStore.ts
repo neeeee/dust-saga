@@ -17,6 +17,7 @@ import {
   getMaxPotential,
   getMinAdeptness,
   getDesignJobId,
+  getEffectiveProficiencies,
 } from '@dust-saga/shared';
 
 export interface SkillCooldownState {
@@ -329,11 +330,7 @@ export function useSkillStore() {
     const seen = new Set<string>();
     const proficiencies = state.skillProficiencies || {};
     const designJobId = getDesignJobId(state.jobId);
-
-    const effectiveProficiencies: Record<string, number> = {};
-    for (const subName of Object.keys(SUB_CATEGORY_TO_CATEGORY)) {
-      effectiveProficiencies[subName] = (proficiencies[subName] || 0) + getMinAdeptness(designJobId, subName);
-    }
+    const effectiveProficiencies = getEffectiveProficiencies(proficiencies, designJobId);
 
     for (const [, catData] of Object.entries(CLASS_SKILL_DATA)) {
       const categoryData = catData as { skills: SkillSubCategory[] };

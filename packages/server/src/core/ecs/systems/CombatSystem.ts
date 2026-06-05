@@ -325,7 +325,12 @@ export class CombatSystem extends System {
 
     const targetDodge = target.statBreakdown?.totalDodge ?? 0;
     const enemyAccuracy = enemy.level + 7;
-    const hitChance = Math.min(0.99, Math.max(0.01, calculateHitChance(enemyAccuracy, targetDodge)));
+    let hitChance = calculateHitChance(enemyAccuracy, targetDodge);
+    const levelDiff = target.stats.level - enemy.level;
+    if (levelDiff > 0) {
+      hitChance /= 1 + levelDiff * 0.15;
+    }
+    hitChance = Math.min(0.99, Math.max(0.01, hitChance));
     if (Math.random() > hitChance) {
       return {
         attackerId: enemy.id,
