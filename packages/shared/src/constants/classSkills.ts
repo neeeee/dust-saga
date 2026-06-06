@@ -1118,6 +1118,7 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       castTime: 1.5,
       cooldown: 10,
       duration: 210,
+      isBuff: true,
       description: "Restore MP over time",
       skillType: SkillType.MP_RESTORE,
     },
@@ -1128,11 +1129,11 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1,
       duration: 480,
       description: "Increase dodge rate",
-      isAOE: true,
+      isBuff: true,
       buffEffectTable: {
         statTieredValues: {
           stat: 'SPI',
-          proficiencyStat: 'Blessing',
+          proficiencyStat: 'Exorcism',
           tiers: [
             {
               threshold: 33,
@@ -1230,11 +1231,11 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1,
       duration: 480,
       description: "Increase dodge rate",
-      isAOE: true,
+      isBuff: true,
       buffEffectTable: {
         statTieredValues: {
           stat: 'SPI',
-          proficiencyStat: 'Blessing',
+          proficiencyStat: 'Exorcism',
           tiers: [
             {
               threshold: 33,
@@ -1351,11 +1352,11 @@ export const CLASS_SPECIFIC_SKILLS: Record<number, ClassSpecificSkills> = {
       cooldown: 1,
       duration: 480,
       description: "Increase dodge rate",
-      isAOE: true,
+      isBuff: true,
       buffEffectTable: {
         statTieredValues: {
           stat: 'SPI',
-          proficiencyStat: 'Blessing',
+          proficiencyStat: 'Exorcism',
           tiers: [
             {
               threshold: 33,

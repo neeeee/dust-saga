@@ -132,6 +132,7 @@ export interface ClassSpecificSkill {
   debuffEffectTable?: DebuffEffectTable;
   debuffDuration?: number;
   basePower?: number;
+  baseHits?: number;
   pulseCount?: number;
   pulseInterval?: number;
   onHitEffects?: OnHitEffect[];
@@ -139,6 +140,30 @@ export interface ClassSpecificSkill {
   consumableItem?: string;
   consumableItemQuantity?: number;
   isPassive?: boolean;
+  isBuff?: boolean;
+  isDebuff?: boolean;
+  hasDebuff?: boolean;
+  selfBuffOnly?: boolean;
+  isRevive?: boolean;
+  isSong?: boolean;
+  sacrificeHeal?: boolean;
+  mpDamage?: boolean;
+  createItems?: Array<{ itemId: string; quantity: number; consumeItems?: Array<{ itemId: string; quantity: number }> }>;
+  hidden?: boolean;
+  delayExplosion?: { minSeconds: number; maxSeconds: number };
+  dispelBuff?: boolean;
+  dispelDebuff?: boolean;
+  revealInvisible?: boolean;
+  summonObject?: SummonObject;
+  banishObject?: boolean;
+  negateFieldSpells?: boolean;
+  fieldSpellNegationRadius?: number;
+  damageVsLowDefense?: boolean;
+  fearAOE?: boolean;
+  preventResurrect?: boolean;
+  curse?: boolean;
+  blockOnly?: boolean;
+  shieldRequired?: boolean;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;

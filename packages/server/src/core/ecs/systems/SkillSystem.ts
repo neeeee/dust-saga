@@ -146,11 +146,11 @@ export class SkillSystem {
     if (skill.mpDamage) return SkillType.MP_DAMAGE;
     if (skill.isDebuff || skill.debuffEffectTable) return SkillType.DEBUFF;
     if (skill.healing) return SkillType.HEAL;
-    if (skill.isBuff) return SkillType.BUFF;
+    if (skill.isBuff || skill.buffEffectTable) return SkillType.BUFF;
     const isMagical = skill.damageType === 'magical'
       || (skill.damageSubType && ['fire','ice','lightning','dark','holy','poison'].includes(skill.damageSubType as string));
     if (isMagical) return SkillType.DAMAGE_MAGICAL;
-    if (skill.basePower !== undefined || skill.damageType === 'physical') return SkillType.DAMAGE_PHYSICAL;
+    if ((skill.basePower !== undefined && skill.basePower > 0) || skill.damageType === 'physical') return SkillType.DAMAGE_PHYSICAL;
     if (skill.createItems) return SkillType.CRAFT;
     return undefined;
   }
@@ -1202,32 +1202,26 @@ export class SkillSystem {
       const prof = cfg.proficiencyStat
         ? (caster.skillAdeptness?.[cfg.proficiencyStat] || 0)
         : 0;
-      const skillName = skill.name.toLowerCase();
 
-      if (skillName === 'lapis mediow') {
-        const result = resolveStatTieredValue(cfg, totalStat, prof, 'def');
-        if (result != null) {
-          pushEffect(StatusEffectType.BUFF_DEFENSE, 0, { flatDefense: result });
-          this.lastBuffDebug = `[Lapis Mediow] ${cfg.stat}=${totalStat} (${caster.baseStats?.[statKey] || 0} base + ${((caster.statPoints as unknown as Record<string, number>)?.[statKey] || 0)} alloc) ${cfg.proficiencyStat || '?'}=${prof} baseDef=${target.stats.defense} +${result} def`;
-        }
-      } else if (skillName === 'green song' || skillName === 'speedy gale') {
-        const dodgeResult = resolveStatTieredValue(cfg, totalStat, prof, 'dodgeChance');
-        if (dodgeResult != null) {
-          pushEffect(StatusEffectType.BUFF_DODGE, dodgeResult);
-        }
-        if (skillName === 'green song') {
-          const accuracyResult = resolveStatTieredValue(cfg, totalStat, prof, 'accuracy');
-          if (accuracyResult != null) {
-            pushEffect(StatusEffectType.BUFF_ACCURACY, accuracyResult);
+      const firstTier = cfg.tiers[0];
+      if (firstTier?.profTiers?.[0]) {
+        const resultKeys = Object.keys(firstTier.profTiers[0].values) as string[];
+        for (const resultKey of resultKeys) {
+          const result = resolveStatTieredValue(cfg, totalStat, prof, resultKey);
+          if (result != null) {
+            if (resultKey === 'dodgeChance') {
+              pushEffect(StatusEffectType.BUFF_DODGE, result);
+            } else if (resultKey === 'def') {
+              pushEffect(StatusEffectType.BUFF_DEFENSE, 0, { flatDefense: result });
+            } else if (resultKey === 'accuracy') {
+              pushEffect(StatusEffectType.BUFF_ACCURACY, result);
+            }
           }
         }
       }
     }
 
-    if (effects.length === 0) {
-      return;
-    }
-
+    if (effects.length === 0) return;
     target.statusEffects.push(...effects);
   }
 

@@ -1547,7 +1547,10 @@ export const CLASS_SKILL_DATA: Record<
             cooldown: 1.5,
             duration: 480,
             description: "Increase player's attack speed",
-            basePower: 2,
+            isBuff: true,
+            buffEffectTable: {
+              attackSpeed: 1.3,
+            },
           },
           "Lapis Mediow": {
             name: "Lapis Mediow",
@@ -1556,6 +1559,7 @@ export const CLASS_SKILL_DATA: Record<
             castTime: 0.5,
             cooldown: 1.5,
             duration: 480,
+            isBuff: true,
             buffEffectTable: {
               statTieredValues: {
                 stat: 'SPI',

@@ -116,7 +116,9 @@ export function resolveStatTieredValue(
     }
   }
 
-  if (!matchedTier) return null;
+  if (!matchedTier) {
+    matchedTier = tiers[0];
+  }
 
   if (!matchedTier.profTiers?.length) return null;
 
