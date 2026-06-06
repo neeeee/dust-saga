@@ -854,28 +854,35 @@ export class NetworkServer implements NetworkContext {
       const result = this.combat.processEnemyAttack(enemy, target);
       if (!result) return;
 
-      const dmgResult = this.applyPlayerDamage(target, result.damage, enemyId, 'physical', result.isCritical || false, target.zoneId, enemy.position);
-
-      if (!dmgResult.redirected) {
-        this.sendToPlayer(targetId, {
-          type: PacketType.DAMAGE,
-          timestamp: Date.now(),
-          data: { attackerId: enemyId, targetId, damage: dmgResult.damageTaken, isCritical: result.isCritical, damageType: 'physical' }
-        });
-
-        this.sendToPlayer(targetId, {
-          type: PacketType.STATS_UPDATE,
-          timestamp: Date.now(),
-          data: { characterId: targetId, stats: target.stats, statBreakdown: target.statBreakdown, skillProficiencies: target.skillProficiencies, skillAdeptness: target.skillAdeptness }
-        });
-
+      if (result.missed) {
         this.broadcastInZone(target.zoneId, {
           type: PacketType.DAMAGE,
           timestamp: Date.now(),
-          data: { attackerId: enemyId, targetId, damage: dmgResult.damageTaken, isCritical: result.isCritical, damageType: 'physical' }
-        }, targetId);
+          data: { attackerId: enemyId, targetId, damage: 0, isCritical: false, damageType: 'physical', missed: true }
+        });
+      } else {
+        const dmgResult = this.applyPlayerDamage(target, result.damage, enemyId, 'physical', result.isCritical || false, target.zoneId, enemy.position);
 
-        this.broadcastInZone(target.zoneId, {
+        if (!dmgResult.redirected) {
+          this.sendToPlayer(targetId, {
+            type: PacketType.DAMAGE,
+            timestamp: Date.now(),
+            data: { attackerId: enemyId, targetId, damage: dmgResult.damageTaken, isCritical: result.isCritical, damageType: 'physical' }
+          });
+
+          this.sendToPlayer(targetId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: targetId, stats: target.stats, statBreakdown: target.statBreakdown, skillProficiencies: target.skillProficiencies, skillAdeptness: target.skillAdeptness }
+          });
+
+          this.broadcastInZone(target.zoneId, {
+            type: PacketType.DAMAGE,
+            timestamp: Date.now(),
+            data: { attackerId: enemyId, targetId, damage: dmgResult.damageTaken, isCritical: result.isCritical, damageType: 'physical' }
+          }, targetId);
+
+          this.broadcastInZone(target.zoneId, {
           type: PacketType.STATS_UPDATE,
           timestamp: Date.now(),
           data: { entityId: targetId, health: target.stats.health, maxHealth: target.stats.maxHealth }
@@ -890,8 +897,9 @@ export class NetworkServer implements NetworkContext {
         this.broadcastInZone(target.zoneId, {
           type: PacketType.DAMAGE,
           timestamp: Date.now(),
-          data: { attackerId: enemyId, targetId, damage: 0, isCritical: false, damageType: 'physical', missed: true }
+          data: { attackerId: enemyId, targetId, damage: 0, isCritical: false, damageType: 'physical' }
         });
+      }
       }
     });
 
@@ -2392,7 +2400,7 @@ export class NetworkServer implements NetworkContext {
             this.broadcastInZone(session.zoneId, {
               type: PacketType.DAMAGE,
               timestamp: Date.now(),
-              data: { attackerId: session.characterId, targetId: castResult.targetId, damage: result.damage, isCritical: result.isCritical || false, damageType: result.damageType || 'physical', skillName: castResult.skillName, elementalDamage: result.elementalDamage }
+              data: { attackerId: session.characterId, targetId: castResult.targetId, damage: result.damage, isCritical: result.isCritical || false, damageType: result.damageType || 'physical', skillName: castResult.skillName, elementalDamage: result.elementalDamage, missed: result.missed || undefined }
             });
             if (died) {
               this.handleEnemyKill(castResult.targetId, session.characterId);
@@ -2427,7 +2435,7 @@ export class NetworkServer implements NetworkContext {
               this.broadcastInZone(session.zoneId, {
                 type: PacketType.DAMAGE,
                 timestamp: Date.now(),
-                data: { attackerId: session.characterId, targetId: castResult.targetId, damage: pvpDmgResult.redirected ? 0 : pvpDmgResult.damageTaken, isCritical: result.isCritical || false, damageType: result.damageType || 'physical', skillName: castResult.skillName, elementalDamage: pvpDmgResult.redirected ? [] : result.elementalDamage, missed: pvpDmgResult.redirected ? true : undefined }
+                data: { attackerId: session.characterId, targetId: castResult.targetId, damage: pvpDmgResult.redirected ? 0 : pvpDmgResult.damageTaken, isCritical: result.isCritical || false, damageType: result.damageType || 'physical', skillName: castResult.skillName, elementalDamage: pvpDmgResult.redirected ? [] : result.elementalDamage, missed: result.missed || undefined }
               });
               this.consumeDebuffsOnHit(playerTarget);
             }
@@ -2678,6 +2686,12 @@ export class NetworkServer implements NetworkContext {
             timestamp: Date.now(),
             data: { attackerId: '', targetId: session.characterId, damage: tick.mpDamage, isCritical: false, damageType: 'magical', skillName: 'mp_drain' }
           });
+        }
+        if (tick.mpRestored > 0) {
+          session.stats.mana = Math.min(session.stats.maxMana, session.stats.mana + tick.mpRestored);
+        }
+        if (tick.healed > 0) {
+          session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + tick.healed);
         }
         if (tick.expired.length > 0) {
           this.playerSys.recalcStats(session);

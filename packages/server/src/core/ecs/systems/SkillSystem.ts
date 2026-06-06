@@ -63,6 +63,7 @@ export interface SkillUseResult {
   hits?: Array<{
     damage: number;
     isCritical: boolean;
+    missed?: boolean;
     elementalDamage?: Array<{ element: string; damage: number }>;
   }>;
   createdItems?: Array<{ itemId: string; quantity: number; consumeItems?: Array<{ itemId: string; quantity: number }> }>;
@@ -604,13 +605,15 @@ export class SkillSystem {
     }
     steps.push(`raw=${basePower}×(${primaryStat}+${secondaryStat}×0.3)×${attackMultiplier}-${defenseStat}×0.5=${baseDamage}`);
 
-    const hits: Array<{ damage: number; isCritical: boolean; elementalDamage?: Array<{ element: string; damage: number }> }> = [];
+    const hits: Array<{ damage: number; isCritical: boolean; missed?: boolean; elementalDamage?: Array<{ element: string; damage: number }> }> = [];
     let totalDamage = 0;
     let anyCritical = false;
+    let anyMissed = false;
 
     for (let h = 0; h < numHits; h++) {
       if (Math.random() > hitChance) {
-        hits.push({ damage: 0, isCritical: false });
+        hits.push({ damage: 0, isCritical: false, missed: true });
+        anyMissed = true;
         if (numHits > 1) steps.push(`hit${h + 1}: miss`);
         continue;
       }
@@ -684,6 +687,7 @@ export class SkillSystem {
       success: true,
       damage: totalDamage,
       isCritical: anyCritical,
+      missed: numHits === 1 ? anyMissed : undefined,
       damageType,
       statusEffects: statusEffects.length > 0 ? statusEffects : undefined,
       debugCalc: `[${skill.name}] ${steps.join(' → ')} → final=${totalDamage}`,
@@ -1002,6 +1006,19 @@ export class SkillSystem {
 
     if (bt.mpRegen) {
       pushEffect(StatusEffectType.BUFF_MP_REGEN, bt.mpRegen);
+    }
+
+    if (bt.mpRestorePerTick) {
+      const cfg = bt.mpRestorePerTick;
+      const caster = casterSession || target;
+      const statVal = cfg.statScale
+        ? (caster.baseStats?.[cfg.statScale as keyof typeof caster.baseStats] || 0) + ((caster.statPoints as unknown as Record<string, number>)?.[cfg.statScale] || 0)
+        : 0;
+      const profVal = cfg.proficiencyStat
+        ? (caster.skillAdeptness?.[cfg.proficiencyStat] || 0)
+        : 0;
+      const mpPerTick = Math.floor(cfg.base + statVal * (cfg.statMultiplier ?? 0) + profVal * (cfg.proficiencyMultiplier ?? 0));
+      pushEffect(StatusEffectType.BUFF_MP_REGEN, 0, { mpRestorePerTick: { mpPerTick, tickInterval: 3000 } });
     }
 
     if (bt.physicalDamageReduction) {
@@ -1330,13 +1347,14 @@ export class SkillSystem {
     return available;
   }
 
-  tickStatusEffects(session: PlayerSession, now: number): { damage: number; mpDamage: number; healed: number; expired: StatusEffect[] } {
+  tickStatusEffects(session: PlayerSession, now: number): { damage: number; mpDamage: number; healed: number; mpRestored: number; expired: StatusEffect[] } {
     let damage = 0;
     let mpDamage = 0;
     let healed = 0;
+    let mpRestored = 0;
     const expired: StatusEffect[] = [];
 
-    if (!session.statusEffects) return { damage: 0, mpDamage: 0, healed: 0, expired: [] };
+    if (!session.statusEffects) return { damage: 0, mpDamage: 0, healed: 0, mpRestored: 0, expired: [] };
 
     for (const effect of session.statusEffects) {
       if (effect.songProximityBuff && effect.lastInRangeAt && now - effect.lastInRangeAt > 5000) {
@@ -1366,6 +1384,11 @@ export class SkillSystem {
         healed += effect.buffData.healOverTime.hpPerTick;
       }
 
+      if (effect.buffData?.mpRestorePerTick && now - effect.lastTickAt >= effect.buffData.mpRestorePerTick.tickInterval) {
+        effect.lastTickAt = now;
+        mpRestored += effect.buffData.mpRestorePerTick.mpPerTick;
+      }
+
       const songTypes = SONG_TYPES;
       if (songTypes.includes(effect.type) && effect.tickInterval > 0 && now - effect.lastTickAt >= effect.tickInterval) {
         effect.lastTickAt = now;
@@ -1383,6 +1406,6 @@ export class SkillSystem {
       e => !expired.includes(e)
     );
 
-    return { damage, mpDamage, healed, expired };
+    return { damage, mpDamage, healed, mpRestored, expired };
   }
 }

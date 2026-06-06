@@ -149,6 +149,7 @@ export interface BuffEffectTable {
   castTime?: number;
   maxHp?: number;
   mpRegen?: number;
+  mpRestorePerTick?: { base: number; statScale?: string; statMultiplier?: number; proficiencyStat?: string; proficiencyMultiplier?: number };
   physicalDamageReduction?: string;
   dodgeChance?: number;
   accuracy?: number;
@@ -244,6 +245,7 @@ export interface BuffData {
   dodgeReductionFlat?: number;
   accuracyBonusFlat?: number;
   healOverTime?: { hpPerTick: number; tickInterval: number };
+  mpRestorePerTick?: { mpPerTick: number; tickInterval: number };
   fear?: boolean;
   delayExplosion?: { minMs: number; maxMs: number };
   preventResurrect?: boolean;

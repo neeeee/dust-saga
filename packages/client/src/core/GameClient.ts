@@ -462,6 +462,33 @@ export class GameClient {
         this.engine.showDamageNumber(targetId, 0, false, undefined, true);
       } else {
         this.engine.showDamageNumber(targetId, damage, isCritical);
+
+        if (elementalDamage && Array.isArray(elementalDamage)) {
+          for (const el of elementalDamage) {
+            this.engine.showDamageNumber(targetId, el.damage, false, el.element);
+          }
+        }
+
+        const entity = this.knownEntities.get(targetId);
+        if (entity?.type === 'enemy') {
+          const enemyData = this.enemies.get(targetId);
+          if (enemyData) {
+            enemyData.health = Math.max(0, enemyData.health - damage);
+            if (elementalDamage) {
+              for (const el of elementalDamage) {
+                enemyData.health = Math.max(0, enemyData.health - el.damage);
+              }
+            }
+          }
+        }
+        if (entity?.type === 'player') {
+          entity.data.health = Math.max(0, (entity.data.health || 0) - damage);
+          if (elementalDamage) {
+            for (const el of elementalDamage) {
+              entity.data.health = Math.max(0, (entity.data.health || 0) - el.damage);
+            }
+          }
+        }
       }
 
       if (elementalDamage && Array.isArray(elementalDamage)) {
