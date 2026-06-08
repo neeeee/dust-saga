@@ -73,6 +73,7 @@ export interface SkillUseResult {
   dispelDebuff?: boolean;
   revealInvisible?: boolean;
   fear?: boolean;
+  provoked?: boolean;
   summonObject?: { objectType: string; duration: number; hp?: number; defense?: number; aoeDamage?: number };
   banishObject?: boolean;
   blockOnly?: boolean;
@@ -386,6 +387,10 @@ export class SkillSystem {
 
     if (st === SkillType.REVIVE && targetId) {
       return { success: true, revived: true };
+    }
+
+    if (st === SkillType.PROVOKE) {
+      return { success: true, provoked: true, targetId: targetId || undefined };
     }
 
     if (st === SkillType.DEBUFF || st === SkillType.FEAR || st === SkillType.DISPEL) {

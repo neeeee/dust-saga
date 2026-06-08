@@ -29,6 +29,7 @@ import { LootSystem } from '../ecs/systems/LootSystem';
 import { PlayerSystem } from '../ecs/systems/PlayerSystem';
 import { SkillSystem } from '../ecs/systems/SkillSystem';
 import { PartySystem } from '../ecs/systems/PartySystem';
+import { EnmitySystem } from '../ecs/systems/EnmitySystem';
 import { SpawnManager } from '../world/SpawnManager';
 import { QuestSystem } from '../../systems/QuestSystem';
 import { v4 as uuidv4 } from 'uuid';
@@ -44,6 +45,7 @@ export class NetworkServer implements NetworkContext {
   readonly playerSys: PlayerSystem;
   readonly skillSys: SkillSystem;
   readonly partySys: PartySystem;
+  readonly enmity: EnmitySystem;
   readonly spawnMgr: SpawnManager;
   readonly questSys: QuestSystem;
   readonly state: ServerGameState;
@@ -92,6 +94,8 @@ export class NetworkServer implements NetworkContext {
     this.playerSys = new PlayerSystem({ getEntity: () => undefined, getEntitiesWithComponent: () => [], getAllEntities: () => [], addComponent: () => {}, removeComponent: () => {}, createEntity: () => ({ id: '', components: new Map() }), removeEntity: () => {} } as any);
     this.skillSys = new SkillSystem();
     this.partySys = new PartySystem();
+    this.enmity = new EnmitySystem();
+    this.ai.enmitySys = this.enmity;
     this.spawnMgr = new SpawnManager();
     this.questSys = new QuestSystem();
     this.state = {
@@ -203,8 +207,19 @@ export class NetworkServer implements NetworkContext {
 
     this.spawnMgr.getAllEnemies().forEach(enemy => {
       if (enemy.targetId === session.characterId) {
-        enemy.state = 'return';
-        enemy.targetId = null;
+        this.enmity.removePlayer(enemy, session.characterId);
+        const topTarget = this.enmity.getTopTarget(enemy);
+        if (topTarget) {
+          enemy.targetId = topTarget.characterId;
+          if (enemy.state === 'return') {
+            enemy.state = 'chase';
+          }
+        } else {
+          enemy.state = 'return';
+          enemy.targetId = null;
+        }
+      } else if (enemy.enmityTable?.has(session.characterId)) {
+        this.enmity.removePlayer(enemy, session.characterId);
       }
     });
 
@@ -489,12 +504,15 @@ export class NetworkServer implements NetworkContext {
     }
   }
 
-  damageEnemy(enemy: EnemyInstance, damage: number): { died: boolean; actualDamage: number } {
+  damageEnemy(enemy: EnemyInstance, damage: number, attackerId?: string): { died: boolean; actualDamage: number } {
     enemy.health = Math.max(0, enemy.health - damage);
     const actualDamage = damage;
     if (enemy.invulnerable) {
       enemy.health = enemy.maxHealth;
       return { died: false, actualDamage };
+    }
+    if (attackerId) {
+      this.enmity.addDamageEnmity(enemy, attackerId, damage);
     }
     return { died: enemy.health <= 0, actualDamage };
   }
@@ -1255,12 +1273,17 @@ export class NetworkServer implements NetworkContext {
       for (const target of targets) {
         const enemy = this.spawnMgr.getEnemy(target.id);
         if (enemy && enemy.state !== 'dead') {
+          let anyApplied = false;
+          let maxPotency = 0;
           for (const effect of result.statusEffects) {
             if (!this.shouldApplyDebuff(effect, target.id, session.characterId)) continue;
             if (this.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
             const cloned = { ...effect, targetId: target.id };
             enemy.statusEffects.push(cloned);
+            anyApplied = true;
+            if (effect.potency > maxPotency) maxPotency = effect.potency;
           }
+          this.enmity.addDebuffEnmity(enemy, session.characterId, maxPotency, anyApplied);
           this.broadcastInZone(session.zoneId, {
             type: PacketType.ENTITY_STATUS_EFFECTS,
             timestamp: Date.now(),
@@ -1298,10 +1321,10 @@ export class NetworkServer implements NetworkContext {
 
       const enemy = this.spawnMgr.getEnemy(target.id);
       if (enemy) {
-        const { died } = this.damageEnemy(enemy, targetResult.damage);
+        const { died } = this.damageEnemy(enemy, targetResult.damage, characterId);
         if (targetResult.elementalDamage) {
           for (const el of targetResult.elementalDamage) {
-            this.damageEnemy(enemy, el.damage);
+            this.damageEnemy(enemy, el.damage, characterId);
           }
         }
         this.broadcastInZone(session.zoneId, {
@@ -1416,12 +1439,12 @@ export class NetworkServer implements NetworkContext {
       if (enemy) {
         for (const hit of hits) {
           if (hit.damage > 0) {
-            const { died } = this.damageEnemy(enemy, hit.damage);
+            const { died } = this.damageEnemy(enemy, hit.damage, characterId);
             if (died) enemyDied = true;
           }
           if (hit.elementalDamage) {
             for (const el of hit.elementalDamage) {
-              this.damageEnemy(enemy, el.damage);
+              this.damageEnemy(enemy, el.damage, characterId);
             }
           }
           this.broadcastInZone(session.zoneId, {
@@ -1485,10 +1508,10 @@ export class NetworkServer implements NetworkContext {
 
     const enemy = this.spawnMgr.getEnemy(targetId);
     if (enemy) {
-      const { died } = this.damageEnemy(enemy, result.damage!);
+      const { died } = this.damageEnemy(enemy, result.damage!, characterId);
       if (result.elementalDamage) {
         for (const el of result.elementalDamage) {
-          this.damageEnemy(enemy, el.damage);
+          this.damageEnemy(enemy, el.damage, characterId);
         }
       }
       this.broadcastInZone(session.zoneId, {
@@ -1810,7 +1833,7 @@ export class NetworkServer implements NetworkContext {
       const variance = 0.9 + Math.random() * 0.2;
       const hpDamage = Math.max(1, Math.floor(baseDamage * variance));
 
-      const { died } = this.damageEnemy(enemy, hpDamage);
+      const { died } = this.damageEnemy(enemy, hpDamage, caster.characterId);
 
       this.broadcastInZone(caster.zoneId, {
         type: PacketType.DAMAGE,
@@ -2098,10 +2121,10 @@ export class NetworkServer implements NetworkContext {
     if (enemy && enemy.state !== 'dead') {
       const targetStats = this.getTargetStatsForEntity(targetId);
       const result = this.skillSys.calculateAOEDamage(session, skillName, targetId, () => targetStats);
-      if (result?.damage) {
-        const { died } = this.damageEnemy(enemy, result.damage);
-        this.broadcastInZone(session.zoneId, {
-          type: PacketType.DAMAGE,
+       if (result?.damage) {
+         const { died } = this.damageEnemy(enemy, result.damage, session.characterId);
+         this.broadcastInZone(session.zoneId, {
+           type: PacketType.DAMAGE,
           timestamp: Date.now(),
           data: {
             attackerId: session.characterId,
@@ -2136,12 +2159,15 @@ export class NetworkServer implements NetworkContext {
     const enemy = this.spawnMgr.getEnemy(targetId);
     if (enemy && enemy.state !== 'dead') {
       let changed = false;
+      let maxPotency = 0;
       for (const effect of debuffEffects) {
         if (enemy.statusEffects.some(e => e.type === effect.type && e.skillName === skillName)) continue;
         enemy.statusEffects.push({ ...effect, targetId });
         changed = true;
+        if (effect.potency > maxPotency) maxPotency = effect.potency;
       }
       if (changed) {
+        this.enmity.addDebuffEnmity(enemy, caster.characterId, maxPotency, true);
         this.broadcastInZone(caster.zoneId, {
           type: PacketType.ENTITY_STATUS_EFFECTS,
           timestamp: Date.now(),
@@ -2391,10 +2417,10 @@ export class NetworkServer implements NetworkContext {
         } else if (result.damage && castResult.targetId) {
           const enemy = this.spawnMgr.getEnemy(castResult.targetId);
           if (enemy) {
-            const { died } = this.damageEnemy(enemy, result.damage);
+            const { died } = this.damageEnemy(enemy, result.damage, session.characterId);
             if (result.elementalDamage) {
               for (const el of result.elementalDamage) {
-                this.damageEnemy(enemy, el.damage);
+                this.damageEnemy(enemy, el.damage, session.characterId);
               }
             }
             this.broadcastInZone(session.zoneId, {
@@ -2648,17 +2674,35 @@ export class NetworkServer implements NetworkContext {
           } else {
             const debuffEnemy = this.spawnMgr.getEnemy(castResult.targetId);
             if (debuffEnemy && debuffEnemy.state !== 'dead') {
+               let anyApplied = false;
+               let maxPotency = 0;
                for (const effect of result.statusEffects) {
                  if (!this.shouldApplyDebuff(effect, castResult.targetId, session.characterId)) continue;
                  if (this.hasActiveDebuff(castResult.targetId, effect.type, effect.skillName)) continue;
                  effect.targetId = castResult.targetId;
                  debuffEnemy.statusEffects.push(effect);
+                 anyApplied = true;
+                 if (effect.potency > maxPotency) maxPotency = effect.potency;
                }
+               this.enmity.addDebuffEnmity(debuffEnemy, session.characterId, maxPotency, anyApplied);
               this.broadcastInZone(session.zoneId, {
                 type: PacketType.ENTITY_STATUS_EFFECTS,
                 timestamp: Date.now(),
                 data: { entityId: castResult.targetId, effects: debuffEnemy.statusEffects }
               });
+            }
+          }
+        }
+
+        if (!result.damage && (!result.statusEffects || result.statusEffects.length === 0) && !result.provoked && !result.healing && castResult.targetId) {
+          const fallbackSkillDef = this.skillSys.findSkillDefinition(castResult.skillName);
+          if (fallbackSkillDef) {
+            const fst = fallbackSkillDef.skillType;
+            if (fst === SkillType.DEBUFF || fst === SkillType.FEAR || fst === SkillType.DISPEL) {
+              const fallbackEnemy = this.spawnMgr.getEnemy(castResult.targetId);
+              if (fallbackEnemy && fallbackEnemy.state !== 'dead') {
+                this.enmity.addDebuffEnmity(fallbackEnemy, session.characterId, 0, false);
+              }
             }
           }
         }

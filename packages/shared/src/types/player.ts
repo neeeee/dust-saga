@@ -86,6 +86,12 @@ export interface PlayerSession {
   }>;
 }
 
+export interface EnmityEntry {
+  ce: number;
+  ve: number;
+  timestamp: number;
+}
+
 export interface EnemyInstance {
   id: string;
   enemyType: string;
@@ -103,6 +109,7 @@ export interface EnemyInstance {
   currentPatrolIndex: number;
   statusEffects: StatusEffect[];
   invulnerable?: boolean;
+  enmityTable?: Map<string, EnmityEntry>;
 }
 
 export interface DamageInfo {

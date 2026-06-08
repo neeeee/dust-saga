@@ -11,7 +11,7 @@ const SKILLS: Record<string, ClassSpecificSkill> = {
     cooldown: 15,
     duration: 1,
     description: "Provoke target to attack you",
-    skillType: SkillType.DEBUFF,
+    skillType: SkillType.PROVOKE,
   },
   "Brewer (Passive)": {
     reqLevel: 12,
@@ -57,7 +57,7 @@ const SKILLS: Record<string, ClassSpecificSkill> = {
     cooldown: 15,
     duration: 10,
     description: "Provoke target to attack you",
-    skillType: SkillType.DEBUFF,
+    skillType: SkillType.PROVOKE,
   },
   "Jousting (Passive)": {
     reqLevel: 45,

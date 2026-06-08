@@ -1,6 +1,7 @@
 import { EntityManager, System } from '../EntityManager';
 import { EnemyInstance, StatusEffectType, distance2D } from '@dust-saga/shared';
 import { getEnemyDefinition } from '@dust-saga/shared';
+import type { EnmitySystem } from './EnmitySystem';
 
 type EnemyState = 'idle' | 'patrol' | 'chase' | 'attack' | 'return' | 'dead';
 
@@ -8,6 +9,7 @@ export class AISystem extends System {
   private attackCallbacks: Array<(enemyId: string, targetId: string, damage: number) => void> = [];
   private respawnCallbacks: Array<(enemyId: string) => void> = [];
   private aggroCallbacks: Array<(enemyId: string, enemyType: string, targetId: string, enemyPos: { x: number; y: number; z: number }, spawnPos: { x: number; y: number; z: number }) => void> = [];
+  enmitySys: EnmitySystem | null = null;
 
   constructor(entityManager: EntityManager) {
     super(entityManager);
@@ -120,10 +122,10 @@ export class AISystem extends System {
 
       const stateHandlers: Record<Exclude<EnemyState, 'dead'>, () => void> = {
         idle: () => this.updateIdle(enemy, players, def),
-        patrol: () => this.updatePatrol(enemy, def, deltaTime),
+        patrol: () => this.updatePatrol(enemy, players, def, deltaTime),
         chase: () => this.updateChase(enemy, players, def, deltaTime),
         attack: () => this.updateAttack(enemy, players, def, deltaTime),
-        return: () => this.updateReturn(enemy, def, deltaTime),
+        return: () => this.updateReturn(enemy, players, def, deltaTime),
       };
 
       const handler = stateHandlers[enemy.state as Exclude<EnemyState, 'dead'>];
@@ -139,12 +141,28 @@ export class AISystem extends System {
     }
   }
 
+  private tryEngageFromEnmity(
+    enemy: EnemyInstance,
+    players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>
+  ): boolean {
+    if (!this.enmitySys || !enemy.enmityTable || enemy.enmityTable.size === 0) return false;
+    const topTarget = this.enmitySys.getTopTarget(enemy);
+    if (!topTarget) return false;
+    const targetPos = this.findPlayerTarget(players, topTarget.characterId);
+    if (!targetPos) return false;
+    enemy.state = 'chase';
+    enemy.targetId = topTarget.characterId;
+    return true;
+  }
+
   private updateIdle(
     enemy: EnemyInstance,
     players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>,
     def: ReturnType<typeof getEnemyDefinition>,
   ): void {
     if (!def) return;
+
+    if (this.tryEngageFromEnmity(enemy, players)) return;
 
     const target = this.pickAggroTarget(enemy, players, def.aggroRange, def.aggroStrategy || 'first');
     if (target) {
@@ -160,11 +178,13 @@ export class AISystem extends System {
     }
   }
 
-  private updatePatrol(enemy: EnemyInstance, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
+  private updatePatrol(enemy: EnemyInstance, players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
     if (!def || enemy.patrolPoints.length === 0) {
       this.transitionTo(enemy, 'idle');
       return;
     }
+
+    if (this.tryEngageFromEnmity(enemy, players)) return;
 
     const target = enemy.patrolPoints[enemy.currentPatrolIndex];
     const dist = distance2D(enemy.position, target);
@@ -190,6 +210,17 @@ export class AISystem extends System {
       return;
     }
 
+    if (this.enmitySys) {
+      this.enmitySys.decayVE(enemy, deltaTime);
+      const topTarget = this.enmitySys.getTopTarget(enemy);
+      if (topTarget && topTarget.characterId !== enemy.targetId) {
+        const newTarget = this.findPlayerTarget(players, topTarget.characterId);
+        if (newTarget) {
+          enemy.targetId = topTarget.characterId;
+        }
+      }
+    }
+
     const targetPos = this.findPlayerTarget(players, enemy.targetId);
     if (!targetPos) {
       this.transitionTo(enemy, 'return');
@@ -200,8 +231,11 @@ export class AISystem extends System {
     const spawnDist = distance2D(enemy.position, enemy.spawnPosition);
 
     if (spawnDist > def.leashRange) {
-      this.transitionTo(enemy, 'return');
-      return;
+      const hasEnmity = this.enmitySys && this.enmitySys.getTopTarget(enemy) !== null;
+      if (!hasEnmity) {
+        this.transitionTo(enemy, 'return');
+        return;
+      }
     }
 
     if (dist <= def.attackRange) {
@@ -217,11 +251,22 @@ export class AISystem extends System {
     enemy: EnemyInstance,
     players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>,
     def: ReturnType<typeof getEnemyDefinition>,
-    _deltaTime: number
+    deltaTime: number
   ): void {
     if (!def || !enemy.targetId) {
       this.transitionTo(enemy, 'return');
       return;
+    }
+
+    if (this.enmitySys) {
+      this.enmitySys.decayVE(enemy, deltaTime);
+      const topTarget = this.enmitySys.getTopTarget(enemy);
+      if (topTarget && topTarget.characterId !== enemy.targetId) {
+        const newTarget = this.findPlayerTarget(players, topTarget.characterId);
+        if (newTarget) {
+          enemy.targetId = topTarget.characterId;
+        }
+      }
     }
 
     const targetPos = this.findPlayerTarget(players, enemy.targetId);
@@ -247,12 +292,17 @@ export class AISystem extends System {
     }
   }
 
-  private updateReturn(enemy: EnemyInstance, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
+  private updateReturn(enemy: EnemyInstance, players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
     if (!def) return;
+
+    if (this.tryEngageFromEnmity(enemy, players)) return;
 
     const dist = distance2D(enemy.position, enemy.spawnPosition);
 
     if (dist < 1) {
+      if (this.enmitySys) {
+        this.enmitySys.clearEnmity(enemy);
+      }
       this.transitionTo(enemy, 'idle');
       const def2 = getEnemyDefinition(enemy.enemyType);
       if (def2) {
@@ -277,6 +327,9 @@ export class AISystem extends System {
       enemy.position = { ...enemy.spawnPosition };
       enemy.currentPatrolIndex = 0;
       enemy.statusEffects = [];
+      if (this.enmitySys) {
+        this.enmitySys.clearEnmity(enemy);
+      }
       this.respawnCallbacks.forEach(cb => cb(enemy.id));
     }
   }

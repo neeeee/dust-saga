@@ -13,6 +13,7 @@ import { LootSystem } from '../ecs/systems/LootSystem';
 import { PlayerSystem } from '../ecs/systems/PlayerSystem';
 import { SkillSystem } from '../ecs/systems/SkillSystem';
 import { PartySystem } from '../ecs/systems/PartySystem';
+import { EnmitySystem } from '../ecs/systems/EnmitySystem';
 import { SpawnManager } from '../world/SpawnManager';
 import { QuestSystem } from '../../systems/QuestSystem';
 
@@ -33,6 +34,7 @@ export interface NetworkContext {
   readonly playerSys: PlayerSystem;
   readonly skillSys: SkillSystem;
   readonly partySys: PartySystem;
+  readonly enmity: EnmitySystem;
   readonly spawnMgr: SpawnManager;
   readonly questSys: QuestSystem;
 
@@ -54,7 +56,7 @@ export interface NetworkContext {
   handleEnemyKill(enemyId: string, killerId: string): void;
   handleRevivePlayerBySession(caster: PlayerSession, targetId: string): void;
   applyPlayerDamage(target: PlayerSession, damage: number, attackerId: string, damageType: string, isCritical: boolean, zoneId: string, attackerPosition?: { x: number; y: number; z: number }): { redirected: boolean; damageTaken: number };
-  damageEnemy(enemy: EnemyInstance, damage: number): { died: boolean; actualDamage: number };
+  damageEnemy(enemy: EnemyInstance, damage: number, attackerId?: string): { died: boolean; actualDamage: number };
   getEnemyEffectiveDefense(enemy: EnemyInstance): number;
   sendDamageDebug(session: PlayerSession, result: { debugCalc?: string }): void;
   getTargetStatsForEntity(id: string): {

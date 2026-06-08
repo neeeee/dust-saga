@@ -217,6 +217,7 @@ export enum SkillType {
   DISPEL = 'dispel',
   FEAR = 'fear',
   PASSIVE = 'passive',
+  PROVOKE = 'provoke',
 }
 
 export interface OnHitEffect {

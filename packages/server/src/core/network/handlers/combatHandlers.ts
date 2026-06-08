@@ -63,6 +63,12 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
           ctx.damageEnemy(enemy, el.damage);
         }
       }
+      const totalDmg = damageInfo.damage + (damageInfo.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
+      if (!damageInfo.missed && totalDmg > 0) {
+        ctx.enmity.addDamageEnmity(enemy, characterId, totalDmg);
+      } else if (damageInfo.missed) {
+        ctx.enmity.addEnmity(enemy, characterId, 50, 0);
+      }
       ctx.broadcastInZone(session.zoneId, {
         type: PacketType.STATS_UPDATE,
         timestamp: Date.now(),
@@ -117,6 +123,12 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
     }
 
     if (enemy) {
+      if (!info.missed && info.damage > 0) {
+        const manualTotalDmg = info.damage + (info.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
+        ctx.enmity.addDamageEnmity(enemy, characterId, manualTotalDmg);
+      } else if (info.missed) {
+        ctx.enmity.addEnmity(enemy, characterId, 50, 0);
+      }
       ctx.broadcastInZone(session.zoneId, {
         type: PacketType.STATS_UPDATE,
         timestamp: Date.now(),

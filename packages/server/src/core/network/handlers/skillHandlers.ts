@@ -280,6 +280,19 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
     });
   }
 
+  if (result.provoked && result.targetId) {
+    const provokeTarget = ctx.spawnMgr.getEnemy(result.targetId);
+    if (provokeTarget && provokeTarget.state !== 'dead') {
+      ctx.enmity.provokeEnmity(provokeTarget, characterId);
+      provokeTarget.targetId = characterId;
+      if (provokeTarget.state === 'idle') {
+        provokeTarget.state = 'chase';
+      } else if (provokeTarget.state === 'return') {
+        provokeTarget.state = 'chase';
+      }
+    }
+  }
+
   if (result.damage) {
     if (aoePosition) {
       ctx.applyAOEDamageToTargets(session, skillName, aoePosition, aoeRadius, result);
@@ -294,11 +307,20 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
       for (const target of targets) {
         const enemy = ctx.spawnMgr.getEnemy(target.id);
         if (enemy && enemy.state !== 'dead') {
+          let anyApplied = false;
+          let maxPotency = 0;
           for (const effect of result.statusEffects) {
             if (!ctx.shouldApplyDebuff(effect, target.id, characterId)) continue;
             if (ctx.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
             const cloned = { ...effect, targetId: target.id };
             enemy.statusEffects.push(cloned);
+            anyApplied = true;
+            if (effect.potency > maxPotency) maxPotency = effect.potency;
+          }
+          if (anyApplied) {
+            ctx.enmity.addDebuffEnmity(enemy, characterId, maxPotency, true);
+          } else {
+            ctx.enmity.addDebuffEnmity(enemy, characterId, 0, false);
           }
           ctx.broadcastInZone(session.zoneId, {
             type: PacketType.ENTITY_STATUS_EFFECTS,
@@ -330,11 +352,20 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
     } else if (firstTargetId) {
       const enemy = ctx.spawnMgr.getEnemy(firstTargetId);
       if (enemy && enemy.state !== 'dead') {
+        let anyApplied = false;
+        let maxPotency = 0;
         for (const effect of result.statusEffects) {
           if (!ctx.shouldApplyDebuff(effect, firstTargetId, characterId)) continue;
           if (ctx.hasActiveDebuff(firstTargetId, effect.type, effect.skillName)) continue;
           const cloned = { ...effect, targetId: firstTargetId };
           enemy.statusEffects.push(cloned);
+          anyApplied = true;
+          if (effect.potency > maxPotency) maxPotency = effect.potency;
+        }
+        if (anyApplied) {
+          ctx.enmity.addDebuffEnmity(enemy, characterId, maxPotency, true);
+        } else {
+          ctx.enmity.addDebuffEnmity(enemy, characterId, 0, false);
         }
         ctx.broadcastInZone(session.zoneId, {
           type: PacketType.ENTITY_STATUS_EFFECTS,
@@ -389,6 +420,36 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
         timestamp: Date.now(),
         data: { targetId: characterId, amount: result.healing }
       });
+    }
+  }
+
+  if (result.healing && result.healing > 0) {
+    const party = ctx.partySys.getPartyForMember(characterId);
+    const partyMemberIds = new Set<string>();
+    partyMemberIds.add(characterId);
+    if (party) {
+      for (const m of party.members) {
+        partyMemberIds.add(m.characterId);
+      }
+    }
+    ctx.spawnMgr.getAllEnemies().forEach(enemy => {
+      if (enemy.state === 'dead' || !enemy.enmityTable) return;
+      if (ctx.enmity.hasEnmityWithParty(enemy, partyMemberIds)) {
+        ctx.enmity.addHealEnmity(enemy, characterId, result.healing!);
+      }
+    });
+  }
+
+  if (!result.damage && (!result.statusEffects || result.statusEffects.length === 0) && !result.provoked && !result.healing && firstTargetId) {
+    const skillDef = ctx.skillSys.findSkillDefinition(skillName);
+    if (skillDef) {
+      const st = skillDef.skillType;
+      if (st === SkillType.DEBUFF || st === SkillType.FEAR || st === SkillType.DISPEL) {
+        const fallbackEnemy = ctx.spawnMgr.getEnemy(firstTargetId);
+        if (fallbackEnemy && fallbackEnemy.state !== 'dead') {
+          ctx.enmity.addDebuffEnmity(fallbackEnemy, characterId, 0, false);
+        }
+      }
     }
   }
 
