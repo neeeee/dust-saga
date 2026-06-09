@@ -46,6 +46,10 @@ export interface NetworkContext {
   sendToPlayer(characterId: string, packet: Packet): void;
   broadcastInZone(zoneId: string, packet: Packet, excludeCharacterId?: string): void;
   sendZoneState(socket: Socket, zoneId: string, includePlayerId?: string): void;
+  registerPlayerInZone(characterId: string, zoneId: string): void;
+  unregisterPlayerFromZone(characterId: string): void;
+  movePlayerToZone(characterId: string, newZoneId: string): void;
+  forEachPlayerInZone(zoneId: string, cb: (id: string, player: PlayerSession) => void): void;
 
   isPartyMember(characterId: string, targetId: string): boolean;
   refreshPartyForMember(characterId: string): void;
@@ -87,6 +91,11 @@ export interface NetworkContext {
   removeBlockingProtectedBuffs(blockerId: string): void;
   removeSongProximityBuffs(caster: PlayerSession): void;
   applySongPulseImmediate(caster: PlayerSession): void;
+
+  getLastMoveBroadcast(characterId: string): number;
+  setLastMoveBroadcast(characterId: string, time: number): void;
+  clearMovementThrottle(characterId: string): void;
+  updatePlayerSpatialPosition(characterId: string, position: { x: number; z: number }): void;
 
   spawnDummy(session: PlayerSession): void;
   despawnDummy(dummyId: string, session: PlayerSession): void;

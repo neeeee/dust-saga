@@ -21,6 +21,7 @@ import {
   ZoneType,
   normalizeEquipment,
   getEnemyDefinition, getZoneDefinition, NPC_DATABASE, getNPCsInZone, getItem, getQuest, QUEST_DATABASE, ITEM_DATABASE,
+  SpatialHash, SpatialEntry,
 } from '@dust-saga/shared';
 import { AuthManager } from '../auth/AuthManager';
 import { CombatSystem } from '../ecs/systems/CombatSystem';
@@ -35,6 +36,9 @@ import { QuestSystem } from '../../systems/QuestSystem';
 import { v4 as uuidv4 } from 'uuid';
 import { NetworkContext, ServerGameState, PacketHandler } from './NetworkContext';
 import { registerAllHandlers } from './handlers';
+
+const STA_DEBUFF_CATEGORIES = new Set(['ailment', 'stun', 'trip', 'knockdown', 'knockback', 'bleed']);
+const SPI_DEBUFF_CATEGORIES = new Set(['disorder', 'freeze', 'burn', 'curse', 'sleep', 'weakness', 'weaken']);
 
 export class NetworkServer implements NetworkContext {
   private io: SocketIOServer;
@@ -77,6 +81,37 @@ export class NetworkServer implements NetworkContext {
   }> = new Map();
   private dummyCounter: number = 0;
 
+  private zonePlayerIndex: Map<string, Set<string>> = new Map();
+
+  private lastMoveBroadcast: Map<string, number> = new Map();
+
+  private playerSpatialHash = new SpatialHash<PlayerSession>(8);
+  private enemySpatialHash = new SpatialHash<EnemyInstance>(8);
+  static readonly INTEREST_RADIUS = 50;
+  static readonly INTEREST_RADIUS_SQ = 50 * 50;
+  private aiTickBucket: number = 0;
+  private readonly AI_TICK_STAGGER = 4;
+
+  private addToZonePlayerIndex(zoneId: string, characterId: string): void {
+    let set = this.zonePlayerIndex.get(zoneId);
+    if (!set) {
+      set = new Set();
+      this.zonePlayerIndex.set(zoneId, set);
+    }
+    set.add(characterId);
+  }
+
+  private removeFromZonePlayerIndex(characterId: string): void {
+    for (const [, set] of this.zonePlayerIndex) {
+      set.delete(characterId);
+    }
+  }
+
+  private movePlayerZoneIndex(characterId: string, newZoneId: string): void {
+    this.removeFromZonePlayerIndex(characterId);
+    this.addToZonePlayerIndex(newZoneId, characterId);
+  }
+
   constructor(httpServer: any) {
     this.io = new SocketIOServer(httpServer, {
       cors: {
@@ -112,10 +147,7 @@ export class NetworkServer implements NetworkContext {
   }
 
   findCharacterBySocket(socketId: string): string | undefined {
-    for (const [characterId, socket] of this.state.playerToSocket) {
-      if (socket === socketId) return characterId;
-    }
-    return undefined;
+    return this.state.socketToPlayer.get(socketId);
   }
 
   findPlayerByCharacterId(characterId: string): PlayerSession | undefined {
@@ -139,6 +171,55 @@ export class NetworkServer implements NetworkContext {
     this.io.to(socketId).emit('packet', packet);
   }
 
+  registerPlayerInZone(characterId: string, zoneId: string): void {
+    this.addToZonePlayerIndex(zoneId, characterId);
+    this.insertPlayerSpatial(characterId);
+    const socketId = this.state.playerToSocket.get(characterId);
+    if (socketId) {
+      this.io.of('/').sockets.get(socketId)?.join(`zone:${zoneId}`);
+    }
+  }
+
+  unregisterPlayerFromZone(characterId: string): void {
+    const zoneId = this.getZoneIdForCharacter(characterId);
+    this.removeFromZonePlayerIndex(characterId);
+    this.removePlayerSpatial(characterId);
+    if (zoneId) {
+      const socketId = this.state.playerToSocket.get(characterId);
+      if (socketId) {
+        this.io.of('/').sockets.get(socketId)?.leave(`zone:${zoneId}`);
+      }
+    }
+  }
+
+  movePlayerToZone(characterId: string, newZoneId: string): void {
+    const oldZoneId = this.getZoneIdForCharacter(characterId);
+    const socketId = this.state.playerToSocket.get(characterId);
+    if (socketId) {
+      if (oldZoneId) {
+        this.io.of('/').sockets.get(socketId)?.leave(`zone:${oldZoneId}`);
+      }
+      this.io.of('/').sockets.get(socketId)?.join(`zone:${newZoneId}`);
+    }
+    this.movePlayerZoneIndex(characterId, newZoneId);
+  }
+
+  private getZoneIdForCharacter(characterId: string): string | undefined {
+    for (const [zoneId, set] of this.zonePlayerIndex) {
+      if (set.has(characterId)) return zoneId;
+    }
+    return undefined;
+  }
+
+  forEachPlayerInZone(zoneId: string, cb: (id: string, player: PlayerSession) => void): void {
+    const ids = this.zonePlayerIndex.get(zoneId);
+    if (!ids) return;
+    for (const id of ids) {
+      const p = this.state.players.get(id);
+      if (p) cb(id, p);
+    }
+  }
+
   sendToPlayer(characterId: string, packet: Packet): void {
     const socketId = this.state.playerToSocket.get(characterId);
     if (socketId) {
@@ -147,14 +228,16 @@ export class NetworkServer implements NetworkContext {
   }
 
   broadcastInZone(zoneId: string, packet: Packet, excludeCharacterId?: string): void {
-    this.state.players.forEach(session => {
-      if (session.zoneId !== zoneId) return;
-      if (excludeCharacterId && session.characterId === excludeCharacterId) return;
-      const socketId = this.state.playerToSocket.get(session.characterId);
-      if (socketId) {
-        this.io.to(socketId).emit('packet', packet);
+    if (excludeCharacterId) {
+      const excludeSocket = this.state.playerToSocket.get(excludeCharacterId);
+      if (excludeSocket) {
+        this.io.to(`zone:${zoneId}`).except(excludeSocket).emit('packet', packet);
+      } else {
+        this.io.to(`zone:${zoneId}`).emit('packet', packet);
       }
-    });
+    } else {
+      this.io.to(`zone:${zoneId}`).emit('packet', packet);
+    }
   }
 
   broadcastEntityEffects(session: PlayerSession): void {
@@ -163,6 +246,49 @@ export class NetworkServer implements NetworkContext {
       timestamp: Date.now(),
       data: { entityId: session.characterId, effects: session.statusEffects }
     }, session.characterId);
+  }
+
+  updatePlayerSpatialPosition(characterId: string, position: { x: number; z: number }): void {
+    const session = this.state.players.get(characterId);
+    if (session) {
+      this.playerSpatialHash.move(characterId, position.x, position.z);
+    }
+  }
+
+  insertPlayerSpatial(characterId: string): void {
+    const session = this.state.players.get(characterId);
+    if (session?.position) {
+      this.playerSpatialHash.insert(characterId, session.position.x, session.position.z, session);
+    }
+  }
+
+  removePlayerSpatial(characterId: string): void {
+    this.playerSpatialHash.remove(characterId);
+  }
+
+  insertEnemySpatial(enemy: EnemyInstance): void {
+    if (enemy.state !== 'dead') {
+      this.enemySpatialHash.insert(enemy.id, enemy.position.x, enemy.position.z, enemy);
+    }
+  }
+
+  removeEnemySpatial(enemyId: string): void {
+    this.enemySpatialHash.remove(enemyId);
+  }
+
+  queryEnemiesNear(x: number, z: number, radius: number, zoneId: string): SpatialEntry<EnemyInstance>[] {
+    return this.enemySpatialHash.queryRadius(x, z, radius).filter(e => {
+      if (e.data.state === 'dead') return false;
+      const eZone = this.spawnMgr.findZoneOfEnemy(e.id);
+      return eZone === zoneId;
+    });
+  }
+
+  queryPlayersNear(x: number, z: number, radius: number, zoneId: string): SpatialEntry<PlayerSession>[] {
+    return this.playerSpatialHash.queryRadius(x, z, radius).filter(e => {
+      if (e.data.isDead) return false;
+      return e.data.zoneId === zoneId;
+    });
   }
 
   isPartyMember(characterId: string, targetId: string): boolean {
@@ -205,7 +331,7 @@ export class NetworkServer implements NetworkContext {
     session.deathTime = Date.now();
     session.activeCast = null;
 
-    this.spawnMgr.getAllEnemies().forEach(enemy => {
+    this.spawnMgr.iterateAllEnemies(enemy => {
       if (enemy.targetId === session.characterId) {
         this.enmity.removePlayer(enemy, session.characterId);
         const topTarget = this.enmity.getTopTarget(enemy);
@@ -218,7 +344,7 @@ export class NetworkServer implements NetworkContext {
           enemy.state = 'return';
           enemy.targetId = null;
         }
-      } else if (enemy.enmityTable?.has(session.characterId)) {
+      } else if (enemy.enmityTable?.[session.characterId]) {
         this.enmity.removePlayer(enemy, session.characterId);
       }
     });
@@ -382,20 +508,45 @@ export class NetworkServer implements NetworkContext {
   applyPlayerDamage(target: PlayerSession, damage: number, attackerId: string, damageType: string, isCritical: boolean, zoneId: string, attackerPosition?: { x: number; y: number; z: number }): { redirected: boolean; damageTaken: number } {
     if (damage <= 0) return { redirected: false, damageTaken: 0 };
 
-    const negationEffect = target.statusEffects?.find(
-      e => e.type === StatusEffectType.BUFF_DAMAGE_NEGATION && e.buffData?.damageNegationThreshold
-    );
-    if (negationEffect && damage <= (negationEffect.buffData!.damageNegationThreshold!)) {
-      return { redirected: false, damageTaken: 0 };
+    if (!target.statusEffects || target.statusEffects.length === 0) {
+      return this._applyRawDamage(target, damage, attackerId, damageType, isCritical, zoneId);
     }
 
-    const protectedEffect = target.statusEffects?.find(
-      e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy
-    );
-    if (protectedEffect) {
+    let negationIdx = -1;
+    let protectedIdx = -1;
+    let selfBlockIdx = -1;
+
+    for (let i = 0; i < target.statusEffects.length; i++) {
+      const e = target.statusEffects[i];
+      if (negationIdx === -1 && e.type === StatusEffectType.BUFF_DAMAGE_NEGATION && e.buffData?.damageNegationThreshold) {
+        negationIdx = i;
+      } else if (protectedIdx === -1 && e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy) {
+        protectedIdx = i;
+      } else if (selfBlockIdx === -1 && e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance) {
+        selfBlockIdx = i;
+      }
+    }
+
+    if (negationIdx !== -1) {
+      const negationEffect = target.statusEffects[negationIdx];
+      if (damage <= (negationEffect.buffData!.damageNegationThreshold!)) {
+        return { redirected: false, damageTaken: 0 };
+      }
+    }
+
+    if (protectedIdx !== -1) {
+      const protectedEffect = target.statusEffects[protectedIdx];
       const blockerId = protectedEffect.buffData!.blockingProtectedBy!;
       const blocker = this.state.players.get(blockerId);
-      const blockStance = blocker?.statusEffects?.find(e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE);
+      let blockStance = false;
+      if (blocker && !blocker.isDead && blocker.statusEffects) {
+        for (let i = 0; i < blocker.statusEffects.length; i++) {
+          if (blocker.statusEffects[i].type === StatusEffectType.BUFF_BLOCKING_STANCE) {
+            blockStance = true;
+            break;
+          }
+        }
+      }
       if (blocker && !blocker.isDead && blockStance) {
         const reducedDamage = Math.floor(damage * 0.4);
         blocker.stats.health = Math.max(0, blocker.stats.health - reducedDamage);
@@ -445,16 +596,17 @@ export class NetworkServer implements NetworkContext {
       }
     }
 
-    const selfBlock = target.statusEffects?.find(
-      e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance
-    );
-    if (selfBlock) {
+    if (selfBlockIdx !== -1) {
       const reducedDamage = Math.floor(damage * 0.4);
       target.stats.health = Math.max(0, target.stats.health - reducedDamage);
       this.tryInterruptCast(target);
       return { redirected: false, damageTaken: reducedDamage };
     }
 
+    return this._applyRawDamage(target, damage, attackerId, damageType, isCritical, zoneId);
+  }
+
+  private _applyRawDamage(target: PlayerSession, damage: number, attackerId: string, damageType: string, isCritical: boolean, zoneId: string): { redirected: boolean; damageTaken: number } {
     const guardian = this.findGuardian(target.characterId);
     if (guardian && !guardian.isDead) {
       guardian.stats.health = Math.max(0, guardian.stats.health - damage);
@@ -596,25 +748,24 @@ export class NetworkServer implements NetworkContext {
   findClosestEntityToPosition(session: PlayerSession, pos: { x: number; y: number; z: number }, radius: number): { id: string; distance: number } | null {
     let closest: { id: string; distance: number } | null = null;
 
-    for (const [id, enemy] of this.spawnMgr.getAllEnemies()) {
-      if (enemy.state === 'dead') continue;
-      const dx = enemy.position.x - pos.x;
-      const dz = enemy.position.z - pos.z;
+    const nearEnemies = this.queryEnemiesNear(pos.x, pos.z, radius, session.zoneId);
+    for (const entry of nearEnemies) {
+      const dx = entry.x - pos.x;
+      const dz = entry.z - pos.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
       if (dist <= radius && (!closest || dist < closest.distance)) {
-        closest = { id, distance: dist };
+        closest = { id: entry.id, distance: dist };
       }
     }
 
-    for (const [id, player] of this.state.players) {
-      if (id === session.characterId) continue;
-      if (player.stats.health <= 0) continue;
-      if (!player.position) continue;
-      const dx = player.position.x - pos.x;
-      const dz = player.position.z - pos.z;
+    const nearPlayers = this.queryPlayersNear(pos.x, pos.z, radius, session.zoneId);
+    for (const entry of nearPlayers) {
+      if (entry.id === session.characterId) continue;
+      const dx = entry.x - pos.x;
+      const dz = entry.z - pos.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
       if (dist <= radius && (!closest || dist < closest.distance)) {
-        closest = { id, distance: dist };
+        closest = { id: entry.id, distance: dist };
       }
     }
 
@@ -624,25 +775,24 @@ export class NetworkServer implements NetworkContext {
   findAllEntitiesInRadius(session: PlayerSession, pos: { x: number; y: number; z: number }, radius: number): Array<{ id: string; distance: number }> {
     const results: Array<{ id: string; distance: number }> = [];
 
-    for (const [id, enemy] of this.spawnMgr.getAllEnemies()) {
-      if (enemy.state === 'dead') continue;
-      const dx = enemy.position.x - pos.x;
-      const dz = enemy.position.z - pos.z;
+    const nearEnemies = this.queryEnemiesNear(pos.x, pos.z, radius, session.zoneId);
+    for (const entry of nearEnemies) {
+      const dx = entry.x - pos.x;
+      const dz = entry.z - pos.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
       if (dist <= radius) {
-        results.push({ id, distance: dist });
+        results.push({ id: entry.id, distance: dist });
       }
     }
 
-    for (const [id, player] of this.state.players) {
-      if (id === session.characterId) continue;
-      if (player.stats.health <= 0) continue;
-      if (!player.position) continue;
-      const dx = player.position.x - pos.x;
-      const dz = player.position.z - pos.z;
+    const nearPlayers = this.queryPlayersNear(pos.x, pos.z, radius, session.zoneId);
+    for (const entry of nearPlayers) {
+      if (entry.id === session.characterId) continue;
+      const dx = entry.x - pos.x;
+      const dz = entry.z - pos.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
       if (dist <= radius) {
-        results.push({ id, distance: dist });
+        results.push({ id: entry.id, distance: dist });
       }
     }
 
@@ -681,7 +831,7 @@ export class NetworkServer implements NetworkContext {
     }
     const resistPercent = this.getDebuffResist(targetId, effect.debuffCategory);
     const { applied, roll } = rollDebuffApplication(accuracy, resistPercent);
-    if (casterId) {
+    if (casterId && process.env.DEBUG_DEBUFF_ROLLS === '1') {
       this.sendToPlayer(casterId, {
         type: PacketType.CHAT_MESSAGE,
         timestamp: Date.now(),
@@ -698,13 +848,11 @@ export class NetworkServer implements NetworkContext {
       const totalSTA = (player.statPoints.STA || 0) + baseStats.STA;
       const totalSPI = (player.statPoints.SPI || 0) + baseStats.SPI;
       const gc = player.statBreakdown?.gearCombat;
-      const staCategories = new Set(['ailment', 'stun', 'trip', 'knockdown', 'knockback', 'bleed']);
-      const spiCategories = new Set(['disorder', 'freeze', 'burn', 'curse', 'sleep', 'weakness', 'weaken']);
-      if (staCategories.has(category)) {
+      if (STA_DEBUFF_CATEGORIES.has(category)) {
         const gearKey = `${category}Resist` as keyof typeof gc;
         const gearBonus = (gc as any)?.[gearKey] || 0;
         return computeAilmentResist(totalSTA, gearBonus);
-      } else if (spiCategories.has(category)) {
+      } else if (SPI_DEBUFF_CATEGORIES.has(category)) {
         const gearKey = `${category}Resist` as keyof typeof gc;
         const gearBonus = (gc as any)?.[gearKey] || 0;
         return computeDisorderResist(totalSPI, gearBonus);
@@ -858,16 +1006,6 @@ export class NetworkServer implements NetworkContext {
 
       const enemy = this.spawnMgr.getEnemy(enemyId);
       if (!enemy || enemy.state === 'dead') return;
-
-      const dx = enemy.position.x - target.position.x;
-      const dz = enemy.position.z - target.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      const enemyDef = getEnemyDefinition(enemy.enemyType);
-      if (dist > (enemyDef?.attackRange || 2) * 2) {
-        enemy.state = 'return';
-        enemy.targetId = null;
-        return;
-      }
 
       const result = this.combat.processEnemyAttack(enemy, target);
       if (!result) return;
@@ -1055,7 +1193,9 @@ export class NetworkServer implements NetworkContext {
           if (meta.ownerId === characterId) {
             if (meta.inParty) this.partySys.leaveParty(dummyId);
             this.state.players.delete(dummyId);
+            this.unregisterPlayerFromZone(dummyId);
             this.dummyMeta.delete(dummyId);
+            this.clearMovementThrottle(dummyId);
             this.broadcastInZone(session.zoneId, {
               type: PacketType.ENTITY_DESPAWN,
               timestamp: Date.now(),
@@ -1088,6 +1228,8 @@ export class NetworkServer implements NetworkContext {
       }
       this.state.players.delete(characterId);
       this.state.playerToSocket.delete(characterId);
+      this.unregisterPlayerFromZone(characterId);
+      this.clearMovementThrottle(characterId);
     }
     this.state.socketToPlayer.delete(socket.id);
   }
@@ -1782,18 +1924,12 @@ export class NetworkServer implements NetworkContext {
 
       const pulseTargets: PlayerSession[] = [caster];
 
-      for (const [targetId, target] of this.state.players) {
-        if (targetId === charId) continue;
-        if (target.isDead) continue;
-        if (target.zoneId !== caster.zoneId) continue;
-        if (!target.position || !caster.position) continue;
-        if (!this.isPartyMember(charId, targetId)) continue;
-
-        const dx = caster.position.x - target.position.x;
-        const dz = caster.position.z - target.position.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        if (dist <= songRadius) {
-          pulseTargets.push(target);
+      if (caster.position) {
+        const nearby = this.queryPlayersNear(caster.position.x, caster.position.z, songRadius, caster.zoneId);
+        for (const entry of nearby) {
+          if (entry.id === charId) continue;
+          if (!this.isPartyMember(charId, entry.id)) continue;
+          pulseTargets.push(entry.data);
         }
       }
 
@@ -2007,87 +2143,109 @@ export class NetworkServer implements NetworkContext {
    }
 
    private tickBlockingProximity(now: number): void {
-    for (const [blockerId, blocker] of this.state.players) {
-      if (blocker.isDead) continue;
-      const blockStance = blocker.statusEffects?.find(
-        e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance
-      );
-      if (!blockStance || !blocker.position) continue;
+     for (const [blockerId, blocker] of this.state.players) {
+       if (blocker.isDead) continue;
+       const blockStance = blocker.statusEffects?.find(
+         e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance
+       );
+       if (!blockStance || !blocker.position) continue;
 
-      const blockRange = blockStance.buffData?.blockingRange || 6;
-      const protRange = Math.max(2, blockRange * 0.4);
+       const blockRange = blockStance.buffData?.blockingRange || 6;
+       const protRange = Math.max(2, blockRange * 0.4);
 
-      let blockerFacing = 0;
-      const rot = blocker.rotation as any;
-      if (typeof rot === 'object' && rot.w !== undefined) {
-        const sinY = 2 * (rot.w * rot.y - rot.z * rot.x);
-        const cosY = 1 - 2 * (rot.y * rot.y + rot.z * rot.z);
-        blockerFacing = Math.atan2(sinY, cosY);
-      }
+       let blockerFacing = 0;
+       const rot = blocker.rotation as any;
+       if (typeof rot === 'object' && rot.w !== undefined) {
+         const sinY = 2 * (rot.w * rot.y - rot.z * rot.x);
+         const cosY = 1 - 2 * (rot.y * rot.y + rot.z * rot.z);
+         blockerFacing = Math.atan2(sinY, cosY);
+       }
 
-      for (const [targetId, target] of this.state.players) {
-        if (targetId === blockerId) continue;
-        if (target.isDead) continue;
-        if (target.zoneId !== blocker.zoneId) continue;
-        if (!target.position) continue;
+       const nearby = this.queryPlayersNear(blocker.position.x, blocker.position.z, protRange, blocker.zoneId);
+       const processedTargets = new Set<string>();
 
-        const dx = target.position.x - blocker.position.x;
-        const dz = target.position.z - blocker.position.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
+       for (const entry of nearby) {
+         const targetId = entry.id;
+         if (targetId === blockerId) continue;
+         processedTargets.add(targetId);
 
-        const existingProt = target.statusEffects.find(
-          e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
-        );
+         const dx = entry.x - blocker.position.x;
+         const dz = entry.z - blocker.position.z;
+         const dist = Math.sqrt(dx * dx + dz * dz);
 
-        let behindBlocker = false;
-        if (dist <= protRange && dist > 0.01) {
-          const angleToTarget = Math.atan2(dx, dz);
-          let angleDiff = angleToTarget - blockerFacing;
-          while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-          while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-          const behindAngle = Math.abs(angleDiff) - Math.PI;
-          behindBlocker = Math.abs(behindAngle) < Math.PI / 4;
-        }
+         const existingProt = entry.data.statusEffects?.find(
+           e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
+         );
 
-        if (behindBlocker) {
-          if (!existingProt) {
-            target.statusEffects.push({
-              id: `block_prot_${blockerId}_${Date.now()}`,
-              type: StatusEffectType.BUFF_BLOCKING_PROTECTED,
-              sourceId: blockerId,
-              targetId,
-              potency: 0,
-              appliedAt: now,
-              duration: 999999999,
-              tickInterval: 0,
-              lastTickAt: now,
-              stacks: 1,
-              skillName: 'Blocking',
-              buffData: { blockingProtectedBy: blockerId },
-            });
-            this.playerSys.recalcStats(target);
-            this.sendToPlayer(targetId, {
-              type: PacketType.STATUS_EFFECT_UPDATE,
-              timestamp: Date.now(),
-              data: { effects: target.statusEffects }
-            });
-            this.broadcastEntityEffects(target);
-          }
-        } else {
-          if (existingProt) {
-            target.statusEffects = target.statusEffects.filter(e => e !== existingProt);
-            this.playerSys.recalcStats(target);
-            this.sendToPlayer(targetId, {
-              type: PacketType.STATUS_EFFECT_UPDATE,
-              timestamp: Date.now(),
-              data: { effects: target.statusEffects }
-            });
-            this.broadcastEntityEffects(target);
-          }
-        }
-      }
-    }
-  }
+         let behindBlocker = false;
+         if (dist <= protRange && dist > 0.01) {
+           const angleToTarget = Math.atan2(dx, dz);
+           let angleDiff = angleToTarget - blockerFacing;
+           while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+           while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+           const behindAngle = Math.abs(angleDiff) - Math.PI;
+           behindBlocker = Math.abs(behindAngle) < Math.PI / 4;
+         }
+
+         if (behindBlocker) {
+           if (!existingProt) {
+             entry.data.statusEffects.push({
+               id: `block_prot_${blockerId}_${Date.now()}`,
+               type: StatusEffectType.BUFF_BLOCKING_PROTECTED,
+               sourceId: blockerId,
+               targetId,
+               potency: 0,
+               appliedAt: now,
+               duration: 999999999,
+               tickInterval: 0,
+               lastTickAt: now,
+               stacks: 1,
+               skillName: 'Blocking',
+               buffData: { blockingProtectedBy: blockerId },
+             });
+             this.playerSys.recalcStats(entry.data);
+             this.sendToPlayer(targetId, {
+               type: PacketType.STATUS_EFFECT_UPDATE,
+               timestamp: Date.now(),
+               data: { effects: entry.data.statusEffects }
+             });
+             this.broadcastEntityEffects(entry.data);
+           }
+         } else {
+           if (existingProt) {
+             entry.data.statusEffects = entry.data.statusEffects.filter(e => e !== existingProt);
+             this.playerSys.recalcStats(entry.data);
+             this.sendToPlayer(targetId, {
+               type: PacketType.STATUS_EFFECT_UPDATE,
+               timestamp: Date.now(),
+               data: { effects: entry.data.statusEffects }
+             });
+             this.broadcastEntityEffects(entry.data);
+           }
+         }
+       }
+
+       for (const [targetId, target] of this.state.players) {
+         if (targetId === blockerId) continue;
+         if (target.isDead) continue;
+         if (target.zoneId !== blocker.zoneId) continue;
+         if (processedTargets.has(targetId)) continue;
+         const existingProt = target.statusEffects.find(
+           e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
+         );
+         if (existingProt) {
+           target.statusEffects = target.statusEffects.filter(e => e !== existingProt);
+           this.playerSys.recalcStats(target);
+           this.sendToPlayer(targetId, {
+             type: PacketType.STATUS_EFFECT_UPDATE,
+             timestamp: Date.now(),
+             data: { effects: target.statusEffects }
+           });
+           this.broadcastEntityEffects(target);
+         }
+       }
+     }
+   }
 
   private checkEntityAOEEntries(entityId: string, position: { x: number; y: number; z: number }): void {
     for (const [zoneId, zone] of this.activeAOEZones) {
@@ -2121,10 +2279,10 @@ export class NetworkServer implements NetworkContext {
     if (enemy && enemy.state !== 'dead') {
       const targetStats = this.getTargetStatsForEntity(targetId);
       const result = this.skillSys.calculateAOEDamage(session, skillName, targetId, () => targetStats);
-       if (result?.damage) {
-         const { died } = this.damageEnemy(enemy, result.damage, session.characterId);
-         this.broadcastInZone(session.zoneId, {
-           type: PacketType.DAMAGE,
+      if (result?.damage) {
+        const { died } = this.damageEnemy(enemy, result.damage, session.characterId);
+        this.broadcastInZone(session.zoneId, {
+          type: PacketType.DAMAGE,
           timestamp: Date.now(),
           data: {
             attackerId: session.characterId,
@@ -2201,9 +2359,22 @@ export class NetworkServer implements NetworkContext {
     }
   }
 
-  gameLoop(): void {
+  gameLoop(_elapsedMs?: number): void {
     const now = Date.now();
 
+    this.tickPlayerUpdates(now);
+    this.tickAOEZones(now);
+    this.tickSongProximity(now);
+    this.tickBlockingProximity(now);
+    this.tickEnemyStatusEffects(now);
+    this.tickDummies();
+    this.tickAI(now);
+    this.tickEntityAOEEntries();
+    this.updateEnemySpatialHash();
+    this.broadcastEntityStates();
+  }
+
+  private tickPlayerUpdates(now: number): void {
     this.state.players.forEach(session => {
       if (session.isDead) return;
 
@@ -2867,58 +3038,61 @@ export class NetworkServer implements NetworkContext {
           }
         }
       }
+
+      if (session.statsDirty) {
+        this.playerSys.recalcStats(session);
+        session.statsDirty = false;
+      }
     });
+  }
 
-    const now2 = Date.now();
-    this.tickAOEZones(now2);
-    this.tickSongProximity(now2);
-    this.tickBlockingProximity(now2);
-
-    this.spawnMgr.getAllEnemies().forEach((enemy, enemyId) => {
+  private tickEnemyStatusEffects(now: number): void {
+    this.spawnMgr.iterateAllEnemies((enemy, enemyId) => {
       if (enemy.state === 'dead') return;
       if (!enemy.statusEffects || enemy.statusEffects.length === 0) return;
 
-      const tick = this.skillSys.tickStatusEffects(
-         { ...enemy, stats: { health: enemy.health, maxHealth: enemy.maxHealth, mana: 0, maxMana: 0, attack: 0, defense: 0, speed: 0, speedMultiplier: 1, magicAttack: 0, critChance: 0, castSpeed: 1, level: enemy.level, experience: 0, experienceToNext: 0 }, statPoints: { STR: 0, AGI: 0, INT: 0, SPI: 0, DEX: 0, STA: 0 }, statusEffects: enemy.statusEffects, skillCooldowns: [], activeCast: null } as any,
-        now
-      );
+      const fakeSession: any = {
+        stats: { health: enemy.health, maxHealth: enemy.maxHealth, mana: 0, maxMana: 0, attack: 0, defense: 0, speed: 0, speedMultiplier: 1, magicAttack: 0, critChance: 0, castSpeed: 1, level: enemy.level, experience: 0, experienceToNext: 0 },
+        statPoints: { STR: 0, AGI: 0, INT: 0, SPI: 0, DEX: 0, STA: 0 },
+        statusEffects: enemy.statusEffects,
+        skillCooldowns: [],
+        activeCast: null,
+      };
+
+      const tick = this.skillSys.tickStatusEffects(fakeSession, now);
+
+      const zoneId = this.findZoneOfEnemy(enemyId);
+      if (!zoneId) return;
 
       if (tick.damage > 0) {
         const { died } = this.damageEnemy(enemy, tick.damage);
-        const zoneId = this.findZoneOfEnemy(enemyId);
-        if (zoneId) {
-          this.broadcastInZone(zoneId, {
-            type: PacketType.DAMAGE,
-            timestamp: Date.now(),
-            data: { attackerId: '', targetId: enemyId, damage: tick.damage, isCritical: false, damageType: 'magical', skillName: 'dot' }
-          });
-          this.broadcastInZone(zoneId, {
-            type: PacketType.STATS_UPDATE,
-            timestamp: Date.now(),
-            data: { entityId: enemyId, health: enemy.health, maxHealth: enemy.maxHealth }
-          });
-        }
+        this.broadcastInZone(zoneId, {
+          type: PacketType.DAMAGE,
+          timestamp: Date.now(),
+          data: { attackerId: '', targetId: enemyId, damage: tick.damage, isCritical: false, damageType: 'magical', skillName: 'dot' }
+        });
+        this.broadcastInZone(zoneId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { entityId: enemyId, health: enemy.health, maxHealth: enemy.maxHealth }
+        });
         if (died) {
           enemy.state = 'dead';
           enemy.deathTime = now;
-          const zoneId = this.findZoneOfEnemy(enemyId);
-          if (zoneId) {
-            this.broadcastInZone(zoneId, {
-              type: PacketType.DEATH,
-              timestamp: Date.now(),
-              data: { entityId: enemyId, killerId: '' }
-            });
-            this.broadcastInZone(zoneId, {
-              type: PacketType.ENTITY_DESPAWN,
-              timestamp: Date.now(),
-              data: { entityId: enemyId }
-            });
-          }
+          this.broadcastInZone(zoneId, {
+            type: PacketType.DEATH,
+            timestamp: Date.now(),
+            data: { entityId: enemyId, killerId: '' }
+          });
+          this.broadcastInZone(zoneId, {
+            type: PacketType.ENTITY_DESPAWN,
+            timestamp: Date.now(),
+            data: { entityId: enemyId }
+          });
         }
       }
 
-      if (tick.expired.length > 0 && this.findZoneOfEnemy(enemyId)) {
-        const zoneId = this.findZoneOfEnemy(enemyId)!;
+      if (tick.expired.length > 0) {
         this.broadcastInZone(zoneId, {
           type: PacketType.ENTITY_STATUS_EFFECTS,
           timestamp: Date.now(),
@@ -2926,55 +3100,108 @@ export class NetworkServer implements NetworkContext {
         });
       }
     });
+  }
 
-    this.tickDummies();
+  private tickAI(now: number): void {
+    this.aiTickBucket = (this.aiTickBucket + 1) % this.AI_TICK_STAGGER;
+
+    const reusableZonePlayers = new Map<string, Map<string, { position: { x: number; y: number; z: number }; characterId: string }>>();
 
     for (const zoneId of this.spawnMgr.getZoneIds()) {
-      const zonePlayers = new Map<string, { position: { x: number; y: number; z: number }; characterId: string }>();
-      this.state.players.forEach(session => {
-        if (session.zoneId !== zoneId) return;
-        if (session.isDead) return;
-        if (session.invulnerableUntil > now) return;
-        zonePlayers.set(session.characterId, { position: session.position, characterId: session.characterId });
-      });
+      const zonePlayerIds = this.zonePlayerIndex.get(zoneId);
+      let zonePlayers = reusableZonePlayers.get(zoneId);
+      if (!zonePlayers) {
+        zonePlayers = new Map();
+        reusableZonePlayers.set(zoneId, zonePlayers);
+      }
+      zonePlayers.clear();
+      if (zonePlayerIds) {
+        for (const cid of zonePlayerIds) {
+          const s = this.state.players.get(cid);
+          if (!s || s.isDead || s.invulnerableUntil > now) continue;
+          zonePlayers.set(cid, { position: s.position, characterId: cid });
+        }
+      }
 
       this.ai.updateEnemies(this.spawnMgr.getEnemiesInZone(zoneId), zonePlayers, 1 / this.tickRate);
     }
+  }
 
-    if (this.activeAOEZones.size > 0) {
-      for (const [enemyId, enemy] of this.spawnMgr.getAllEnemies()) {
-        if (enemy.state === 'dead') continue;
-        this.checkEntityAOEEntries(enemyId, enemy.position);
+  private tickEntityAOEEntries(): void {
+    if (this.activeAOEZones.size === 0) return;
+    for (const zoneId of this.spawnMgr.getZoneIds()) {
+        const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
+        if (!zoneEnemies) continue;
+        for (const [enemyId, enemy] of zoneEnemies) {
+          if (enemy.state === 'dead') continue;
+          this.checkEntityAOEEntries(enemyId, enemy.position);
+        }
+    }
+  }
+
+  private updateEnemySpatialHash(): void {
+    for (const zoneId of this.spawnMgr.getZoneIds()) {
+      const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
+      if (!zoneEnemies) continue;
+      for (const [enemyId, enemy] of zoneEnemies) {
+        if (enemy.state !== 'dead' && enemy.position) {
+          this.enemySpatialHash.move(enemyId, enemy.position.x, enemy.position.z);
+        }
       }
     }
+  }
 
-    const updates: Map<string, any[]> = new Map();
+  private broadcastEntityStates(): void {
+    const RADIUS_SQ = NetworkServer.INTEREST_RADIUS_SQ;
 
-    this.spawnMgr.getAllEnemies().forEach(enemy => {
-      if (enemy.state === 'dead') return;
+    for (const zoneId of this.spawnMgr.getZoneIds()) {
+      const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
+      if (!zoneEnemies) continue;
+      const zonePlayerIds = this.zonePlayerIndex.get(zoneId);
+      if (!zonePlayerIds || zonePlayerIds.size === 0) continue;
 
-      const zoneId = this.findZoneOfEnemy(enemy.id);
-      if (!zoneId) return;
+      const aliveEnemies: Array<{ id: string; position: { x: number; y: number; z: number }; rotation: number; state: string; health: number; maxHealth: number; targetId: string | null }> = [];
+      for (const [enemyId, enemy] of zoneEnemies) {
+        if (enemy.state === 'dead') continue;
+        aliveEnemies.push({ id: enemyId, position: enemy.position, rotation: enemy.rotation, state: enemy.state, health: enemy.health, maxHealth: enemy.maxHealth, targetId: enemy.targetId });
+      }
 
-      if (!updates.has(zoneId)) updates.set(zoneId, []);
-      updates.get(zoneId)!.push({
-        id: enemy.id,
-        position: enemy.position,
-        rotation: { x: 0, y: enemy.rotation, z: 0, w: 1 },
-        state: enemy.state,
-        health: enemy.health,
-        maxHealth: enemy.maxHealth,
-        targetId: enemy.targetId
-      });
-    });
+      for (const characterId of zonePlayerIds) {
+        const player = this.state.players.get(characterId);
+        if (!player || !player.position) continue;
 
-    updates.forEach((entityUpdates, zoneId) => {
-      this.broadcastInZone(zoneId, {
-        type: PacketType.PLAYER_POSITION_UPDATE,
-        timestamp: Date.now(),
-        data: { entities: entityUpdates }
-      });
-    });
+        const visible: typeof aliveEnemies = [];
+        const px = player.position.x;
+        const pz = player.position.z;
+
+        for (let i = 0; i < aliveEnemies.length; i++) {
+          const e = aliveEnemies[i];
+          const dx = e.position.x - px;
+          const dz = e.position.z - pz;
+          if (dx * dx + dz * dz <= RADIUS_SQ) {
+            visible.push(e);
+          }
+        }
+
+        if (visible.length > 0) {
+          this.sendToPlayer(characterId, {
+            type: PacketType.PLAYER_POSITION_UPDATE,
+            timestamp: Date.now(),
+            data: {
+              entities: visible.map(e => ({
+                id: e.id,
+                position: e.position,
+                rotation: { x: 0, y: e.rotation, z: 0, w: 1 },
+                state: e.state,
+                health: e.health,
+                maxHealth: e.maxHealth,
+                targetId: e.targetId
+              }))
+            }
+          });
+        }
+      }
+    }
   }
 
   spawnDummy(session: PlayerSession): void {
@@ -3022,6 +3249,7 @@ export class NetworkServer implements NetworkContext {
     };
 
     this.state.players.set(dummyId, dummySession);
+    this.registerPlayerInZone(dummyId, session.zoneId);
     this.dummyMeta.set(dummyId, {
       ownerId: session.characterId,
       isPvp: false,
@@ -3075,7 +3303,9 @@ export class NetworkServer implements NetworkContext {
     }
 
     this.state.players.delete(dummyId);
+    this.unregisterPlayerFromZone(dummyId);
     this.dummyMeta.delete(dummyId);
+    this.clearMovementThrottle(dummyId);
 
     this.broadcastInZone(session.zoneId, {
       type: PacketType.ENTITY_DESPAWN,
@@ -3398,32 +3628,43 @@ export class NetworkServer implements NetworkContext {
   }
 
   async saveAllCharacters(): Promise<void> {
-    const saves: Promise<void>[] = [];
-    this.state.players.forEach(session => {
-      saves.push(this.auth.saveCharacter(session.characterId, {
-        level: session.stats.level,
-        experience: session.stats.experience,
-        position: session.position,
-        zoneId: session.zoneId,
-        statPoints: session.statPoints,
-        unspentStatPoints: session.unspentStatPoints,
-        unspentSkillPoints: session.unspentSkillPoints,
-        skillProficiencies: session.skillProficiencies,
-          skillAdeptness: session.skillAdeptness,
-          jobId: session.jobId,
-          nation: session.nation,
-          lastSafeZoneId: session.lastSafeZoneId,
-          inventory: session.inventory,
-          equipment: session.equipment,
-          gold: session.gold,
-      }));
-    });
-    await Promise.all(saves);
-    console.log(`Saved ${saves.length} character(s)`);
+    const sessions = [...this.state.players.values()];
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < sessions.length; i += BATCH_SIZE) {
+      const batch = sessions.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(session =>
+        this.auth.saveCharacter(session.characterId, {
+          level: session.stats.level,
+          experience: session.stats.experience,
+          position: session.position,
+          zoneId: session.zoneId,
+          statPoints: session.statPoints,
+          unspentStatPoints: session.unspentStatPoints,
+          unspentSkillPoints: session.unspentSkillPoints,
+          skillProficiencies: session.skillProficiencies,
+            skillAdeptness: session.skillAdeptness,
+            jobId: session.jobId,
+            nation: session.nation,
+            lastSafeZoneId: session.lastSafeZoneId,
+            inventory: session.inventory,
+            equipment: session.equipment,
+            gold: session.gold,
+        }).catch(err => console.error(`Failed to save ${session.characterId}:`, err))
+      ));
+    }
+    console.log(`Saved ${sessions.length} character(s)`);
   }
 
   getSpawnManager(): SpawnManager {
     return this.spawnMgr;
+  }
+
+  populateEnemySpatialHash(): void {
+    this.spawnMgr.iterateAllEnemies(enemy => {
+      if (enemy.state !== 'dead') {
+        this.enemySpatialHash.insert(enemy.id, enemy.position.x, enemy.position.z, enemy);
+      }
+    });
   }
 
   getGameState(): ServerGameState {
@@ -3432,5 +3673,17 @@ export class NetworkServer implements NetworkContext {
 
   getTickRate(): number {
     return this.tickRate;
+  }
+
+  getLastMoveBroadcast(characterId: string): number {
+    return this.lastMoveBroadcast.get(characterId) || 0;
+  }
+
+  setLastMoveBroadcast(characterId: string, time: number): void {
+    this.lastMoveBroadcast.set(characterId, time);
+  }
+
+  clearMovementThrottle(characterId: string): void {
+    this.lastMoveBroadcast.delete(characterId);
   }
 }

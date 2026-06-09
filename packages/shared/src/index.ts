@@ -41,3 +41,5 @@ export * from './utils/statusResistance';
 export * from './utils/accuracyDodge';
 export * from './utils/enhancement';
 export { safeFormulaEval } from './utils/safeFormula';
+export { SpatialHash } from './utils/spatialHash';
+export type { SpatialEntry } from './utils/spatialHash';

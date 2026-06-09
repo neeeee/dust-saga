@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import {
-  Packet, PacketType,
+  Packet, PacketType, PlayerSession,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -21,7 +21,7 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
   const damageInfo = ctx.combat.processPlayerAttack(
     session,
     data.targetId,
-    ctx.spawnMgr.getAllEnemies(),
+    ctx.spawnMgr.getEnemiesInZone(session.zoneId) || new Map(),
     ctx.state.players
   );
 
@@ -60,12 +60,11 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
     if (enemy) {
       if (damageInfo.elementalDamage) {
         for (const el of damageInfo.elementalDamage) {
-          ctx.damageEnemy(enemy, el.damage);
+          ctx.damageEnemy(enemy, el.damage, characterId);
         }
       }
-      const totalDmg = damageInfo.damage + (damageInfo.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
-      if (!damageInfo.missed && totalDmg > 0) {
-        ctx.enmity.addDamageEnmity(enemy, characterId, totalDmg);
+      if (!damageInfo.missed && damageInfo.damage > 0) {
+        ctx.enmity.addDamageEnmity(enemy, characterId, damageInfo.damage);
       } else if (damageInfo.missed) {
         ctx.enmity.addEnmity(enemy, characterId, 50, 0);
       }
@@ -85,11 +84,15 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
   const session = ctx.state.players.get(characterId);
   if (!session || session.isDead) return;
 
+  const zoneEnemies = ctx.spawnMgr.getEnemiesInZone(session.zoneId) || new Map();
+  const zonePlayerBuf = new Map<string, PlayerSession>();
+  ctx.forEachPlayerInZone(session.zoneId, (id, p) => zonePlayerBuf.set(id, p));
+
   const results = ctx.combat.processManualAttack(
     session,
     data.facingAngle,
-    ctx.spawnMgr.getAllEnemies(),
-    ctx.state.players
+    zoneEnemies,
+    zonePlayerBuf
   ).filter((r: any) => !ctx.state.players.has(r.targetId) || r.targetId === characterId || !ctx.isPartyMember(characterId, r.targetId));
 
   for (const info of results) {

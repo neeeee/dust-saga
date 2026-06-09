@@ -84,6 +84,7 @@ export interface PlayerSession {
     }>;
     startedAt: number;
   }>;
+  statsDirty?: boolean;
 }
 
 export interface EnmityEntry {
@@ -109,7 +110,7 @@ export interface EnemyInstance {
   currentPatrolIndex: number;
   statusEffects: StatusEffect[];
   invulnerable?: boolean;
-  enmityTable?: Map<string, EnmityEntry>;
+  enmityTable?: Record<string, EnmityEntry>;
 }
 
 export interface DamageInfo {

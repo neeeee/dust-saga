@@ -19,6 +19,51 @@ import {
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
 import { CLASS_SPECIFIC_SKILLS, getClassSpecificSkillsForJob } from '@dust-saga/shared';
+import { findSkillDefinition as sharedFindSkillDefinition } from '@dust-saga/shared';
+
+const CLASS_SKILL_LOOKUP: Map<string, SkillDefinition> = ((): Map<string, SkillDefinition> => {
+  const lookup = new Map<string, SkillDefinition>();
+  for (const category of Object.values(CLASS_SKILL_DATA)) {
+    for (const subSkill of category.skills) {
+      for (const [name, def] of Object.entries(subSkill.skills)) {
+        lookup.set(name, { ...def, name });
+      }
+    }
+  }
+  return lookup;
+})();
+
+const CLASS_SPECIFIC_SKILL_LOOKUP: Map<string, SkillDefinition> = ((): Map<string, SkillDefinition> => {
+  const lookup = new Map<string, SkillDefinition>();
+  for (const jobSkills of Object.values(CLASS_SPECIFIC_SKILLS)) {
+    for (const [name, s] of Object.entries(jobSkills)) {
+      lookup.set(name, {
+        name,
+        reqPoints: s.reqPoints || 0,
+        mpCost: s.mpCost,
+        castTime: s.castTime,
+        cooldown: s.cooldown,
+        duration: s.duration,
+        description: s.description,
+        skillType: s.skillType,
+        isAOE: s.isAOE,
+        aoeTargetMode: s.aoeTargetMode,
+        aoeRadius: s.aoeRadius,
+        buffEffectTable: s.buffEffectTable,
+        debuffEffectTable: s.debuffEffectTable,
+        debuffDuration: s.debuffDuration,
+        damageType: s.damageType,
+        damageSubType: s.damageSubType,
+        basePower: s.basePower,
+        pulseCount: s.pulseCount,
+        pulseInterval: s.pulseInterval,
+        onHitEffects: s.onHitEffects,
+        healing: s.healing,
+      });
+    }
+  }
+  return lookup;
+})();
 
 const SKILL_TO_SUBCATEGORY: Record<string, string> = {};
 for (const category of Object.values(CLASS_SKILL_DATA)) {
@@ -1270,45 +1315,10 @@ export class SkillSystem {
   }
 
   findSkillDefinition(skillName: string): SkillDefinition | null {
-    for (const category of Object.values(CLASS_SKILL_DATA)) {
-      for (const subSkill of category.skills) {
-        if (subSkill.skills[skillName]) {
-          const def = subSkill.skills[skillName];
-          return { ...def, name: skillName };
-        }
-      }
+    if (CLASS_SPECIFIC_SKILL_LOOKUP.has(skillName)) {
+      return CLASS_SPECIFIC_SKILL_LOOKUP.get(skillName)!;
     }
-
-    for (const jobSkills of Object.values(CLASS_SPECIFIC_SKILLS)) {
-      if (jobSkills[skillName]) {
-        const s = jobSkills[skillName];
-        return {
-          name: skillName,
-          reqPoints: s.reqPoints || 0,
-          mpCost: s.mpCost,
-          castTime: s.castTime,
-          cooldown: s.cooldown,
-          duration: s.duration,
-          description: s.description,
-          skillType: s.skillType,
-          isAOE: s.isAOE,
-          aoeTargetMode: s.aoeTargetMode,
-          aoeRadius: s.aoeRadius,
-          buffEffectTable: s.buffEffectTable,
-          debuffEffectTable: s.debuffEffectTable,
-          debuffDuration: s.debuffDuration,
-          damageType: s.damageType,
-          damageSubType: s.damageSubType,
-          basePower: s.basePower,
-          pulseCount: s.pulseCount,
-          pulseInterval: s.pulseInterval,
-          onHitEffects: s.onHitEffects,
-          healing: s.healing,
-        };
-      }
-    }
-
-    return null;
+    return CLASS_SKILL_LOOKUP.get(skillName) || null;
   }
 
   getSubCategoryForSkill(skillName: string): string | null {
@@ -1407,8 +1417,9 @@ export class SkillSystem {
       }
     }
 
+    const expiredSet = new Set(expired);
     session.statusEffects = session.statusEffects.filter(
-      e => !expired.includes(e)
+      e => !expiredSet.has(e)
     );
 
     return { damage, mpDamage, healed, mpRestored, expired };

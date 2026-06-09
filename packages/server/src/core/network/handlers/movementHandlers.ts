@@ -8,6 +8,8 @@ export function registerHandlers(registry: Map<PacketType, PacketHandler>): void
   registry.set(PacketType.PLAYER_MOVE, handlePlayerMove);
 }
 
+const MOVE_BROADCAST_INTERVAL = 50;
+
 function handlePlayerMove(ctx: NetworkContext, socket: Socket, data: any): void {
   const characterId = ctx.findCharacterBySocket(socket.id);
   if (!characterId) return;
@@ -28,6 +30,7 @@ function handlePlayerMove(ctx: NetworkContext, socket: Socket, data: any): void 
   if (data.rotation) {
     session.rotation = data.rotation;
   }
+  ctx.updatePlayerSpatialPosition(characterId, { x: data.position.x, z: data.position.z });
 
   if (moved) {
     const blockingEffect = session.statusEffects?.find(
@@ -51,14 +54,19 @@ function handlePlayerMove(ctx: NetworkContext, socket: Socket, data: any): void 
     }
   }
 
-  ctx.broadcastInZone(session.zoneId, {
-    type: PacketType.PLAYER_POSITION_UPDATE,
-    timestamp: Date.now(),
-    data: {
-      socketId: socket.id,
-      characterId,
-      position: data.position,
-      rotation: data.rotation || session.rotation
-    }
-  }, characterId);
+  const now = Date.now();
+  const last = ctx.getLastMoveBroadcast(characterId);
+  if (now - last >= MOVE_BROADCAST_INTERVAL) {
+    ctx.setLastMoveBroadcast(characterId, now);
+    ctx.broadcastInZone(session.zoneId, {
+      type: PacketType.PLAYER_POSITION_UPDATE,
+      timestamp: Date.now(),
+      data: {
+        socketId: socket.id,
+        characterId,
+        position: data.position,
+        rotation: data.rotation || session.rotation
+      }
+    }, characterId);
+  }
 }

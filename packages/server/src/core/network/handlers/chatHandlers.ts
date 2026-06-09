@@ -27,15 +27,22 @@ function handleChatMessage(ctx: NetworkContext, socket: Socket, data: any): void
     return;
   }
 
-  (ctx as any).io.emit('packet', {
+  const channel = data.channel || 'zone';
+  const packet = {
     type: PacketType.CHAT_MESSAGE,
     timestamp: Date.now(),
     data: {
       sender: session.characterName,
       message,
-      channel: data.channel || 'global'
+      channel
     }
-  });
+  };
+
+  if (channel === 'global') {
+    (ctx as any).io.emit('packet', packet);
+  } else {
+    ctx.broadcastInZone(session.zoneId, packet);
+  }
 }
 
 function handleChatCommand(ctx: NetworkContext, socket: Socket, session: PlayerSession, message: string): void {
@@ -461,6 +468,7 @@ function handleReturn(ctx: NetworkContext, socket: Socket, session: PlayerSessio
 
   if (changingZone) {
     session.zoneId = spawnZoneId;
+    ctx.movePlayerToZone(session.characterId, spawnZoneId);
     ctx.broadcastInZone(spawnZoneId, {
       type: PacketType.ENTITY_SPAWN,
       timestamp: Date.now(),

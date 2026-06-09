@@ -100,10 +100,7 @@ export class AISystem extends System {
     players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>,
     targetId: string
   ): { x: number; y: number; z: number } | null {
-    for (const [, player] of players) {
-      if (player.characterId === targetId) return player.position;
-    }
-    return null;
+    return players.get(targetId)?.position || null;
   }
 
   updateEnemies(
@@ -121,11 +118,11 @@ export class AISystem extends System {
       if (!def) return;
 
       const stateHandlers: Record<Exclude<EnemyState, 'dead'>, () => void> = {
-        idle: () => this.updateIdle(enemy, players, def),
-        patrol: () => this.updatePatrol(enemy, players, def, deltaTime),
+        idle: () => this.updateIdle(enemy, enemies, players, def),
+        patrol: () => this.updatePatrol(enemy, enemies, players, def, deltaTime),
         chase: () => this.updateChase(enemy, players, def, deltaTime),
         attack: () => this.updateAttack(enemy, players, def, deltaTime),
-        return: () => this.updateReturn(enemy, players, def, deltaTime),
+        return: () => this.updateReturn(enemy, enemies, players, def, deltaTime),
       };
 
       const handler = stateHandlers[enemy.state as Exclude<EnemyState, 'dead'>];
@@ -141,11 +138,39 @@ export class AISystem extends System {
     }
   }
 
+  private checkLinkedAggro(
+    enemy: EnemyInstance,
+    enemies: Map<string, EnemyInstance>,
+    players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>,
+    linkRange: number
+  ): boolean {
+    for (const [, other] of enemies) {
+      if (other.id === enemy.id) continue;
+      if (other.enemyType !== enemy.enemyType) continue;
+      if (other.state !== 'chase' && other.state !== 'attack') continue;
+      if (!other.targetId) continue;
+
+      const dist = distance2D(enemy.position, other.position);
+      if (dist > linkRange) continue;
+
+      const targetPos = this.findPlayerTarget(players, other.targetId);
+      if (!targetPos) continue;
+
+      enemy.state = 'chase';
+      enemy.targetId = other.targetId;
+      if (this.enmitySys) {
+        this.enmitySys.addEnmity(enemy, other.targetId, 1, 0);
+      }
+      return true;
+    }
+    return false;
+  }
+
   private tryEngageFromEnmity(
     enemy: EnemyInstance,
     players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>
   ): boolean {
-    if (!this.enmitySys || !enemy.enmityTable || enemy.enmityTable.size === 0) return false;
+    if (!this.enmitySys || !enemy.enmityTable || Object.keys(enemy.enmityTable).length === 0) return false;
     const topTarget = this.enmitySys.getTopTarget(enemy);
     if (!topTarget) return false;
     const targetPos = this.findPlayerTarget(players, topTarget.characterId);
@@ -157,12 +182,15 @@ export class AISystem extends System {
 
   private updateIdle(
     enemy: EnemyInstance,
+    enemies: Map<string, EnemyInstance>,
     players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>,
     def: ReturnType<typeof getEnemyDefinition>,
   ): void {
     if (!def) return;
 
     if (this.tryEngageFromEnmity(enemy, players)) return;
+
+    if (this.checkLinkedAggro(enemy, enemies, players, def.aggroRange)) return;
 
     const target = this.pickAggroTarget(enemy, players, def.aggroRange, def.aggroStrategy || 'first');
     if (target) {
@@ -178,13 +206,15 @@ export class AISystem extends System {
     }
   }
 
-  private updatePatrol(enemy: EnemyInstance, players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
+  private updatePatrol(enemy: EnemyInstance, enemies: Map<string, EnemyInstance>, players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
     if (!def || enemy.patrolPoints.length === 0) {
       this.transitionTo(enemy, 'idle');
       return;
     }
 
     if (this.tryEngageFromEnmity(enemy, players)) return;
+
+    if (this.checkLinkedAggro(enemy, enemies, players, def.aggroRange)) return;
 
     const target = enemy.patrolPoints[enemy.currentPatrolIndex];
     const dist = distance2D(enemy.position, target);
@@ -211,7 +241,7 @@ export class AISystem extends System {
     }
 
     if (this.enmitySys) {
-      this.enmitySys.decayVE(enemy, deltaTime);
+      this.enmitySys.decay(enemy, deltaTime, true);
       const topTarget = this.enmitySys.getTopTarget(enemy);
       if (topTarget && topTarget.characterId !== enemy.targetId) {
         const newTarget = this.findPlayerTarget(players, topTarget.characterId);
@@ -228,15 +258,6 @@ export class AISystem extends System {
     }
 
     const dist = distance2D(enemy.position, targetPos);
-    const spawnDist = distance2D(enemy.position, enemy.spawnPosition);
-
-    if (spawnDist > def.leashRange) {
-      const hasEnmity = this.enmitySys && this.enmitySys.getTopTarget(enemy) !== null;
-      if (!hasEnmity) {
-        this.transitionTo(enemy, 'return');
-        return;
-      }
-    }
 
     if (dist <= def.attackRange) {
       this.transitionTo(enemy, 'attack');
@@ -259,7 +280,7 @@ export class AISystem extends System {
     }
 
     if (this.enmitySys) {
-      this.enmitySys.decayVE(enemy, deltaTime);
+      this.enmitySys.decay(enemy, deltaTime, true);
       const topTarget = this.enmitySys.getTopTarget(enemy);
       if (topTarget && topTarget.characterId !== enemy.targetId) {
         const newTarget = this.findPlayerTarget(players, topTarget.characterId);
@@ -292,10 +313,16 @@ export class AISystem extends System {
     }
   }
 
-  private updateReturn(enemy: EnemyInstance, players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
+  private updateReturn(enemy: EnemyInstance, enemies: Map<string, EnemyInstance>, players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
     if (!def) return;
 
     if (this.tryEngageFromEnmity(enemy, players)) return;
+
+    if (this.checkLinkedAggro(enemy, enemies, players, def.aggroRange)) return;
+
+    if (this.enmitySys) {
+      this.enmitySys.decay(enemy, deltaTime, false);
+    }
 
     const dist = distance2D(enemy.position, enemy.spawnPosition);
 

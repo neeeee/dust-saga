@@ -2758,16 +2758,20 @@ export const CLASS_SKILL_DATA: Record<
   },
 };
 
-export function findSkillDefinition(
-  skillName: string,
-): import("../types/skills").SkillDefinition | null {
+const SKILL_LOOKUP: Map<string, import("../types/skills").SkillDefinition> = ((): Map<string, import("../types/skills").SkillDefinition> => {
+  const lookup = new Map<string, import("../types/skills").SkillDefinition>();
   for (const category of Object.values(CLASS_SKILL_DATA)) {
     for (const subSkill of category.skills) {
-      if (subSkill.skills[skillName]) {
-        const def = subSkill.skills[skillName];
-        return { ...def, name: skillName };
+      for (const [name, def] of Object.entries(subSkill.skills)) {
+        lookup.set(name, { ...def, name });
       }
     }
   }
-  return null;
+  return lookup;
+})();
+
+export function findSkillDefinition(
+  skillName: string,
+): import("../types/skills").SkillDefinition | null {
+  return SKILL_LOOKUP.get(skillName) || null;
 }

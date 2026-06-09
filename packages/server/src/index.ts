@@ -40,12 +40,24 @@ async function startServer() {
     const networkServer = new NetworkServer(httpServer);
 
     networkServer.getSpawnManager().initialize();
+    networkServer.populateEnemySpatialHash();
     console.log('World spawned');
 
     const tickRate = networkServer.getTickRate();
-    setInterval(() => {
-      networkServer.gameLoop();
-    }, 1000 / tickRate);
+    const tickInterval = 1000 / tickRate;
+    let lastTick = process.hrtime.bigint();
+
+    function tick() {
+      const now = process.hrtime.bigint();
+      const elapsedMs = Number(now - lastTick) / 1_000_000;
+      lastTick = now;
+
+      networkServer.gameLoop(Math.min(elapsedMs, 200));
+
+      const nextDelay = Math.max(0, tickInterval - Number(process.hrtime.bigint() - now) / 1_000_000);
+      setTimeout(tick, nextDelay);
+    }
+    setTimeout(tick, tickInterval);
 
     setInterval(() => {
       networkServer.saveAllCharacters().catch(err => console.error('Autosave error:', err));
