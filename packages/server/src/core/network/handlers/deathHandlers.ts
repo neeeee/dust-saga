@@ -51,6 +51,7 @@ function handleRespawnRequest(ctx: NetworkContext, socket: Socket, _data: any): 
 
   if (changingZone) {
     session.zoneId = respawnZoneId;
+    ctx.movePlayerToZone(characterId, respawnZoneId);
     ctx.broadcastInZone(respawnZoneId, {
       type: PacketType.ENTITY_SPAWN,
       timestamp: Date.now(),

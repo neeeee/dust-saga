@@ -25,6 +25,7 @@ function handleEnterZone(ctx: NetworkContext, socket: Socket, data: any): void {
   });
 
   session.zoneId = data.zoneId;
+  ctx.movePlayerToZone(characterId, data.zoneId);
   if (targetZone.type === ZoneType.SAFE || targetZone.type === ZoneType.NATION) {
     session.lastSafeZoneId = data.zoneId;
   }

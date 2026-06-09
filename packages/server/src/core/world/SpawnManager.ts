@@ -4,6 +4,7 @@ import { getEnemyDefinition, getZoneDefinition, ZONE_DATABASE, ZoneType } from '
 
 export class SpawnManager {
   private spawnedEnemies: Map<string, Map<string, EnemyInstance>> = new Map();
+  private enemyZoneIndex: Map<string, string> = new Map();
 
   initialize(): void {
     Object.keys(ZONE_DATABASE).forEach(zoneId => {
@@ -63,6 +64,7 @@ export class SpawnManager {
         };
 
         enemies.set(enemy.id, enemy);
+        this.enemyZoneIndex.set(enemy.id, zoneId);
       }
     }
   }
@@ -94,11 +96,13 @@ export class SpawnManager {
   }
 
   getEnemy(enemyId: string): EnemyInstance | undefined {
-    for (const [, enemies] of this.spawnedEnemies) {
-      const enemy = enemies.get(enemyId);
-      if (enemy) return enemy;
-    }
-    return undefined;
+    const zoneId = this.enemyZoneIndex.get(enemyId);
+    if (!zoneId) return undefined;
+    return this.spawnedEnemies.get(zoneId)?.get(enemyId);
+  }
+
+  findZoneOfEnemy(enemyId: string): string | undefined {
+    return this.enemyZoneIndex.get(enemyId);
   }
 
   getAllEnemies(): Map<string, EnemyInstance> {
@@ -109,10 +113,15 @@ export class SpawnManager {
     return all;
   }
 
-  findZoneOfEnemy(enemyId: string): string | undefined {
-    for (const [zoneId, enemies] of this.spawnedEnemies) {
-      if (enemies.has(enemyId)) return zoneId;
-    }
-    return undefined;
+  iterateAllEnemies(cb: (enemy: EnemyInstance, enemyId: string) => void): void {
+    this.spawnedEnemies.forEach(enemies => {
+      enemies.forEach((enemy, id) => cb(enemy, id));
+    });
+  }
+
+  forEnemiesInZone(zoneId: string, cb: (enemy: EnemyInstance, enemyId: string) => void): void {
+    const enemies = this.spawnedEnemies.get(zoneId);
+    if (!enemies) return;
+    enemies.forEach(cb);
   }
 }

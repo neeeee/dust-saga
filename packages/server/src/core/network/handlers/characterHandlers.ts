@@ -141,6 +141,7 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
 
   ctx.state.players.set(session.characterId, session);
   ctx.state.playerToSocket.set(session.characterId, socket.id);
+  ctx.registerPlayerInZone(session.characterId, session.zoneId);
 
   ctx.sendToSocket(socket.id, {
     type: PacketType.CHARACTER_SELECT,

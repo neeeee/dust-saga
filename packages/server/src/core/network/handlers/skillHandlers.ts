@@ -432,8 +432,11 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
         partyMemberIds.add(m.characterId);
       }
     }
-    ctx.spawnMgr.getAllEnemies().forEach(enemy => {
+    ctx.spawnMgr.forEnemiesInZone(session.zoneId, enemy => {
       if (enemy.state === 'dead' || !enemy.enmityTable) return;
+      const dx = enemy.position.x - session.position.x;
+      const dz = enemy.position.z - session.position.z;
+      if (Math.sqrt(dx * dx + dz * dz) > 30) return;
       if (ctx.enmity.hasEnmityWithParty(enemy, partyMemberIds)) {
         ctx.enmity.addHealEnmity(enemy, characterId, result.healing!);
       }
