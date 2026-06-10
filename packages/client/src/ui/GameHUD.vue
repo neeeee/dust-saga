@@ -71,6 +71,7 @@
       <div class="minimap-container">
         <canvas ref="minimapCanvas" width="150" height="150"></canvas>
       </div>
+      <div class="fps-counter">{{ fps }}</div>
     </div>
 
     <div class="hud-bottom-center">
@@ -95,6 +96,22 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { PlayerStats, StatusEffectType } from '@dust-saga/shared';
 import SkillBarContainer from './SkillBarContainer.vue';
 import CastBar from './CastBar.vue';
+
+const fps = ref(0);
+let fpsInterval: ReturnType<typeof setInterval> | null = null;
+
+onMounted(() => {
+  fpsInterval = setInterval(() => {
+    const canvas = document.querySelector('canvas');
+    if (canvas && (canvas as any).engineInstance) {
+      fps.value = Math.round((canvas as any).engineInstance.getFps());
+    }
+  }, 500);
+});
+
+onUnmounted(() => {
+  if (fpsInterval) clearInterval(fpsInterval);
+});
 
 const BUFF_TYPES = new Set([
   StatusEffectType.HASTE,
@@ -523,6 +540,17 @@ defineExpose({ minimapCanvas });
   position: absolute;
   top: 15px;
   right: 15px;
+}
+
+.fps-counter {
+  margin-top: 4px;
+  padding: 2px 8px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  color: #8f8;
+  font-size: 0.7rem;
+  font-family: monospace;
+  text-align: right;
 }
 
 .minimap-container {

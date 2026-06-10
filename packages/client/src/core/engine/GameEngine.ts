@@ -80,6 +80,7 @@ export class GameEngine {
     this.scene.fogMode = SceneType.FOGMODE_EXP;
     this.scene.fogDensity = 0.003;
     this.scene.fogColor = new Color3(0.7, 0.85, 0.95);
+    (this.canvas as any).engineInstance = this.engine;
 
     this.assetManager = new AssetManager(this.scene);
     this.mapBuilder = new MapBuilder(this.scene, this.assetManager);
