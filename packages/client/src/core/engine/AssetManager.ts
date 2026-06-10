@@ -9,7 +9,8 @@ import {
   StandardMaterial,
   MeshBuilder,
   DynamicTexture,
-  AssetContainer
+  AssetContainer,
+  Mesh
 } from '@babylonjs/core';
 
 export class AssetManager {
@@ -20,6 +21,30 @@ export class AssetManager {
 
   constructor(scene: Scene) {
     this.scene = scene;
+  }
+
+  createNamePlate(name: string, parentId: string): Mesh {
+    const plane = MeshBuilder.CreatePlane(`name_${parentId}`, { width: 2, height: 0.3 }, this.scene);
+
+    const texture = new DynamicTexture(`name_tex_${parentId}`, { width: 256, height: 48 }, this.scene, true);
+    texture.hasAlpha = true;
+    const ctx = texture.getContext();
+    ctx.clearRect(0, 0, 256, 48);
+    ctx.font = 'bold 24px Arial';
+    ctx.fillStyle = 'white';
+    ctx.fillText(name, 128, 32);
+    texture.update();
+
+    const mat = new StandardMaterial(`name_mat_${parentId}`, this.scene);
+    mat.diffuseTexture = texture;
+    mat.emissiveTexture = texture;
+    mat.backFaceCulling = false;
+    mat.disableLighting = true;
+    mat.useAlphaFromDiffuseTexture = true;
+    plane.material = mat;
+    plane.billboardMode = 7;
+
+    return plane;
   }
 
   private async getContainer(name: string): Promise<AssetContainer | null> {
@@ -84,74 +109,6 @@ export class AssetManager {
     }
 
     return { root, animations: result.animationGroups };
-  }
-
-  createHealthBar(parentId: string, width: number = 2, height: number = 0.2): { background: AbstractMesh; foreground: AbstractMesh } {
-    const bg = MeshBuilder.CreatePlane(`hp_bg_${parentId}`, { width, height }, this.scene);
-    const fg = MeshBuilder.CreatePlane(`hp_fg_${parentId}`, { width: width - 0.05, height: height - 0.05 }, this.scene);
-
-    const bgMat = new StandardMaterial(`hp_bg_mat_${parentId}`, this.scene);
-    bgMat.diffuseColor = new Color3(0.2, 0.2, 0.2);
-    bgMat.emissiveColor = new Color3(0.1, 0.1, 0.1);
-    bgMat.backFaceCulling = false;
-    bgMat.disableLighting = true;
-    bg.material = bgMat;
-
-    const fgMat = new StandardMaterial(`hp_fg_mat_${parentId}`, this.scene);
-    fgMat.diffuseColor = new Color3(0.1, 0.8, 0.1);
-    fgMat.emissiveColor = new Color3(0.1, 0.6, 0.1);
-    fgMat.backFaceCulling = false;
-    fgMat.disableLighting = true;
-    fg.material = fgMat;
-
-    fg.position.z = -0.01;
-
-    bg.billboardMode = 7;
-    fg.billboardMode = 7;
-
-    return { background: bg, foreground: fg };
-  }
-
-  createNamePlate(name: string, parentId: string): AbstractMesh {
-    const plane = MeshBuilder.CreatePlane(`name_${parentId}`, { width: 2, height: 0.3 }, this.scene);
-
-    const texture = new DynamicTexture(`name_tex_${parentId}`, { width: 256, height: 48 }, this.scene, true);
-    texture.hasAlpha = true;
-    const ctx = texture.getContext();
-    ctx.clearRect(0, 0, 256, 48);
-    ctx.font = 'bold 24px Arial';
-    ctx.fillStyle = 'white';
-    ctx.fillText(name, 128, 32);
-    texture.update();
-
-    const mat = new StandardMaterial(`name_mat_${parentId}`, this.scene);
-    mat.diffuseTexture = texture;
-    mat.emissiveTexture = texture;
-    mat.backFaceCulling = false;
-    mat.disableLighting = true;
-    mat.useAlphaFromDiffuseTexture = true;
-    plane.material = mat;
-    plane.billboardMode = 7;
-
-    return plane;
-  }
-
-  updateHealthBar(_parentId: string, current: number, max: number, _bg: AbstractMesh, fg: AbstractMesh): void {
-    const ratio = Math.max(0, Math.min(1, current / max));
-    fg.scaling.x = ratio;
-    fg.position.x = -(1 - ratio) * 0.5 * 2;
-
-    const fgMat = fg.material as StandardMaterial;
-    if (ratio > 0.5) {
-      fgMat.diffuseColor = new Color3(0.1, 0.8, 0.1);
-      fgMat.emissiveColor = new Color3(0.1, 0.6, 0.1);
-    } else if (ratio > 0.25) {
-      fgMat.diffuseColor = new Color3(0.8, 0.8, 0.1);
-      fgMat.emissiveColor = new Color3(0.6, 0.6, 0.1);
-    } else {
-      fgMat.diffuseColor = new Color3(0.8, 0.1, 0.1);
-      fgMat.emissiveColor = new Color3(0.6, 0.1, 0.1);
-    }
   }
 
   private static ELEMENT_COLORS: Record<string, string> = {

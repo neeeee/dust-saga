@@ -28,7 +28,12 @@ export interface EntityMeshGroup {
   healthBarFg?: AbstractMesh;
   namePlate?: AbstractMesh;
   selectionCircle?: AbstractMesh;
+  frozen?: boolean;
 }
+
+const DIST_FREEZE = 35;
+const DIST_UNFREEZE = 38;
+const PERF_TICK_MS = 500;
 
 export class GameEngine {
   private canvas: HTMLCanvasElement | null;
@@ -59,6 +64,8 @@ export class GameEngine {
   private moveIndicatorCallback: ((worldPos: V3) => void) | null = null;
   private songIndicator: { disc: AbstractMesh; material: StandardMaterial } | null = null;
   private songPulseEffects: Map<string, { disc: AbstractMesh; material: StandardMaterial; startTime: number }> = new Map();
+  private lastPerfTick = 0;
+  private playerEntityId: string | null = null;
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -143,6 +150,10 @@ export class GameEngine {
     this.engine.runRenderLoop(() => {
       if (this.scene) {
         const now = Date.now();
+        if (now - this.lastPerfTick >= PERF_TICK_MS) {
+          this.perfTick();
+          this.lastPerfTick = now;
+        }
         this.updateAOEZoneMeshes(now);
         if (this.songIndicator && this.playerMesh) {
           const pos = this.playerMesh.position;
@@ -405,8 +416,8 @@ export class GameEngine {
       if (result) {
         mesh = result.root;
         mesh.rotationQuaternion = null;
-        this.entityAnimations.set(entityId, result.animations);
-        this.startAnimation(entityId, 'Idle');
+        mesh.scaling = new V3(0.6, 0.6, 0.6);
+        result.animations.forEach(ag => ag.stop());
       }
     }
 
@@ -416,19 +427,33 @@ export class GameEngine {
 
     if (mesh) {
       mesh.name = `enemy_${entityId}`;
-      mesh.scaling = new V3(0.6, 0.6, 0.6);
     }
 
-    const namePlate = this.assetManager.createNamePlate(name, entityId);
-    namePlate.position = position.add(new V3(0, 2.5, 0));
+    const group: EntityMeshGroup = { root: mesh };
 
-    const group: EntityMeshGroup = {
-      root: mesh,
-      namePlate
-    };
+    if (name) {
+      const namePlate = this.assetManager.createNamePlate(name, entityId);
+      namePlate.position = position.add(new V3(0, 2.8, 0));
+      group.namePlate = namePlate;
+    }
+
     this.meshes.set(entityId, group);
 
     return mesh;
+  }
+
+  private _npcIndicatorMat: StandardMaterial | null = null;
+
+  private getNpcIndicatorMat(): StandardMaterial {
+    if (!this._npcIndicatorMat) {
+      this._npcIndicatorMat = new StandardMaterial('npc_indicator_shared', this.scene!);
+      this._npcIndicatorMat.diffuseColor = new Color3(1, 1, 0);
+      this._npcIndicatorMat.emissiveColor = new Color3(0.8, 0.8, 0);
+      this._npcIndicatorMat.disableLighting = true;
+      this._npcIndicatorMat.backFaceCulling = false;
+      this._npcIndicatorMat.freeze();
+    }
+    return this._npcIndicatorMat;
   }
 
   async createNPCEntity(
@@ -464,18 +489,14 @@ export class GameEngine {
     namePlate.position = position.add(new V3(0, 2.8, 0));
 
     const indicator = MeshBuilder.CreatePlane(`npc_indicator_${entityId}`, { width: 0.3, height: 0.3 }, this.scene);
-    const indMat = new StandardMaterial(`npc_ind_mat_${entityId}`, this.scene);
-    indMat.diffuseColor = new Color3(1, 1, 0);
-    indMat.emissiveColor = new Color3(0.8, 0.8, 0);
-    indMat.disableLighting = true;
-    indMat.backFaceCulling = false;
-    indicator.material = indMat;
+    indicator.material = this.getNpcIndicatorMat();
     indicator.position = position.add(new V3(0, 3.2, 0));
     indicator.billboardMode = 7;
 
     const group: EntityMeshGroup = {
       root: mesh,
-      namePlate
+      namePlate,
+      selectionCircle: indicator
     };
     this.meshes.set(entityId, group);
 
@@ -501,6 +522,7 @@ export class GameEngine {
     const group = this.meshes.get(entityId);
     if (group) {
       this.playerMesh = group.root;
+      this.playerEntityId = entityId;
     }
   }
 
@@ -511,6 +533,14 @@ export class GameEngine {
   updateEntityPosition(entityId: string, position: V3): void {
     const group = this.meshes.get(entityId);
     if (group?.root) {
+      if (group.frozen) {
+        group.frozen = false;
+        group.root.unfreezeWorldMatrix();
+        group.root.getChildMeshes().forEach(m => m.unfreezeWorldMatrix());
+        if (group.namePlate) group.namePlate.unfreezeWorldMatrix();
+        if (group.selectionCircle) group.selectionCircle.unfreezeWorldMatrix();
+      }
+
       group.root.position = position;
 
       if (group.healthBarBg) {
@@ -531,15 +561,16 @@ export class GameEngine {
   updateEntityRotation(entityId: string, rotation: number): void {
     const group = this.meshes.get(entityId);
     if (group?.root) {
+      if (group.frozen) {
+        group.frozen = false;
+        group.root.unfreezeWorldMatrix();
+        group.root.getChildMeshes().forEach(m => m.unfreezeWorldMatrix());
+      }
       group.root.rotation.y = rotation;
     }
   }
 
-  updateEntityHealth(entityId: string, current: number, max: number): void {
-    const group = this.meshes.get(entityId);
-    if (!group || !this.assetManager || !group.healthBarBg || !group.healthBarFg) return;
-
-    this.assetManager.updateHealthBar(entityId, current, max, group.healthBarBg, group.healthBarFg);
+  updateEntityHealth(_entityId: string, _current: number, _max: number): void {
   }
 
   showDamageNumber(entityId: string, damage: number, isCritical: boolean, element?: string, miss?: boolean): void {
@@ -728,6 +759,12 @@ export class GameEngine {
 
     const meshGroup = this.meshes.get(entityId);
     if (meshGroup?.root) {
+      if (meshGroup.frozen) {
+        meshGroup.frozen = false;
+        meshGroup.root.unfreezeWorldMatrix();
+        meshGroup.root.getChildMeshes().forEach(m => m.unfreezeWorldMatrix());
+      }
+
       const skeleton = meshGroup.root.skeleton || meshGroup.root.getChildMeshes().find(m => m.skeleton)?.skeleton;
       if (skeleton) {
         skeleton.returnToRest();
@@ -749,6 +786,12 @@ export class GameEngine {
 
     const meshGroup = this.meshes.get(entityId);
     if (meshGroup?.root) {
+      if (meshGroup.frozen) {
+        meshGroup.frozen = false;
+        meshGroup.root.unfreezeWorldMatrix();
+        meshGroup.root.getChildMeshes().forEach(m => m.unfreezeWorldMatrix());
+      }
+
       const skeleton = meshGroup.root.skeleton || meshGroup.root.getChildMeshes().find(m => m.skeleton)?.skeleton;
       if (skeleton) {
         skeleton.returnToRest();
@@ -1154,6 +1197,37 @@ export class GameEngine {
     }
     for (const id of toRemove) {
       this.songPulseEffects.delete(id);
+    }
+  }
+
+  private perfTick(): void {
+    if (!this.playerMesh) return;
+    const px = this.playerMesh.position.x;
+    const pz = this.playerMesh.position.z;
+
+    for (const [entityId, group] of this.meshes) {
+      if (!group.root || entityId === this.playerEntityId) continue;
+
+      const dx = group.root.position.x - px;
+      const dz = group.root.position.z - pz;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+
+      if (dist > DIST_FREEZE && !group.frozen) {
+        group.frozen = true;
+        group.root.freezeWorldMatrix();
+        group.root.getChildMeshes().forEach(m => m.freezeWorldMatrix());
+        if (group.namePlate) group.namePlate.freezeWorldMatrix();
+        if (group.selectionCircle) group.selectionCircle.freezeWorldMatrix();
+
+        const skeleton = group.root.skeleton || group.root.getChildMeshes().find(m => m.skeleton)?.skeleton;
+        if (skeleton) skeleton.returnToRest();
+      } else if (dist <= DIST_UNFREEZE && group.frozen) {
+        group.frozen = false;
+        group.root.unfreezeWorldMatrix();
+        group.root.getChildMeshes().forEach(m => m.unfreezeWorldMatrix());
+        if (group.namePlate) group.namePlate.unfreezeWorldMatrix();
+        if (group.selectionCircle) group.selectionCircle.unfreezeWorldMatrix();
+      }
     }
   }
 

@@ -58,15 +58,69 @@ export interface MapData {
   }>;
 }
 
+function colorKey(r: number, g: number, b: number): string {
+  return `${r.toFixed(2)},${g.toFixed(2)},${b.toFixed(2)}`;
+}
+
 export class MapBuilder {
   private scene: Scene;
   private assetManager: AssetManager;
   private disposedMeshes: AbstractMesh[] = [];
   private teleporterPositions: Map<string, { position: Vector3; radius: number; data: MapTeleporter }> = new Map();
 
+  private trunkMat: StandardMaterial | null = null;
+  private leavesMat: StandardMaterial | null = null;
+  private rockMat: StandardMaterial | null = null;
+  private structMatCache: Map<string, StandardMaterial> = new Map();
+  private sharedMats: StandardMaterial[] = [];
+
   constructor(scene: Scene, assetManager: AssetManager) {
     this.scene = scene;
     this.assetManager = assetManager;
+  }
+
+  private getTrunkMat(): StandardMaterial {
+    if (!this.trunkMat) {
+      this.trunkMat = new StandardMaterial('map_trunk_mat_shared', this.scene);
+      this.trunkMat.diffuseColor = new Color3(0.4, 0.25, 0.15);
+      this.trunkMat.freeze();
+      this.sharedMats.push(this.trunkMat);
+    }
+    return this.trunkMat;
+  }
+
+  private getLeavesMat(): StandardMaterial {
+    if (!this.leavesMat) {
+      this.leavesMat = new StandardMaterial('map_leaves_mat_shared', this.scene);
+      this.leavesMat.diffuseColor = new Color3(0.22, 0.6, 0.2);
+      this.leavesMat.freeze();
+      this.sharedMats.push(this.leavesMat);
+    }
+    return this.leavesMat;
+  }
+
+  private getRockMat(): StandardMaterial {
+    if (!this.rockMat) {
+      this.rockMat = new StandardMaterial('map_rock_mat_shared', this.scene);
+      this.rockMat.diffuseColor = new Color3(0.5, 0.5, 0.5);
+      this.rockMat.freeze();
+      this.sharedMats.push(this.rockMat);
+    }
+    return this.rockMat;
+  }
+
+  private getStructMat(r: number, g: number, b: number, specular: boolean): StandardMaterial {
+    const key = `${specular ? 's' : 'n'}_${colorKey(r, g, b)}`;
+    let mat = this.structMatCache.get(key);
+    if (!mat) {
+      mat = new StandardMaterial(`map_struct_${key}`, this.scene);
+      mat.diffuseColor = new Color3(r, g, b);
+      mat.specularColor = specular ? new Color3(0.05, 0.05, 0.05) : Color3.Black();
+      mat.freeze();
+      this.structMatCache.set(key, mat);
+      this.sharedMats.push(mat);
+    }
+    return mat;
   }
 
   async build(mapData: MapData): Promise<void> {
@@ -153,10 +207,7 @@ export class MapBuilder {
     }, this.scene);
     trunk.position = position.clone();
     trunk.position.y += 1.5 * scale;
-
-    const trunkMat = new StandardMaterial(`map_trunk_mat_${Date.now()}`, this.scene);
-    trunkMat.diffuseColor = new Color3(0.4, 0.25, 0.15);
-    trunk.material = trunkMat;
+    trunk.material = this.getTrunkMat();
 
     const leaves = MeshBuilder.CreateCylinder(`map_tree_leaves_${Date.now()}_${Math.random()}`, {
       height: 4 * scale,
@@ -165,10 +216,7 @@ export class MapBuilder {
       tessellation: 6
     }, this.scene);
     leaves.position = position.add(new Vector3(0, 4 * scale, 0));
-
-    const leavesMat = new StandardMaterial(`map_leaves_mat_${Date.now()}`, this.scene);
-    leavesMat.diffuseColor = new Color3(0.15 + Math.random() * 0.15, 0.5 + Math.random() * 0.2, 0.15);
-    leaves.material = leavesMat;
+    leaves.material = this.getLeavesMat();
 
     this.disposedMeshes.push(trunk, leaves);
   }
@@ -181,10 +229,7 @@ export class MapBuilder {
     }, this.scene);
     rock.position = position.add(new Vector3(0, 0.25 * scale, 0));
     rock.rotation.y = Math.random() * Math.PI * 2;
-
-    const mat = new StandardMaterial(`map_rock_mat_${Date.now()}`, this.scene);
-    mat.diffuseColor = new Color3(0.4 + Math.random() * 0.2, 0.4 + Math.random() * 0.2, 0.4 + Math.random() * 0.2);
-    rock.material = mat;
+    rock.material = this.getRockMat();
 
     this.disposedMeshes.push(rock);
   }
@@ -195,13 +240,11 @@ export class MapBuilder {
         case 'platform':
         case 'path':
         case 'wall':
+        case 'fence':
           this.buildBox(struct);
           break;
         case 'pillar':
           this.buildPillar(struct);
-          break;
-        case 'fence':
-          this.buildBox(struct);
           break;
         case 'house':
           this.buildHouse(struct);
@@ -218,10 +261,7 @@ export class MapBuilder {
     }, this.scene);
     mesh.position = new Vector3(struct.position.x, struct.position.y + struct.size.h / 2, struct.position.z);
 
-    const mat = new StandardMaterial(`map_struct_mat_${Date.now()}`, this.scene);
-    mat.diffuseColor = new Color3(struct.color.r, struct.color.g, struct.color.b);
-    mat.specularColor = new Color3(0.05, 0.05, 0.05);
-    mesh.material = mat;
+    mesh.material = this.getStructMat(struct.color.r, struct.color.g, struct.color.b, true);
     mesh.receiveShadows = true;
 
     this.disposedMeshes.push(mesh);
@@ -234,10 +274,7 @@ export class MapBuilder {
     }, this.scene);
     mesh.position = new Vector3(struct.position.x, struct.position.y + struct.size.h / 2, struct.position.z);
 
-    const mat = new StandardMaterial(`map_pillar_mat_${Date.now()}`, this.scene);
-    mat.diffuseColor = new Color3(struct.color.r, struct.color.g, struct.color.b);
-    mat.specularColor = new Color3(0.05, 0.05, 0.05);
-    mesh.material = mat;
+    mesh.material = this.getStructMat(struct.color.r, struct.color.g, struct.color.b, true);
 
     this.disposedMeshes.push(mesh);
   }
@@ -252,11 +289,7 @@ export class MapBuilder {
       depth: struct.size.d
     }, this.scene);
     walls.position = new Vector3(struct.position.x, struct.position.y + struct.size.h / 2, struct.position.z);
-
-    const wallsMat = new StandardMaterial(`map_house_walls_mat_${Date.now()}`, this.scene);
-    wallsMat.diffuseColor = new Color3(wallsColor.r, wallsColor.g, wallsColor.b);
-    wallsMat.specularColor = new Color3(0.05, 0.05, 0.05);
-    walls.material = wallsMat;
+    walls.material = this.getStructMat(wallsColor.r, wallsColor.g, wallsColor.b, true);
 
     const roof = MeshBuilder.CreateCylinder(`map_house_roof_${Date.now()}`, {
       height: struct.size.d * 1.1,
@@ -266,11 +299,7 @@ export class MapBuilder {
     }, this.scene);
     roof.position = new Vector3(struct.position.x, struct.position.y + struct.size.h + struct.size.w * 0.35, struct.position.z);
     roof.rotation.y = Math.PI / 4;
-
-    const roofMat = new StandardMaterial(`map_house_roof_mat_${Date.now()}`, this.scene);
-    roofMat.diffuseColor = new Color3(roofColor.r, roofColor.g, roofColor.b);
-    roofMat.specularColor = new Color3(0.05, 0.05, 0.05);
-    roof.material = roofMat;
+    roof.material = this.getStructMat(roofColor.r, roofColor.g, roofColor.b, true);
 
     this.disposedMeshes.push(walls, roof);
   }
@@ -383,10 +412,15 @@ export class MapBuilder {
 
   clear(): void {
     this.disposedMeshes.forEach(m => {
-      if (m.material) m.material.dispose();
       m.dispose();
     });
     this.disposedMeshes = [];
+    this.sharedMats.forEach(m => m.dispose());
+    this.sharedMats = [];
+    this.structMatCache.clear();
+    this.trunkMat = null;
+    this.leavesMat = null;
+    this.rockMat = null;
     this.teleporterPositions.clear();
   }
 }
