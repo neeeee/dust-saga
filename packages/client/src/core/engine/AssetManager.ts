@@ -7,7 +7,6 @@ import {
   AnimationGroup,
   Color3,
   StandardMaterial,
-  Mesh,
   MeshBuilder,
   DynamicTexture,
   AssetContainer
@@ -18,82 +17,9 @@ export class AssetManager {
   private containers: Map<string, AssetContainer> = new Map();
   private loadingPromises: Map<string, Promise<AssetContainer | null>> = new Map();
   private basePath: string = '/models/';
-  private sharedHpBgMat: StandardMaterial | null = null;
-  private sharedHpFgMat: StandardMaterial | null = null;
-  private sharedHpFgYellowMat: StandardMaterial | null = null;
-  private sharedHpFgRedMat: StandardMaterial | null = null;
 
   constructor(scene: Scene) {
     this.scene = scene;
-  }
-
-  private getSharedHpBgMat(): StandardMaterial {
-    if (!this.sharedHpBgMat) {
-      this.sharedHpBgMat = new StandardMaterial('hp_bg_mat_shared', this.scene);
-      this.sharedHpBgMat.diffuseColor = new Color3(0.2, 0.2, 0.2);
-      this.sharedHpBgMat.emissiveColor = new Color3(0.1, 0.1, 0.1);
-      this.sharedHpBgMat.backFaceCulling = false;
-      this.sharedHpBgMat.disableLighting = true;
-      this.sharedHpBgMat.freeze();
-    }
-    return this.sharedHpBgMat;
-  }
-
-  private getSharedHpFgGreenMat(): StandardMaterial {
-    if (!this.sharedHpFgMat) {
-      this.sharedHpFgMat = new StandardMaterial('hp_fg_mat_shared_green', this.scene);
-      this.sharedHpFgMat.diffuseColor = new Color3(0.1, 0.8, 0.1);
-      this.sharedHpFgMat.emissiveColor = new Color3(0.1, 0.6, 0.1);
-      this.sharedHpFgMat.backFaceCulling = false;
-      this.sharedHpFgMat.disableLighting = true;
-      this.sharedHpFgMat.freeze();
-    }
-    return this.sharedHpFgMat;
-  }
-
-  private getSharedHpFgYellowMat(): StandardMaterial {
-    if (!this.sharedHpFgYellowMat) {
-      this.sharedHpFgYellowMat = new StandardMaterial('hp_fg_mat_shared_yellow', this.scene);
-      this.sharedHpFgYellowMat.diffuseColor = new Color3(0.8, 0.8, 0.1);
-      this.sharedHpFgYellowMat.emissiveColor = new Color3(0.6, 0.6, 0.1);
-      this.sharedHpFgYellowMat.backFaceCulling = false;
-      this.sharedHpFgYellowMat.disableLighting = true;
-      this.sharedHpFgYellowMat.freeze();
-    }
-    return this.sharedHpFgYellowMat;
-  }
-
-  private sharedHpBgMesh: Mesh | null = null;
-  private sharedHpFgMesh: Mesh | null = null;
-
-  private getSharedHpBgMesh(): Mesh {
-    if (!this.sharedHpBgMesh) {
-      this.sharedHpBgMesh = MeshBuilder.CreatePlane('hp_bg_template', { width: 2, height: 0.2 }, this.scene);
-      this.sharedHpBgMesh.isVisible = false;
-      this.sharedHpBgMesh.material = this.getSharedHpBgMat();
-    }
-    return this.sharedHpBgMesh;
-  }
-
-  private getSharedHpFgMesh(): Mesh {
-    if (!this.sharedHpFgMesh) {
-      this.sharedHpFgMesh = MeshBuilder.CreatePlane('hp_fg_template', { width: 1.95, height: 0.15 }, this.scene);
-      this.sharedHpFgMesh.isVisible = false;
-      this.sharedHpFgMesh.material = this.getSharedHpFgGreenMat();
-    }
-    return this.sharedHpFgMesh;
-  }
-
-  private getSharedHpFgRedMat(): StandardMaterial {
-    if (!this.sharedHpFgRedMat) {
-      this.sharedHpFgRedMat = new StandardMaterial('hp_fg_mat_shared_red', this.scene);
-      this.sharedHpFgRedMat.diffuseColor = new Color3(0.8, 0.1, 0.1);
-      this.sharedHpFgRedMat.emissiveColor = new Color3(0.6, 0.1, 0.1);
-      this.sharedHpFgRedMat.backFaceCulling = false;
-      this.sharedHpFgRedMat.disableLighting = true;
-      this.sharedHpFgRedMat.freeze();
-    }
-    return this.sharedHpFgRedMat;
   }
 
   private async getContainer(name: string): Promise<AssetContainer | null> {
@@ -160,9 +86,23 @@ export class AssetManager {
     return { root, animations: result.animationGroups };
   }
 
-  createHealthBar(parentId: string): { background: AbstractMesh; foreground: AbstractMesh } {
-    const bg = this.getSharedHpBgMesh().createInstance(`hp_bg_${parentId}`);
-    const fg = this.getSharedHpFgMesh().createInstance(`hp_fg_${parentId}`);
+  createHealthBar(parentId: string, width: number = 2, height: number = 0.2): { background: AbstractMesh; foreground: AbstractMesh } {
+    const bg = MeshBuilder.CreatePlane(`hp_bg_${parentId}`, { width, height }, this.scene);
+    const fg = MeshBuilder.CreatePlane(`hp_fg_${parentId}`, { width: width - 0.05, height: height - 0.05 }, this.scene);
+
+    const bgMat = new StandardMaterial(`hp_bg_mat_${parentId}`, this.scene);
+    bgMat.diffuseColor = new Color3(0.2, 0.2, 0.2);
+    bgMat.emissiveColor = new Color3(0.1, 0.1, 0.1);
+    bgMat.backFaceCulling = false;
+    bgMat.disableLighting = true;
+    bg.material = bgMat;
+
+    const fgMat = new StandardMaterial(`hp_fg_mat_${parentId}`, this.scene);
+    fgMat.diffuseColor = new Color3(0.1, 0.8, 0.1);
+    fgMat.emissiveColor = new Color3(0.1, 0.6, 0.1);
+    fgMat.backFaceCulling = false;
+    fgMat.disableLighting = true;
+    fg.material = fgMat;
 
     fg.position.z = -0.01;
 
@@ -201,12 +141,16 @@ export class AssetManager {
     fg.scaling.x = ratio;
     fg.position.x = -(1 - ratio) * 0.5 * 2;
 
+    const fgMat = fg.material as StandardMaterial;
     if (ratio > 0.5) {
-      fg.material = this.getSharedHpFgGreenMat();
+      fgMat.diffuseColor = new Color3(0.1, 0.8, 0.1);
+      fgMat.emissiveColor = new Color3(0.1, 0.6, 0.1);
     } else if (ratio > 0.25) {
-      fg.material = this.getSharedHpFgYellowMat();
+      fgMat.diffuseColor = new Color3(0.8, 0.8, 0.1);
+      fgMat.emissiveColor = new Color3(0.6, 0.6, 0.1);
     } else {
-      fg.material = this.getSharedHpFgRedMat();
+      fgMat.diffuseColor = new Color3(0.8, 0.1, 0.1);
+      fgMat.emissiveColor = new Color3(0.6, 0.1, 0.1);
     }
   }
 
@@ -293,12 +237,11 @@ export class AssetManager {
     beacon.position = position;
 
     let elapsed = 0;
-    const observer = this.scene.onBeforeRenderObservable.add(() => {
+    this.scene.onBeforeRenderObservable.add(() => {
       elapsed += this.scene.getEngine().getDeltaTime() / 1000;
       beacon.position.y = position.y + 0.3 + Math.sin(elapsed * 3) * 0.2;
       beacon.rotation.y += 0.03;
     });
-    (beacon as any)._lootBeaconObserver = observer;
 
     return beacon;
   }

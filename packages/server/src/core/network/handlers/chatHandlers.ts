@@ -479,8 +479,8 @@ function handleReturn(ctx: NetworkContext, socket: Socket, session: PlayerSessio
         rotation: session.rotation,
         data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth }
       }
-    }, session.characterId);
-    ctx.sendZoneState(socket, spawnZoneId);
+    });
+    ctx.sendZoneState(socket, spawnZoneId, session.characterId);
   }
 
   ctx.sendToPlayer(session.characterId, {

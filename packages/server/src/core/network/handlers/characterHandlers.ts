@@ -141,7 +141,6 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
 
   ctx.state.players.set(session.characterId, session);
   ctx.state.playerToSocket.set(session.characterId, socket.id);
-  ctx.state.socketToPlayer.set(socket.id, session.characterId);
   ctx.registerPlayerInZone(session.characterId, session.zoneId);
 
   ctx.sendToSocket(socket.id, {
@@ -182,7 +181,7 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
       rotation: session.rotation,
       data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth, modelFile: JOB_DEFINITIONS[session.jobId]?.modelFile }
     }
-  }, session.characterId);
+  });
 }
 
 async function handleCharacterDelete(ctx: NetworkContext, socket: Socket, data: any): Promise<void> {

@@ -62,8 +62,8 @@ function handleRespawnRequest(ctx: NetworkContext, socket: Socket, _data: any): 
         rotation: session.rotation,
         data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth }
       }
-    }, characterId);
-    ctx.sendZoneState(socket, respawnZoneId);
+    });
+    ctx.sendZoneState(socket, respawnZoneId, characterId);
   }
 
   ctx.sendToPlayer(characterId, {

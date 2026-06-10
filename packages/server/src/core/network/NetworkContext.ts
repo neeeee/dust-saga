@@ -45,7 +45,7 @@ export interface NetworkContext {
   sendToSocket(socketId: string, packet: Packet): void;
   sendToPlayer(characterId: string, packet: Packet): void;
   broadcastInZone(zoneId: string, packet: Packet, excludeCharacterId?: string): void;
-  sendZoneState(socket: Socket, zoneId: string): void;
+  sendZoneState(socket: Socket, zoneId: string, includePlayerId?: string): void;
   registerPlayerInZone(characterId: string, zoneId: string): void;
   unregisterPlayerFromZone(characterId: string): void;
   movePlayerToZone(characterId: string, newZoneId: string): void;

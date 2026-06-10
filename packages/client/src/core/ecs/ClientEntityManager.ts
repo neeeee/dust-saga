@@ -3,7 +3,6 @@ import { Entity, Component } from '@dust-saga/shared';
 export class ClientEntityManager {
   private entities: Map<string, Entity> = new Map();
   private localEntities: Map<string, Entity> = new Map();
-  private cachedList: Entity[] | null = null;
 
   createEntity(id: string, components?: Map<string, Component>): Entity {
     const entity: Entity = {
@@ -11,7 +10,6 @@ export class ClientEntityManager {
       components: components || new Map()
     };
     this.entities.set(id, entity);
-    this.cachedList = null;
     return entity;
   }
 
@@ -22,7 +20,6 @@ export class ClientEntityManager {
       components: components || new Map()
     };
     this.localEntities.set(id, entity);
-    this.cachedList = null;
     return entity;
   }
 
@@ -33,17 +30,13 @@ export class ClientEntityManager {
   removeEntity(id: string): void {
     this.entities.delete(id);
     this.localEntities.delete(id);
-    this.cachedList = null;
   }
 
   getAllEntities(): Entity[] {
-    if (!this.cachedList) {
-      this.cachedList = [
-        ...this.entities.values(),
-        ...this.localEntities.values()
-      ];
-    }
-    return this.cachedList;
+    return [
+      ...Array.from(this.entities.values()),
+      ...Array.from(this.localEntities.values())
+    ];
   }
 
   addComponent(entityId: string, component: Component): void {
@@ -69,7 +62,6 @@ export class ClientEntityManager {
   clear(): void {
     this.entities.clear();
     this.localEntities.clear();
-    this.cachedList = null;
   }
 }
 

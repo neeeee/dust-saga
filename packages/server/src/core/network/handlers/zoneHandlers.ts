@@ -42,9 +42,9 @@ function handleEnterZone(ctx: NetworkContext, socket: Socket, data: any): void {
       rotation: session.rotation,
       data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth, modelFile: JOB_DEFINITIONS[session.jobId]?.modelFile }
     }
-  }, characterId);
+  });
 
-  ctx.sendZoneState(socket, data.zoneId);
+  ctx.sendZoneState(socket, data.zoneId, characterId);
 
   ctx.sendToPlayer(characterId, {
     type: PacketType.ENTER_ZONE,

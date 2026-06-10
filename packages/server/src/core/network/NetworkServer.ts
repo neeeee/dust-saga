@@ -512,33 +512,40 @@ export class NetworkServer implements NetworkContext {
       return this._applyRawDamage(target, damage, attackerId, damageType, isCritical, zoneId);
     }
 
-    const negationEffect = NetworkServer.findStatusEffect(
-      target.statusEffects, StatusEffectType.BUFF_DAMAGE_NEGATION,
-      e => !!e.buffData?.damageNegationThreshold
-    );
-    const protectedEffect = NetworkServer.findStatusEffect(
-      target.statusEffects, StatusEffectType.BUFF_BLOCKING_PROTECTED,
-      e => !!e.buffData?.blockingProtectedBy
-    );
-    const selfBlockEffect = NetworkServer.findStatusEffect(
-      target.statusEffects, StatusEffectType.BUFF_BLOCKING_STANCE,
-      e => !!e.buffData?.blockingStance
-    );
+    let negationIdx = -1;
+    let protectedIdx = -1;
+    let selfBlockIdx = -1;
 
-    if (negationEffect) {
+    for (let i = 0; i < target.statusEffects.length; i++) {
+      const e = target.statusEffects[i];
+      if (negationIdx === -1 && e.type === StatusEffectType.BUFF_DAMAGE_NEGATION && e.buffData?.damageNegationThreshold) {
+        negationIdx = i;
+      } else if (protectedIdx === -1 && e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy) {
+        protectedIdx = i;
+      } else if (selfBlockIdx === -1 && e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance) {
+        selfBlockIdx = i;
+      }
+    }
+
+    if (negationIdx !== -1) {
+      const negationEffect = target.statusEffects[negationIdx];
       if (damage <= (negationEffect.buffData!.damageNegationThreshold!)) {
         return { redirected: false, damageTaken: 0 };
       }
     }
 
-    if (protectedEffect) {
+    if (protectedIdx !== -1) {
+      const protectedEffect = target.statusEffects[protectedIdx];
       const blockerId = protectedEffect.buffData!.blockingProtectedBy!;
       const blocker = this.state.players.get(blockerId);
       let blockStance = false;
       if (blocker && !blocker.isDead && blocker.statusEffects) {
-        blockStance = !!NetworkServer.findStatusEffect(
-          blocker.statusEffects, StatusEffectType.BUFF_BLOCKING_STANCE
-        );
+        for (let i = 0; i < blocker.statusEffects.length; i++) {
+          if (blocker.statusEffects[i].type === StatusEffectType.BUFF_BLOCKING_STANCE) {
+            blockStance = true;
+            break;
+          }
+        }
       }
       if (blocker && !blocker.isDead && blockStance) {
         const reducedDamage = Math.floor(damage * 0.4);
@@ -589,7 +596,7 @@ export class NetworkServer implements NetworkContext {
       }
     }
 
-    if (selfBlockEffect) {
+    if (selfBlockIdx !== -1) {
       const reducedDamage = Math.floor(damage * 0.4);
       target.stats.health = Math.max(0, target.stats.health - reducedDamage);
       this.tryInterruptCast(target);
@@ -873,9 +880,8 @@ export class NetworkServer implements NetworkContext {
 
   private findGuardian(targetId: string): PlayerSession | null {
     for (const [, session] of this.state.players) {
-      const guardianEffect = NetworkServer.findStatusEffect(
-        session.statusEffects, StatusEffectType.BUFF_DAMAGE_REDIRECT,
-        e => e.buffData?.damageRedirectTargetId === targetId
+      const guardianEffect = session.statusEffects?.find(
+        e => e.type === StatusEffectType.BUFF_DAMAGE_REDIRECT && e.buffData?.damageRedirectTargetId === targetId
       );
       if (guardianEffect) return session;
     }
@@ -1228,11 +1234,9 @@ export class NetworkServer implements NetworkContext {
     this.state.socketToPlayer.delete(socket.id);
   }
 
-  sendZoneState(socket: Socket, zoneId: string): void {
+  sendZoneState(socket: Socket, zoneId: string, includePlayerId?: string): void {
     const zoneDef = getZoneDefinition(zoneId);
     if (!zoneDef) return;
-
-    const selfCharacterId = this.findCharacterBySocket(socket.id);
 
     const enemies = this.spawnMgr.getEnemiesInZone(zoneId);
     const enemyData: any[] = [];
@@ -1271,8 +1275,9 @@ export class NetworkServer implements NetworkContext {
     }));
 
     const otherPlayers: any[] = [];
-    this.forEachPlayerInZone(zoneId, (pid, player) => {
-      if (pid === selfCharacterId) return;
+    this.state.players.forEach(player => {
+      if (player.zoneId !== zoneId) return;
+      if (player.characterId === this.findCharacterBySocket(socket.id) && player.characterId !== includePlayerId) return;
       otherPlayers.push({
         id: player.characterId,
         type: 'player',
@@ -1281,6 +1286,7 @@ export class NetworkServer implements NetworkContext {
         data: { name: player.characterName, class: player.jobId, race: player.race, jobId: player.jobId, level: player.stats.level, health: player.stats.health, maxHealth: player.stats.maxHealth, modelFile: JOB_DEFINITIONS[player.jobId]?.modelFile }
       });
     });
+
     this.sendToSocket(socket.id, {
       type: PacketType.WORLD_STATE,
       timestamp: Date.now(),
@@ -1295,17 +1301,12 @@ export class NetworkServer implements NetworkContext {
   }
 
   removeBlockingProtectedBuffs(blockerId: string): void {
-    const session = this.state.players.get(blockerId);
-    if (!session) return;
-    const zoneId = session.zoneId;
-    this.forEachPlayerInZone(zoneId, (targetId, target) => {
-      if (targetId === blockerId) return;
-      const prot = NetworkServer.findStatusEffect(
-        target.statusEffects, StatusEffectType.BUFF_BLOCKING_PROTECTED,
-        e => e.buffData?.blockingProtectedBy === blockerId
+    for (const [targetId, target] of this.state.players) {
+      const prot = target.statusEffects.find(
+        e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
       );
       if (prot) {
-        NetworkServer.removeStatusEffect(target.statusEffects, prot);
+        target.statusEffects = target.statusEffects.filter(e => e !== prot);
         this.playerSys.recalcStats(target);
         this.sendToPlayer(targetId, {
           type: PacketType.STATUS_EFFECT_UPDATE,
@@ -1314,18 +1315,17 @@ export class NetworkServer implements NetworkContext {
         });
         this.broadcastEntityEffects(target);
       }
-    });
+    }
   }
 
   removeSongProximityBuffs(caster: PlayerSession): void {
-    const zoneId = caster.zoneId;
-    this.forEachPlayerInZone(zoneId, (targetId, target) => {
-      if (!target.statusEffects?.length) return;
+    for (const [targetId, target] of this.state.players) {
+      if (!target.statusEffects?.length) continue;
 
       const toRemove = target.statusEffects.filter(e =>
         e.songProximityBuff && e.sourceId === caster.characterId
       );
-      if (toRemove.length === 0) return;
+      if (toRemove.length === 0) continue;
 
       for (const e of toRemove) {
         e.lastInRangeAt = Date.now();
@@ -1346,7 +1346,7 @@ export class NetworkServer implements NetworkContext {
         });
         this.broadcastEntityEffects(target);
       }
-    });
+    }
   }
 
   executeAOESkillInternal(session: PlayerSession, skillName: string, aoePosition: { x: number; y: number; z: number }): void {
@@ -2145,9 +2145,8 @@ export class NetworkServer implements NetworkContext {
    private tickBlockingProximity(now: number): void {
      for (const [blockerId, blocker] of this.state.players) {
        if (blocker.isDead) continue;
-        const blockStance = NetworkServer.findStatusEffect(
-          blocker.statusEffects, StatusEffectType.BUFF_BLOCKING_STANCE,
-          e => !!e.buffData?.blockingStance
+       const blockStance = blocker.statusEffects?.find(
+         e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance
        );
        if (!blockStance || !blocker.position) continue;
 
@@ -2174,9 +2173,8 @@ export class NetworkServer implements NetworkContext {
          const dz = entry.z - blocker.position.z;
          const dist = Math.sqrt(dx * dx + dz * dz);
 
-         const existingProt = NetworkServer.findStatusEffect(
-           entry.data.statusEffects, StatusEffectType.BUFF_BLOCKING_PROTECTED,
-           e => e.buffData?.blockingProtectedBy === blockerId
+         const existingProt = entry.data.statusEffects?.find(
+           e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
          );
 
          let behindBlocker = false;
@@ -2213,9 +2211,9 @@ export class NetworkServer implements NetworkContext {
              });
              this.broadcastEntityEffects(entry.data);
            }
-          } else {
-            if (existingProt) {
-              NetworkServer.removeStatusEffect(entry.data.statusEffects, existingProt);
+         } else {
+           if (existingProt) {
+             entry.data.statusEffects = entry.data.statusEffects.filter(e => e !== existingProt);
              this.playerSys.recalcStats(entry.data);
              this.sendToPlayer(targetId, {
                type: PacketType.STATUS_EFFECT_UPDATE,
@@ -2232,12 +2230,11 @@ export class NetworkServer implements NetworkContext {
          if (target.isDead) continue;
          if (target.zoneId !== blocker.zoneId) continue;
          if (processedTargets.has(targetId)) continue;
-         const existingProt = NetworkServer.findStatusEffect(
-           target.statusEffects, StatusEffectType.BUFF_BLOCKING_PROTECTED,
-           e => e.buffData?.blockingProtectedBy === blockerId
+         const existingProt = target.statusEffects.find(
+           e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
          );
          if (existingProt) {
-           NetworkServer.removeStatusEffect(target.statusEffects, existingProt);
+           target.statusEffects = target.statusEffects.filter(e => e !== existingProt);
            this.playerSys.recalcStats(target);
            this.sendToPlayer(targetId, {
              type: PacketType.STATUS_EFFECT_UPDATE,
@@ -2964,9 +2961,8 @@ export class NetworkServer implements NetworkContext {
         }
       }
 
-      const blockStanceEffect = NetworkServer.findStatusEffect(
-        session.statusEffects, StatusEffectType.BUFF_BLOCKING_STANCE,
-        e => !!e.buffData?.blockingStance
+      const blockStanceEffect = session.statusEffects?.find(
+        e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance
       );
       if (blockStanceEffect) {
         const lastDrain = (blockStanceEffect as any).lastMpDrainAt || blockStanceEffect.appliedAt;
@@ -2979,7 +2975,7 @@ export class NetworkServer implements NetworkContext {
             data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
           });
           if (session.stats.mana <= 0) {
-            NetworkServer.removeStatusEffect(session.statusEffects, blockStanceEffect);
+            session.statusEffects = session.statusEffects.filter(e => e !== blockStanceEffect);
             this.removeBlockingProtectedBuffs(session.characterId);
             this.playerSys.recalcStats(session);
             this.sendToPlayer(session.characterId, {
@@ -3002,9 +2998,8 @@ export class NetworkServer implements NetworkContext {
         }
       }
 
-      const guardianRedirectFx = NetworkServer.findStatusEffect(
-        session.statusEffects, StatusEffectType.BUFF_DAMAGE_REDIRECT,
-        e => !!e.buffData?.damageRedirectTargetId
+      const guardianRedirectFx = session.statusEffects?.find(
+        e => e.type === StatusEffectType.BUFF_DAMAGE_REDIRECT && e.buffData?.damageRedirectTargetId
       );
       if (guardianRedirectFx && session.position) {
         const guardedCharId = guardianRedirectFx.buffData!.damageRedirectTargetId!;
@@ -3015,7 +3010,7 @@ export class NetworkServer implements NetworkContext {
           const gdz = session.position.z - guardedPlayer.position.z;
           const gdist = Math.sqrt(gdx * gdx + gdy * gdy + gdz * gdz);
           if (gdist > 20) {
-            NetworkServer.removeStatusEffect(session.statusEffects, guardianRedirectFx);
+            session.statusEffects = session.statusEffects.filter(e => e !== guardianRedirectFx);
             this.playerSys.recalcStats(session);
             this.sendToPlayer(session.characterId, {
               type: PacketType.CHAT_MESSAGE,
@@ -3108,6 +3103,7 @@ export class NetworkServer implements NetworkContext {
   }
 
   private tickAI(now: number): void {
+    this.aiTickBucket = (this.aiTickBucket + 1) % this.AI_TICK_STAGGER;
 
     const reusableZonePlayers = new Map<string, Map<string, { position: { x: number; y: number; z: number }; characterId: string }>>();
 
@@ -3156,22 +3152,19 @@ export class NetworkServer implements NetworkContext {
   }
 
   private broadcastEntityStates(): void {
-    const radius = NetworkServer.INTEREST_RADIUS;
+    const RADIUS_SQ = NetworkServer.INTEREST_RADIUS_SQ;
 
     for (const zoneId of this.spawnMgr.getZoneIds()) {
+      const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
+      if (!zoneEnemies) continue;
       const zonePlayerIds = this.zonePlayerIndex.get(zoneId);
       if (!zonePlayerIds || zonePlayerIds.size === 0) continue;
-
-      const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
-      if (!zoneEnemies || zoneEnemies.size === 0) continue;
 
       const aliveEnemies: Array<{ id: string; position: { x: number; y: number; z: number }; rotation: number; state: string; health: number; maxHealth: number; targetId: string | null }> = [];
       for (const [enemyId, enemy] of zoneEnemies) {
         if (enemy.state === 'dead') continue;
         aliveEnemies.push({ id: enemyId, position: enemy.position, rotation: enemy.rotation, state: enemy.state, health: enemy.health, maxHealth: enemy.maxHealth, targetId: enemy.targetId });
       }
-
-      if (aliveEnemies.length === 0) continue;
 
       for (const characterId of zonePlayerIds) {
         const player = this.state.players.get(characterId);
@@ -3181,20 +3174,13 @@ export class NetworkServer implements NetworkContext {
         const px = player.position.x;
         const pz = player.position.z;
 
-        const nearEntries = this.enemySpatialHash.queryRadius(px, pz, radius);
-        for (const entry of nearEntries) {
-          if (entry.data.state === 'dead') continue;
-          const eZone = this.spawnMgr.findZoneOfEnemy(entry.id);
-          if (eZone !== zoneId) continue;
-          visible.push({
-            id: entry.id,
-            position: { x: entry.x, y: entry.data.position.y, z: entry.z },
-            rotation: entry.data.rotation,
-            state: entry.data.state,
-            health: entry.data.health,
-            maxHealth: entry.data.maxHealth,
-            targetId: entry.data.targetId,
-          });
+        for (let i = 0; i < aliveEnemies.length; i++) {
+          const e = aliveEnemies[i];
+          const dx = e.position.x - px;
+          const dz = e.position.z - pz;
+          if (dx * dx + dz * dz <= RADIUS_SQ) {
+            visible.push(e);
+          }
         }
 
         if (visible.length > 0) {
@@ -3687,31 +3673,6 @@ export class NetworkServer implements NetworkContext {
 
   getTickRate(): number {
     return this.tickRate;
-  }
-
-  private static findStatusEffect(
-    effects: StatusEffect[] | undefined,
-    type: StatusEffectType,
-    extra?: (e: StatusEffect) => boolean
-  ): StatusEffect | undefined {
-    if (!effects?.length) return undefined;
-    for (let i = 0; i < effects.length; i++) {
-      const e = effects[i];
-      if (e.type === type && (!extra || extra(e))) return e;
-    }
-    return undefined;
-  }
-
-  private static removeStatusEffect(
-    effects: StatusEffect[],
-    effect: StatusEffect
-  ): void {
-    for (let i = 0; i < effects.length; i++) {
-      if (effects[i] === effect) {
-        effects.splice(i, 1);
-        return;
-      }
-    }
   }
 
   getLastMoveBroadcast(characterId: string): number {

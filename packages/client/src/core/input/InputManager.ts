@@ -26,8 +26,6 @@ export class InputManager {
   private chatFocused: boolean = false;
   private skillBarHandler: SkillBarKeyHandler | null = null;
   private dialogActive: boolean = false;
-  private static readonly _zeroVec = new Vector3(0, 0, 0);
-  private static readonly _cachedMovement = new Vector3(0, 0, 0);
 
   constructor() {
     this.setupEventListeners();
@@ -131,19 +129,16 @@ export class InputManager {
   }
 
   getMovementVector(): Vector3 {
-    if (this.dialogActive) return InputManager._zeroVec;
+    if (this.dialogActive) return new Vector3(0, 0, 0);
     const input = this.getInputState();
-    const movement = InputManager._cachedMovement;
-    movement.x = 0;
-    movement.y = 0;
-    movement.z = 0;
+    const movement = new Vector3(0, 0, 0);
 
     if (input.forward) movement.z += 1;
     if (input.backward) movement.z -= 1;
     if (input.left) movement.x -= 1;
     if (input.right) movement.x += 1;
 
-    if (movement.lengthSquared() > 0) {
+    if (movement.length() > 0) {
       movement.normalize();
     }
 
