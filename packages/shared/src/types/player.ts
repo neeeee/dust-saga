@@ -29,6 +29,7 @@ export interface PlayerSession {
   characterId: string;
   characterName: string;
   race: string;
+  racialPassive?: string;
   jobId: JobId;
   baseClass: BaseClass;
   stats: PlayerStats;

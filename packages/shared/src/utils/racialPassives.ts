@@ -1,84 +1,75 @@
-import { Race, RacialPassiveEffects } from '../types/races';
-import { RACE_DATA } from '../constants/races';
+import { RacialPassiveId } from '../types/races';
 import { PlayerSession } from '../types/player';
 
-export function getRacialPassives(race: string): RacialPassiveEffects {
-  const raceData = RACE_DATA[race as Race];
-  return raceData?.passiveEffects || {};
+export function applyRacialCritChance(passiveId: string | undefined, baseCritChance: number): number {
+  if (passiveId === RacialPassiveId.MYRINE_ACUTE_SENSES) return baseCritChance + 0.05;
+  return baseCritChance;
 }
 
-export function applyRacialCritChance(race: string, baseCritChance: number): number {
-  const passives = getRacialPassives(race);
-  return baseCritChance + (passives.critChanceBonus || 0);
+export function applyRacialDodgeChance(passiveId: string | undefined): number {
+  if (passiveId === RacialPassiveId.MYRINE_SHARPNESS) return 0.05;
+  return 0;
 }
 
-export function applyRacialDodgeChance(race: string): number {
-  const passives = getRacialPassives(race);
-  return passives.dodgeChanceBonus || 0;
-}
-
-export function applyRacialIncomingDamage(race: string, damage: number, damageType: 'physical' | 'magical'): number {
-  const passives = getRacialPassives(race);
-  if (damageType === 'physical' && passives.physicalDamageTakenModifier) {
-    damage = Math.floor(damage * (1 + passives.physicalDamageTakenModifier));
+export function applyRacialIncomingDamage(passiveId: string | undefined, damage: number, damageType: 'physical' | 'magical'): number {
+  if (damageType === 'physical' && passiveId === RacialPassiveId.ENKIDU_STONE_SKIN) {
+    return Math.max(1, Math.floor(damage * 0.9));
   }
-  if (damageType === 'magical' && passives.magicResistBonus) {
-    damage = Math.floor(damage * (1 - passives.magicResistBonus));
+  if (damageType === 'magical' && passiveId === RacialPassiveId.LAPIN_MAGIC_RESISTANCE) {
+    return Math.max(1, Math.floor(damage * 0.9));
   }
   return Math.max(1, damage);
 }
 
-export function applyRacialOutgoingDamage(race: string, damage: number, weaponType?: string): number {
-  const passives = getRacialPassives(race);
-  if (weaponType === 'axe' || weaponType === 'blunt') {
-    if (passives.axeBluntDamageBonus) {
-      damage = Math.floor(damage * (1 + passives.axeBluntDamageBonus));
-    }
+export function applyRacialOutgoingDamage(passiveId: string | undefined, damage: number, weaponType?: string): number {
+  if (!passiveId) return damage;
+  if ((weaponType === 'axe' || weaponType === 'blunt') && passiveId === RacialPassiveId.DWARF_SPIRIT) {
+    return Math.floor(damage * 1.1);
   }
-  if (weaponType === 'twohand') {
-    if (passives.twoHandDamageBonus) {
-      damage = Math.floor(damage * (1 + passives.twoHandDamageBonus));
-    }
+  if (weaponType === 'twohand' && passiveId === RacialPassiveId.ENKIDU_STRONG_ARM) {
+    return Math.floor(damage * 1.1);
   }
   return damage;
 }
 
-export function applyRacialPotionHealing(race: string, baseHeal: number): number {
-  const passives = getRacialPassives(race);
-  if (passives.potionEffectivenessModifier) {
-    return Math.floor(baseHeal * (1 + passives.potionEffectivenessModifier));
+export function applyRacialPotionHealing(passiveId: string | undefined, baseHeal: number): number {
+  if (passiveId === RacialPassiveId.HUMAN_BREWER) {
+    return Math.floor(baseHeal * 1.15);
   }
   return baseHeal;
 }
 
-export function applyRacialMpCost(race: string, baseMpCost: number): number {
-  const passives = getRacialPassives(race);
-  if (passives.spellMpCostModifier) {
-    return Math.max(1, Math.floor(baseMpCost * (1 + passives.spellMpCostModifier)));
+export function applyRacialMpCost(passiveId: string | undefined, baseMpCost: number): number {
+  if (passiveId === RacialPassiveId.ELF_NATURES_HARMONY) {
+    return Math.max(1, Math.floor(baseMpCost * 0.85));
   }
   return baseMpCost;
 }
 
-export function applyRacialAilmentDuration(race: string, baseDurationMs: number): number {
-  const passives = getRacialPassives(race);
-  if (passives.ailmentDurationModifier) {
-    return Math.max(0, Math.floor(baseDurationMs * (1 + passives.ailmentDurationModifier)));
+export function applyRacialAilmentDuration(passiveId: string | undefined, baseDurationMs: number): number {
+  if (passiveId === RacialPassiveId.HUMAN_ADAPTABILITY) {
+    return Math.max(0, Math.floor(baseDurationMs * 0.5));
   }
   return baseDurationMs;
 }
 
-export function checkSurviveFatal(race: string): boolean {
-  const passives = getRacialPassives(race);
-  if (passives.surviveFatalChance) {
-    return Math.random() < passives.surviveFatalChance;
+export function checkSurviveFatal(passiveId: string | undefined): boolean {
+  if (passiveId === RacialPassiveId.DWARF_FILIAL_PIETY) {
+    return Math.random() < 0.03;
   }
   return false;
 }
 
-export function checkDamageToMpConversion(race: string): boolean {
-  const passives = getRacialPassives(race);
-  if (passives.damageToMpChance) {
-    return Math.random() < passives.damageToMpChance;
+export function checkDamageToMpConversion(passiveId: string | undefined): boolean {
+  if (passiveId === RacialPassiveId.MYRINE_CALMNESS) {
+    return Math.random() < 0.05;
+  }
+  return false;
+}
+
+export function checkFatalDamageForParty(passiveId: string | undefined): boolean {
+  if (passiveId === RacialPassiveId.DWARF_STRONGHEARTED) {
+    return Math.random() < 0.01;
   }
   return false;
 }
@@ -88,17 +79,17 @@ export function processRacialOnDamage(
   incomingDamage: number,
   damageType: 'physical' | 'magical'
 ): { finalDamage: number; survivedFatal: boolean; mpConverted: number } {
-  const race = target.race;
-  let finalDamage = applyRacialIncomingDamage(race, incomingDamage, damageType);
+  const passiveId = target.racialPassive;
+  let finalDamage = applyRacialIncomingDamage(passiveId, incomingDamage, damageType);
   let survivedFatal = false;
   let mpConverted = 0;
 
-  if (checkDamageToMpConversion(race)) {
+  if (checkDamageToMpConversion(passiveId)) {
     mpConverted = Math.floor(finalDamage * 0.3);
     target.stats.mana = Math.min(target.stats.maxMana, target.stats.mana + mpConverted);
   }
 
-  if (finalDamage >= target.stats.health && checkSurviveFatal(race)) {
+  if (finalDamage >= target.stats.health && checkSurviveFatal(passiveId)) {
     finalDamage = target.stats.health - 1;
     survivedFatal = true;
   }
@@ -106,17 +97,30 @@ export function processRacialOnDamage(
   return { finalDamage, survivedFatal, mpConverted };
 }
 
-export function getRangedRangeBonus(race: string): number {
-  const passives = getRacialPassives(race);
-  return passives.rangedRangeBonus || 0;
+export function getRangedRangeBonus(passiveId: string | undefined): number {
+  if (passiveId === RacialPassiveId.ELF_HAWKEYE) return 3;
+  return 0;
 }
 
-export function getCharmResist(race: string): number {
-  const passives = getRacialPassives(race);
-  return passives.charmResistBonus || 0;
+export function getCharmResist(passiveId: string | undefined): number {
+  if (passiveId === RacialPassiveId.ELF_STEADFASTNESS) return 20;
+  return 0;
 }
 
-export function getMpRegenBonus(race: string): number {
-  const passives = getRacialPassives(race);
-  return passives.mpRegenModifier || 0;
+export function getMpRegenBonus(passiveId: string | undefined): number {
+  if (passiveId === RacialPassiveId.LAPIN_INNER_LIGHT) return 0.15;
+  return 0;
+}
+
+export function getMeleeSkillBonus(passiveId: string | undefined): number {
+  if (passiveId === RacialPassiveId.HUMAN_FIGHTING_SPIRIT) return 10;
+  return 0;
+}
+
+export function hasLapinSupport(passiveId: string | undefined): boolean {
+  return passiveId === RacialPassiveId.ENKIDU_LAPIN_SUPPORT;
+}
+
+export function hasEnkiduSupport(passiveId: string | undefined): boolean {
+  return passiveId === RacialPassiveId.LAPIN_ENKIDU_SUPPORT;
 }

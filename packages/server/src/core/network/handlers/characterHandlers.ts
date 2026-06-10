@@ -55,7 +55,7 @@ async function handleCharacterCreate(ctx: NetworkContext, socket: Socket, data: 
     return;
   }
 
-  const result = await ctx.auth.createCharacter(playerId, data.name, data.race || 'human', data.characterClass);
+  const result = await ctx.auth.createCharacter(playerId, data.name, data.race || 'human', data.characterClass, data.racialPassive);
 
   if (result.success) {
     const jobDef = JOB_DEFINITIONS[data.characterClass as JobId];
@@ -120,6 +120,7 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
   session.nation = (char.nation as 'varik' | 'pfelstein' | 'latugan' | null) || null;
   session.lastSafeZoneId = char.last_safe_zone_id || session.zoneId;
   session.gold = char.gold || 100;
+  session.racialPassive = char.racial_passive || undefined;
 
   if (char.inventory) {
     const parsed = typeof char.inventory === 'string' ? JSON.parse(char.inventory) : char.inventory;
@@ -167,7 +168,8 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
       unspentSkillPoints: session.unspentSkillPoints,
       skillProficiencies: session.skillProficiencies,
       skillAdeptness: session.skillAdeptness,
-      statBreakdown: session.statBreakdown
+      statBreakdown: session.statBreakdown,
+      racialPassive: session.racialPassive
     }
   });
 

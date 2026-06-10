@@ -28,10 +28,10 @@ function handleItemUse(ctx: NetworkContext, socket: Socket, data: any): void {
 
   if (itemDef.type === 'consumable') {
     if (itemDef.stats.health && itemDef.type === 'consumable') {
-      session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + applyRacialPotionHealing(session.race, itemDef.stats.health || 0));
+      session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + applyRacialPotionHealing(session.racialPassive, itemDef.stats.health || 0));
     }
     if (itemDef.stats.mana && itemDef.type === 'consumable') {
-      session.stats.mana = Math.min(session.stats.maxMana, session.stats.mana + applyRacialPotionHealing(session.race, itemDef.stats.mana || 0));
+      session.stats.mana = Math.min(session.stats.maxMana, session.stats.mana + applyRacialPotionHealing(session.racialPassive, itemDef.stats.mana || 0));
     }
 
     ctx.playerSys.removeItemFromInventory(session, data.itemId, 1);

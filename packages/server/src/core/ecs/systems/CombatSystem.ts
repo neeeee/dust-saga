@@ -29,9 +29,9 @@ export class CombatSystem extends System {
   private computePhysicalDamage(
     attackPower: number,
     targetDefense: number,
-    attackerRace: string
+    attackerRacialPassive?: string
   ): { damage: number; isCritical: boolean } {
-    const isCritical = Math.random() < applyRacialCritChance(attackerRace, COMBAT_CONFIG.CRITICAL_CHANCE);
+    const isCritical = Math.random() < applyRacialCritChance(attackerRacialPassive, COMBAT_CONFIG.CRITICAL_CHANCE);
     let damage = Math.max(
       COMBAT_CONFIG.MIN_DAMAGE,
       attackPower - targetDefense * COMBAT_CONFIG.DAMAGE_REDUCTION_PER_DEFENSE * 10
@@ -139,7 +139,7 @@ export class CombatSystem extends System {
     if (dist > COMBAT_CONFIG.ATTACK_RANGE) return null;
 
     const effective = getEffectiveStats(attacker.stats, attacker.statPoints, attacker.statusEffects || []);
-    const { damage, isCritical } = this.computePhysicalDamage(effective.attack, targetDefense, attacker.race);
+    const { damage, isCritical } = this.computePhysicalDamage(effective.attack, targetDefense, attacker.racialPassive);
 
     const attackerBaseStats = attacker.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
     const attackerTotalDex = (attacker.statPoints.DEX || 0) + (attackerBaseStats.DEX || 0);
@@ -256,7 +256,7 @@ export class CombatSystem extends System {
     for (let i = 0; i < hitTargets.length; i++) {
       const target = hitTargets[i];
       const falloff = Math.pow(COMBAT_CONFIG.MANUAL_ATTACK_FALLOFF, i);
-      const { damage: baseDamage, isCritical } = this.computePhysicalDamage(effective.attack, target.defense, attacker.race);
+      const { damage: baseDamage, isCritical } = this.computePhysicalDamage(effective.attack, target.defense, attacker.racialPassive);
       const damage = Math.max(COMBAT_CONFIG.MIN_DAMAGE, Math.floor(baseDamage * falloff));
 
       let targetDodge = 0;

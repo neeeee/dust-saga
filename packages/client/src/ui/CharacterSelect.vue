@@ -46,7 +46,7 @@
               :key="race.id"
               class="race-card"
               :class="{ selected: newRace === race.id }"
-              @click="newRace = race.id"
+              @click="newRace = race.id; newPassive = race.passiveChoices[0].id"
             >
               <div class="race-emoji">{{ getRaceEmoji(race.id) }}</div>
               <h4>{{ race.name }}</h4>
@@ -57,7 +57,15 @@
                 </span>
               </div>
               <div class="race-passive">
-                <strong>{{ race.passiveName }}</strong>: {{ race.passiveDescription }}
+                <div
+                  v-for="choice in race.passiveChoices"
+                  :key="choice.id"
+                  class="passive-choice"
+                  :class="{ selected: newRace === race.id && newPassive === choice.id }"
+                  @click.stop="newRace = race.id; newPassive = choice.id"
+                >
+                  <strong>{{ choice.name }}</strong>: {{ choice.description }}
+                </div>
               </div>
             </div>
           </div>
@@ -101,7 +109,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { RACE_DATA, JOB_DEFINITIONS, BaseClass, Race, getBaseClassForJob, calculateDerivedStats, createDefaultStatPoints } from '@dust-saga/shared';
+import { RACE_DATA, JOB_DEFINITIONS, BaseClass, Race, getBaseClassForJob, calculateDerivedStats, createDefaultStatPoints, RacialPassiveId } from '@dust-saga/shared';
 
 const props = defineProps<{
   characters: Array<{
@@ -117,7 +125,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'select-character': [characterId: string];
-  'create-character': [name: string, characterClass: string, race: string];
+  'create-character': [name: string, characterClass: string, race: string, racialPassive: string];
   'delete-character': [characterId: string];
 }>();
 
@@ -128,6 +136,7 @@ const showCreateForm = ref(false);
 const newName = ref('');
 const newRace = ref<Race>(Race.HUMAN);
 const newClass = ref<BaseClass>(BaseClass.WARRIOR);
+const newPassive = ref<RacialPassiveId>(RacialPassiveId.HUMAN_FIGHTING_SPIRIT);
 
 const previewStats = [
   { key: 'maxHealth', label: 'HP' },
@@ -185,10 +194,11 @@ function capitalize(s: string): string {
 function handleCreate() {
   if (newName.value && newRace.value && newClass.value) {
     const jobId = Object.values(JOB_DEFINITIONS).find(j => j.baseClass === newClass.value && j.tier === 1)?.id || newClass.value;
-    emit('create-character', newName.value, jobId, newRace.value);
+    emit('create-character', newName.value, jobId, newRace.value, newPassive.value);
     newName.value = '';
     newClass.value = BaseClass.WARRIOR;
     newRace.value = Race.HUMAN;
+    newPassive.value = RacialPassiveId.HUMAN_FIGHTING_SPIRIT;
     showCreateForm.value = false;
   }
 }
@@ -439,12 +449,33 @@ function handleCreate() {
 }
 
 .race-passive {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
   font-size: 0.65rem;
   color: #88ccaa;
   line-height: 1.2;
 }
 
-.race-passive strong {
+.passive-choice {
+  padding: 2px 4px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.passive-choice:hover {
+  background: rgba(136, 204, 170, 0.15);
+}
+
+.passive-choice.selected {
+  border-color: #88ccaa;
+  background: rgba(136, 204, 170, 0.25);
+  color: #aaddcc;
+}
+
+.passive-choice strong {
   color: #aaddcc;
 }
 

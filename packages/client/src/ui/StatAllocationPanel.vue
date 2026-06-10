@@ -199,6 +199,7 @@ const props = defineProps<{
   statPoints: StatPoints | null;
   unspentStatPoints: number;
   race: string;
+  racialPassive?: string;
   jobId: string;
   statBreakdown: any;
   statusEffects: any[];
@@ -380,7 +381,9 @@ function handleCancel(): void {
 const racialPassive = computed(() => {
   const raceData = RACE_DATA[props.race as Race];
   if (!raceData) return null;
-  return { name: raceData.passiveName, description: raceData.passiveDescription };
+  const choice = raceData.passiveChoices.find(c => c.id === props.racialPassive);
+  if (choice) return { name: choice.name, description: choice.description };
+  return { name: raceData.passiveChoices[0].name, description: raceData.passiveChoices[0].description };
 });
 
 const combatStats = computed(() => {

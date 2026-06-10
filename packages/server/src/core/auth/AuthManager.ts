@@ -34,6 +34,7 @@ export interface MockCharacter {
   inventory?: string;
   equipment?: string;
   gold?: number;
+  racial_passive?: string | null;
 }
 
 export class AuthManager {
@@ -164,7 +165,7 @@ export class AuthManager {
 
     try {
       const result = await this.db.postgres!.query(
-        'SELECT id, name, class, race, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies, skill_adeptness, experience, nation, last_safe_zone_id, inventory, equipment, gold FROM characters WHERE player_id = $1',
+        'SELECT id, name, class, race, racial_passive, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies, skill_adeptness, experience, nation, last_safe_zone_id, inventory, equipment, gold FROM characters WHERE player_id = $1',
         [playerId]
       );
       return result.rows;
@@ -178,7 +179,8 @@ export class AuthManager {
     playerId: string,
     name: string,
     race: string,
-    jobId: string
+    jobId: string,
+    racialPassive?: string
   ): Promise<{ success: boolean; characterId?: string; error?: string }> {
     if (!this.db.isPostgresConnected()) {
       const characters = this.mockCharacters.get(playerId) || [];
@@ -204,7 +206,8 @@ export class AuthManager {
         unspent_skill_points: 0,
         skill_proficiencies: JSON.stringify(defaultSkills),
         skill_adeptness: JSON.stringify(defaultAdeptness),
-        experience: 0
+        experience: 0,
+        racial_passive: racialPassive || null,
       };
       characters.push(newChar);
       this.mockCharacters.set(playerId, characters);
@@ -225,9 +228,9 @@ export class AuthManager {
       const defaultSkills = createDefaultSkillProficiencies();
       const defaultAdeptness = createDefaultSkillAdeptness(getDesignJobId(jobId));
       const result = await this.db.postgres!.query(
-        `INSERT INTO characters (player_id, name, class, race, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies, skill_adeptness)
-         VALUES ($1, $2, $3, $4, $5, 1, 0, 0, 0, $6, $7, 0, 0, $8, $9) RETURNING id`,
-        [playerId, name, jobId, race, jobId, 'starter_zone', JSON.stringify(defaultStats), JSON.stringify(defaultSkills), JSON.stringify(defaultAdeptness)]
+        `INSERT INTO characters (player_id, name, class, race, racial_passive, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies, skill_adeptness)
+         VALUES ($1, $2, $3, $4, $5, $6, 1, 0, 0, 0, $7, $8, 0, 0, $9, $10) RETURNING id`,
+        [playerId, name, jobId, race, racialPassive || null, jobId, 'starter_zone', JSON.stringify(defaultStats), JSON.stringify(defaultSkills), JSON.stringify(defaultAdeptness)]
       );
 
       return { success: true, characterId: result.rows[0].id };

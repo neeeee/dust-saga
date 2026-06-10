@@ -122,11 +122,11 @@ export class NetworkClient {
     });
   }
 
-  createCharacter(name: string, characterClass: string, race: string = 'human'): void {
+  createCharacter(name: string, characterClass: string, race: string = 'human', racialPassive?: string): void {
     this.sendPacket({
       type: PacketType.CHARACTER_CREATE,
       timestamp: Date.now(),
-      data: { name, characterClass, race }
+      data: { name, characterClass, race, racialPassive }
     });
   }
 

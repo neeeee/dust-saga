@@ -126,6 +126,7 @@
         :stat-points="playerStatPoints"
         :unspent-stat-points="playerUnspentStatPoints"
         :race="playerRace"
+        :racial-passive="playerRacialPassive"
         :job-id="playerJobId"
         :stat-breakdown="playerStatBreakdown"
         :status-effects="playerStatusEffects"
@@ -273,6 +274,7 @@ const playerUnspentStatPoints = ref(0);
 const playerUnspentSkillPoints = ref(0);
 const playerStatBreakdown = ref<any>(null);
 const playerRace = ref('');
+const playerRacialPassive = ref('');
 const playerJobId = ref('');
 const showSkillWindow = ref(false);
 const skillStore = useSkillStore();
@@ -317,9 +319,9 @@ function handleSelectCharacter(characterId: string) {
   }, 1000);
 }
 
-async function handleCreateCharacter(name: string, characterClass: string, race: string) {
+async function handleCreateCharacter(name: string, characterClass: string, race: string, racialPassive: string) {
   if (!gameClient) return;
-  gameClient.createCharacter(name, characterClass, race);
+  gameClient.createCharacter(name, characterClass, race, racialPassive);
   setTimeout(() => {
     gameClient?.requestCharacterList();
   }, 500);
@@ -721,6 +723,7 @@ onMounted(async () => {
   network.onPacket(PacketType.CHARACTER_SELECT, (packet: any) => {
     gameState.value = 'playing';
     playerRace.value = packet.data.race || '';
+    playerRacialPassive.value = packet.data.racialPassive || '';
     playerJobId.value = packet.data.jobId || '';
     skillStore.initForCharacter(packet.data.characterId);
     nextTick(() => {

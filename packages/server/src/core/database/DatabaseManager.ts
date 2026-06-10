@@ -106,6 +106,7 @@ export class DatabaseManager {
         name VARCHAR(50) NOT NULL,
         class VARCHAR(20) NOT NULL,
         race VARCHAR(20) NOT NULL DEFAULT 'human',
+        racial_passive VARCHAR(50),
         job_id VARCHAR(30) NOT NULL DEFAULT 'warrior',
         level INTEGER DEFAULT 1,
         position_x FLOAT DEFAULT 0,
@@ -177,6 +178,7 @@ export class DatabaseManager {
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS inventory JSONB DEFAULT '[]'`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS equipment JSONB DEFAULT '{"weapon":null,"armor":null,"helmet":null,"boots":null,"gloves":null,"legs":null,"shield":null,"earring_1":null,"earring_2":null,"necklace":null,"belt":null,"ring_1":null,"ring_2":null}'`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS gold INTEGER DEFAULT 100`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS racial_passive VARCHAR(50)`,
     ];
 
     for (const sql of migrations) {

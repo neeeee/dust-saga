@@ -1,4 +1,4 @@
-import { Race, RaceData } from '../types/races';
+import { Race, RaceData, RacialPassiveId } from '../types/races';
 
 export const RACE_DATA: Record<Race, RaceData> = {
   [Race.HUMAN]: {
@@ -6,78 +6,66 @@ export const RACE_DATA: Record<Race, RaceData> = {
     name: 'Human',
     description: 'Versatile and adaptable. Well-rounded in all disciplines.',
     baseStats: { STA: 5, STR: 5, AGI: 5, DEX: 5, SPI: 5, INT: 5 },
-    passiveName: 'Adaptability',
-    passiveDescription: '+10 melee skill (1H), ailment duration -50%, potion effectiveness +15%',
-    passiveEffects: {
-      meleeSkillBonus: 10,
-      ailmentDurationModifier: -0.5,
-      potionEffectivenessModifier: 0.15
-    }
+    passiveChoices: [
+      { id: RacialPassiveId.HUMAN_FIGHTING_SPIRIT, name: 'Fighting Spirit', description: '+10 melee skill (1H)' },
+      { id: RacialPassiveId.HUMAN_ADAPTABILITY, name: 'Adaptability', description: 'Ailment duration -50%' },
+      { id: RacialPassiveId.HUMAN_BREWER, name: 'Brewer', description: 'Potion effectiveness +15%' },
+    ]
   },
   [Race.ELF]: {
     id: Race.ELF,
     name: 'Elf',
     description: 'Graceful and magical. Natural affinity for ranged combat and spellcraft.',
     baseStats: { STA: 3, STR: 3, AGI: 6, DEX: 4, SPI: 7, INT: 7 },
-    passiveName: 'Elven Grace',
-    passiveDescription: '+3 ranged range, spell MP cost -15%, charm resistance +20%',
-    passiveEffects: {
-      rangedRangeBonus: 3,
-      spellMpCostModifier: -0.15,
-      charmResistBonus: 20
-    }
+    passiveChoices: [
+      { id: RacialPassiveId.ELF_HAWKEYE, name: 'Hawkeye', description: '+3 ranged range' },
+      { id: RacialPassiveId.ELF_NATURES_HARMONY, name: "Nature's Harmony", description: 'Spell MP cost -15%' },
+      { id: RacialPassiveId.ELF_STEADFASTNESS, name: 'Steadfastness', description: 'Charm resistance +20' },
+    ]
   },
   [Race.DWARF]: {
     id: Race.DWARF,
     name: 'Dwarf',
     description: 'Sturdy and resilient. Masters of heavy weapons and unwavering defense.',
     baseStats: { STA: 6, STR: 7, AGI: 5, DEX: 6, SPI: 3, INT: 3 },
-    passiveName: 'Dwarven Resilience',
-    passiveDescription: '1% chance take fatal damage for party, axe/blunt damage +10%, 3% survive fatal with 1HP',
-    passiveEffects: {
-      fatalDamagePartyChance: 0.01,
-      axeBluntDamageBonus: 0.1,
-      surviveFatalChance: 0.03
-    }
+    passiveChoices: [
+      { id: RacialPassiveId.DWARF_STRONGHEARTED, name: 'Stronghearted', description: '1% chance take fatal damage for party member' },
+      { id: RacialPassiveId.DWARF_SPIRIT, name: 'Dwarf Spirit', description: 'Axe/blunt damage +10%' },
+      { id: RacialPassiveId.DWARF_FILIAL_PIETY, name: 'Filial Piety', description: '3% survive fatal with 1HP' },
+    ]
   },
   [Race.MYRINE]: {
     id: Race.MYRINE,
     name: 'Myrine',
     description: 'Quick and elusive. Gifted with heightened reflexes and evasion.',
     baseStats: { STA: 5, STR: 5, AGI: 9, DEX: 6, SPI: 3, INT: 2 },
-    passiveName: 'Swift Instinct',
-    passiveDescription: 'Crit chance +5%, 5% dodge, chance convert damage to MP',
-    passiveEffects: {
-      critChanceBonus: 0.05,
-      dodgeChanceBonus: 0.05,
-      damageToMpChance: 0.05
-    }
+    passiveChoices: [
+      { id: RacialPassiveId.MYRINE_ACUTE_SENSES, name: 'Acute Senses', description: 'Crit chance +5%' },
+      { id: RacialPassiveId.MYRINE_SHARPNESS, name: 'Sharpness', description: '5% dodge' },
+      { id: RacialPassiveId.MYRINE_CALMNESS, name: 'Calmness', description: 'Chance convert damage to MP' },
+    ]
   },
   [Race.ENKIDU]: {
     id: Race.ENKIDU,
     name: 'Enkidu',
     description: 'Powerful and tough. A beast-like race with immense physical presence.',
     baseStats: { STA: 8, STR: 6, AGI: 4, DEX: 4, SPI: 6, INT: 2 },
-    passiveName: 'Beast Fortitude',
-    passiveDescription: 'Physical damage taken -10%, 2H weapon damage +10%, boost Lapin party members\' physical defense',
-    passiveEffects: {
-      physicalDamageTakenModifier: -0.1,
-      twoHandDamageBonus: 0.1,
-      boostLapinPhysicalDefense: true
-    }
+    passiveChoices: [
+      { id: RacialPassiveId.ENKIDU_STONE_SKIN, name: 'Stone Skin', description: 'Physical damage taken -10%' },
+      { id: RacialPassiveId.ENKIDU_STRONG_ARM, name: 'Strong Arm', description: '2H weapon damage +10%' },
+      { id: RacialPassiveId.ENKIDU_LAPIN_SUPPORT, name: 'Lapin Support', description: 'Boost Lapin party members\' physical defense' },
+    ]
   },
   [Race.LAPIN]: {
     id: Race.LAPIN,
     name: 'Lapin',
     description: 'Gentle and magically attuned. A rabbit-like race with strong mystical affinity.',
     baseStats: { STA: 3, STR: 1, AGI: 6, DEX: 5, SPI: 9, INT: 6 },
-    passiveName: 'Mystic Hare',
-    passiveDescription: 'Magic resistance +10%, MP regen +15%, boost Enkidu party members\' magic defense',
-    passiveEffects: {
-      magicResistBonus: 0.1,
-      mpRegenModifier: 0.15,
-      boostEnkiduMagicDefense: true
-    }
+    passiveChoices: [
+      { id: RacialPassiveId.LAPIN_MAGIC_RESISTANCE, name: 'Magic Resistance', description: 'Magic resistance +10%' },
+      { id: RacialPassiveId.LAPIN_INNER_LIGHT, name: 'Inner Light', description: 'MP regen +15%' },
+      { id: RacialPassiveId.LAPIN_ENKIDU_SUPPORT, name: 'Enkidu Support', description: 'Boost Enkidu party members\' magic defense' },
+    ]
   }
 };
 

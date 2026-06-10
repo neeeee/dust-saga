@@ -7,14 +7,39 @@ export enum Race {
   LAPIN = 'lapin'
 }
 
+export enum RacialPassiveId {
+  HUMAN_FIGHTING_SPIRIT = 'human_fighting_spirit',
+  HUMAN_ADAPTABILITY = 'human_adaptability',
+  HUMAN_BREWER = 'human_brewer',
+  ELF_HAWKEYE = 'elf_hawkeye',
+  ELF_NATURES_HARMONY = 'elf_natures_harmony',
+  ELF_STEADFASTNESS = 'elf_steadfastness',
+  DWARF_STRONGHEARTED = 'dwarf_stronghearted',
+  DWARF_SPIRIT = 'dwarf_spirit',
+  DWARF_FILIAL_PIETY = 'dwarf_filial_piety',
+  MYRINE_ACUTE_SENSES = 'myrine_acute_senses',
+  MYRINE_SHARPNESS = 'myrine_sharpness',
+  MYRINE_CALMNESS = 'myrine_calmness',
+  ENKIDU_STONE_SKIN = 'enkidu_stone_skin',
+  ENKIDU_STRONG_ARM = 'enkidu_strong_arm',
+  ENKIDU_LAPIN_SUPPORT = 'enkidu_lapin_support',
+  LAPIN_MAGIC_RESISTANCE = 'lapin_magic_resistance',
+  LAPIN_INNER_LIGHT = 'lapin_inner_light',
+  LAPIN_ENKIDU_SUPPORT = 'lapin_enkidu_support',
+}
+
+export interface RacialPassiveChoice {
+  id: RacialPassiveId;
+  name: string;
+  description: string;
+}
+
 export interface RaceData {
   id: Race;
   name: string;
   description: string;
   baseStats: Record<StatType, number>;
-  passiveName: string;
-  passiveDescription: string;
-  passiveEffects: RacialPassiveEffects;
+  passiveChoices: RacialPassiveChoice[];
 }
 
 export enum StatType {
@@ -34,27 +59,6 @@ export const STAT_TYPES: StatType[] = [
   StatType.SPI,
   StatType.INT
 ];
-
-export interface RacialPassiveEffects {
-  meleeSkillBonus?: number;
-  ailmentDurationModifier?: number;
-  potionEffectivenessModifier?: number;
-  rangedRangeBonus?: number;
-  spellMpCostModifier?: number;
-  charmResistBonus?: number;
-  fatalDamagePartyChance?: number;
-  axeBluntDamageBonus?: number;
-  surviveFatalChance?: number;
-  critChanceBonus?: number;
-  dodgeChanceBonus?: number;
-  damageToMpChance?: number;
-  physicalDamageTakenModifier?: number;
-  twoHandDamageBonus?: number;
-  boostLapinPhysicalDefense?: boolean;
-  magicResistBonus?: number;
-  mpRegenModifier?: number;
-  boostEnkiduMagicDefense?: boolean;
-}
 
 export interface StatPoints {
   STA: number;
