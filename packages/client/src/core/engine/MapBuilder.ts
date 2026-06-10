@@ -63,6 +63,7 @@ export class MapBuilder {
   private assetManager: AssetManager;
   private disposedMeshes: AbstractMesh[] = [];
   private teleporterPositions: Map<string, { position: Vector3; radius: number; data: MapTeleporter }> = new Map();
+  private renderObservers: { observer: any }[] = [];
 
   constructor(scene: Scene, assetManager: AssetManager) {
     this.scene = scene;
@@ -81,6 +82,11 @@ export class MapBuilder {
     this.buildStructures(mapData.structures);
     this.buildTeleporters(mapData.teleporters);
     this.buildLights(mapData.lights);
+
+    for (const mesh of this.disposedMeshes) {
+      if (mesh.isPickable === false || mesh.billboardMode === 7) continue;
+      mesh.freezeWorldMatrix();
+    }
   }
 
   private buildGround(ground: MapData['ground']): void {
@@ -311,14 +317,16 @@ export class MapBuilder {
       this.disposedMeshes.push(base, pillar, label);
 
       const startTime = Date.now();
-      this.scene.onBeforeRenderObservable.add(() => {
-        const elapsed = (Date.now() - startTime) / 1000;
-        baseMat.emissiveColor = new Color3(
-          0.1 + Math.sin(elapsed * 2) * 0.1,
-          0.3 + Math.sin(elapsed * 2) * 0.1,
-          0.8
-        );
-        baseMat.alpha = 0.4 + Math.sin(elapsed * 3) * 0.2;
+      this.renderObservers.push({
+        observer: this.scene.onBeforeRenderObservable.add(() => {
+          const elapsed = (Date.now() - startTime) / 1000;
+          baseMat.emissiveColor = new Color3(
+            0.1 + Math.sin(elapsed * 2) * 0.1,
+            0.3 + Math.sin(elapsed * 2) * 0.1,
+            0.8
+          );
+          baseMat.alpha = 0.4 + Math.sin(elapsed * 3) * 0.2;
+        })
       });
     }
   }
@@ -369,8 +377,8 @@ export class MapBuilder {
     for (const [, tp] of this.teleporterPositions) {
       const dx = position.x - tp.position.x;
       const dz = position.z - tp.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < tp.radius) {
+      const radius = tp.radius;
+      if (dx * dx + dz * dz < radius * radius) {
         return tp.data;
       }
     }
@@ -382,6 +390,10 @@ export class MapBuilder {
   }
 
   clear(): void {
+    for (const entry of this.renderObservers) {
+      this.scene.onBeforeRenderObservable.remove(entry.observer);
+    }
+    this.renderObservers = [];
     this.disposedMeshes.forEach(m => {
       if (m.material) m.material.dispose();
       m.dispose();

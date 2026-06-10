@@ -13,6 +13,7 @@ import {
   GROUND_TARGETED_AOE_SKILLS,
   DEFAULT_AOE_RADIUS,
   findSkillDefinition,
+  JOB_DEFINITIONS,
 } from '@dust-saga/shared';
 
 export interface GameCallbacks {
@@ -46,8 +47,6 @@ export class GameClient {
   private input: InputManager | null = null;
   private entityManager: ClientEntityManager;
   private interpolationManager: InterpolationManager;
-  private isRunning: boolean = false;
-  private lastUpdate: number = 0;
   private lastTeleportTime: number = 0;
   private zoneLoading: boolean = false;
   private engineReadyResolve: (() => void) | null = null;
@@ -55,6 +54,9 @@ export class GameClient {
   private pendingSpawns: Array<{ id: string; type: string; position: any; data: any }> = [];
   private playerId: string | null = null;
   private playerMesh: any = null;
+  private spawnPosition: { x: number; y: number; z: number } | null = null;
+  private characterName: string | null = null;
+  private _interpPos = new BabylonVector3();
   private callbacks: Partial<GameCallbacks> = {};
   private stats: PlayerStats | null = null;
   private statPoints: StatPoints | null = null;
@@ -95,15 +97,13 @@ export class GameClient {
   async initialize(): Promise<void> {
     this.setupNetworkHandlers();
     this.network.connect();
-    this.isRunning = true;
-    this.lastUpdate = performance.now();
-    this.gameLoop();
   }
 
   async initEngine(canvas: HTMLCanvasElement): Promise<void> {
     this.engine = new GameEngine(canvas);
     this.input = new InputManager();
     await this.engine.initialize();
+    this.engine.setOnBeforeRender((deltaTime) => this.update(deltaTime));
     this.engineReadyResolve?.();
     this.engineReadyResolve = null;
     this.setupClickHandler();
@@ -293,6 +293,8 @@ export class GameClient {
     this.network.onPacket(PacketType.CHARACTER_SELECT, (packet: any) => {
       const data = packet.data;
       this.playerId = data.characterId;
+      this.spawnPosition = data.position ? { x: data.position.x, y: data.position.y, z: data.position.z } : null;
+      this.characterName = data.characterName || null;
       this.stats = data.stats;
       this.statPoints = data.statPoints;
       this.unspentStatPoints = data.unspentStatPoints || 0;
@@ -357,19 +359,27 @@ export class GameClient {
         this.entityManager.createEntity(player.id);
       }
 
-      if (this.playerId) {
-        this.engine.setPlayerMesh(this.playerId);
-        this.playerMesh = this.engine.getPlayerMesh();
-        if (this.playerMesh) {
-          this.engine.attachCameraToEntity(this.playerId);
-        }
-      }
-
       this.zoneLoading = false;
       const pending = [...this.pendingSpawns];
       this.pendingSpawns = [];
       for (const spawn of pending) {
         await this.processEntitySpawn(spawn.id, spawn.type, spawn.position, spawn.data);
+      }
+
+      if (this.playerId && !this.playerMesh) {
+        const modelFile = (JOB_DEFINITIONS as any)[this.currentJobId]?.modelFile || 'Player.glb';
+        await this.engine.createPlayerEntity(
+          this.playerId,
+          new BabylonVector3(this.spawnPosition?.x ?? 0, this.spawnPosition?.y ?? 0, this.spawnPosition?.z ?? 0),
+          modelFile,
+          this.characterName || 'Player'
+        );
+        this.entityManager.createEntity(this.playerId);
+        this.engine.setPlayerMesh(this.playerId);
+        this.playerMesh = this.engine.getPlayerMesh();
+        if (this.playerMesh) {
+          this.engine.attachCameraToEntity(this.playerId);
+        }
       }
 
       this.callbacks.onEnemyListUpdate?.(Array.from(this.enemies.values()));
@@ -791,17 +801,6 @@ export class GameClient {
     }
   }
 
-  private gameLoop(): void {
-    if (!this.isRunning) return;
-
-    const now = performance.now();
-    const deltaTime = (now - this.lastUpdate) / 1000;
-    this.lastUpdate = now;
-
-    this.update(deltaTime);
-    requestAnimationFrame(() => this.gameLoop());
-  }
-
   private update(deltaTime: number): void {
     if (!this.input || !this.playerMesh) return;
 
@@ -812,18 +811,19 @@ export class GameClient {
     const speed = input.sprint ? GAME_CONFIG.PLAYER_SPEED * 1.5 * speedMultiplier : GAME_CONFIG.PLAYER_SPEED * speedMultiplier;
 
     const camera = this.engine.getScene()?.activeCamera;
-    let camForward = BabylonVector3.Forward();
-    let camRight = BabylonVector3.Right();
+    const camForward = BabylonVector3.Forward();
+    const camRight = BabylonVector3.Right();
     if (camera) {
-      camera.getDirectionToRef(BabylonVector3.Forward(), camForward);
+      camera.getDirectionToRef(camForward, camForward);
       camForward.y = 0;
       camForward.normalize();
-      camera.getDirectionToRef(BabylonVector3.Right(), camRight);
+      camera.getDirectionToRef(camRight, camRight);
       camRight.y = 0;
       camRight.normalize();
     }
 
-    if (movementVector.length() > 0.001) {
+    const moveLenSq = movementVector.lengthSquared();
+    if (moveLenSq > 0.001) {
       this.cancelClickToMove();
     }
 
@@ -833,14 +833,15 @@ export class GameClient {
       const target = this.clickToMovePath[this.clickToMoveTargetIndex];
       const dx = target.x - this.playerMesh.position.x;
       const dz = target.z - this.playerMesh.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
+      const distSq = dx * dx + dz * dz;
 
-      if (dist < 0.3) {
+      if (distSq < 0.09) {
         this.clickToMoveTargetIndex++;
         if (this.clickToMoveTargetIndex >= this.clickToMovePath.length) {
           this.cancelClickToMove();
         }
       } else {
+        const dist = Math.sqrt(distSq);
         const dirX = dx / dist;
         const dirZ = dz / dist;
         this.playerMesh.position.x += dirX * speed * deltaTime;
@@ -849,12 +850,12 @@ export class GameClient {
         this.playerMesh.rotation.y = Math.atan2(dirX, dirZ);
         isMoving = true;
       }
-    } else if (movementVector.length() > 0.001) {
+    } else if (moveLenSq > 0.001) {
       const moveDirection = new BabylonVector3(0, 0, 0);
       moveDirection.addInPlace(camForward.scale(movementVector.z));
       moveDirection.addInPlace(camRight.scale(movementVector.x));
 
-      if (moveDirection.length() > 0.001) {
+      if (moveDirection.lengthSquared() > 0.001) {
         moveDirection.normalize();
         this.playerMesh.position.addInPlace(moveDirection.scale(speed * deltaTime));
         const angle = Math.atan2(moveDirection.x, moveDirection.z);
@@ -872,8 +873,8 @@ export class GameClient {
 
     this.engine.updateMoveIndicator(deltaTime);
 
-    const now = Date.now();
-    if (now - this.lastMoveSend > 50) {
+    const moveNow = Date.now();
+    if (moveNow - this.lastMoveSend > 50) {
       this.network.sendMovement(
         {
           x: this.playerMesh.position.x,
@@ -887,7 +888,7 @@ export class GameClient {
           w: 1
         }
       );
-      this.lastMoveSend = now;
+      this.lastMoveSend = moveNow;
     }
 
     if (input.attack && this.targetId && !this.autoAttacking) {
@@ -896,46 +897,46 @@ export class GameClient {
     }
 
     if (this.autoAttacking && this.targetId && this.targetId !== this.playerId) {
-      const now = Date.now();
       const attackSpeedMult = (this.statBreakdown as any)?.gearCombat?.attackSpeed ?? 0;
       const attackSpeedMultiplier = 1 + attackSpeedMult;
       const autoCooldown = Math.max(
         GAME_CONFIG.AUTO_ATTACK_MIN_COOLDOWN,
         GAME_CONFIG.AUTO_ATTACK_BASE_COOLDOWN / attackSpeedMultiplier
       );
-      if (now - this.lastAutoAttackTime >= autoCooldown) {
+      if (moveNow - this.lastAutoAttackTime >= autoCooldown) {
         this.network.sendAttack(this.targetId);
-        this.lastAutoAttackTime = now;
+        this.lastAutoAttackTime = moveNow;
       }
     }
 
     if (input.manualAttack && !input.attack) {
-      const now = Date.now();
-      if (now - this.lastManualAttackTime >= GAME_CONFIG.MANUAL_ATTACK_COOLDOWN) {
+      if (moveNow - this.lastManualAttackTime >= GAME_CONFIG.MANUAL_ATTACK_COOLDOWN) {
         const facingAngle = Math.atan2(camForward.x, camForward.z);
         this.network.sendManualAttack(facingAngle);
-        this.lastManualAttackTime = now;
+        this.lastManualAttackTime = moveNow;
         this.autoAttacking = false;
-        this.lastAutoAttackTime = now + GAME_CONFIG.MANUAL_ATTACK_COOLDOWN;
+        this.lastAutoAttackTime = moveNow + GAME_CONFIG.MANUAL_ATTACK_COOLDOWN;
       }
     }
 
     const entities = this.entityManager.getAllEntities();
     const currentTime = Date.now();
 
-    entities.forEach(entity => {
-      if (entity.id === this.playerId) return;
+    for (let i = 0; i < entities.length; i++) {
+      const entity = entities[i];
+      if (entity.id === this.playerId) continue;
 
       const interpolatedPos = this.interpolationManager.getInterpolatedPosition(entity.id, currentTime);
       const interpolatedRot = this.interpolationManager.getInterpolatedRotation(entity.id, currentTime);
 
       if (interpolatedPos) {
-        this.engine.updateEntityPosition(entity.id, new BabylonVector3(interpolatedPos.x, interpolatedPos.y, interpolatedPos.z));
+        this._interpPos.set(interpolatedPos.x, interpolatedPos.y, interpolatedPos.z);
+        this.engine.updateEntityPosition(entity.id, this._interpPos);
       }
       if (interpolatedRot) {
         this.engine.updateEntityRotation(entity.id, interpolatedRot.y || 0);
       }
-    });
+    }
 
     if (this.currentZoneId && this.playerMesh) {
       const zoneDef = getZoneDefinition(this.currentZoneId);
@@ -946,18 +947,18 @@ export class GameClient {
           zoneDef.size
         );
       }
+      this.engine.updateVisibility(this.playerMesh.position);
     }
 
     if (this.playerMesh) {
-      const now = Date.now();
-      if (now - this.lastTeleportTime > 3000) {
+      if (currentTime - this.lastTeleportTime > 3000) {
         const mapBuilder = this.engine.getMapBuilder();
         const tp = mapBuilder?.checkTeleport(this.playerMesh.position);
         if (tp) {
-          this.lastTeleportTime = now;
+          this.lastTeleportTime = currentTime;
           this.network.sendPacket({
             type: PacketType.ENTER_ZONE,
-            timestamp: now,
+            timestamp: currentTime,
             data: { zoneId: tp.targetZone, spawnId: tp.targetSpawn }
           });
         }
@@ -1240,7 +1241,6 @@ export class GameClient {
   }
 
   dispose(): void {
-    this.isRunning = false;
     this.network.disconnect();
     this.input?.dispose();
     this.engine.dispose();

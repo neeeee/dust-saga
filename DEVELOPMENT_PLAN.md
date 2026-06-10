@@ -98,7 +98,6 @@ Replace the current 5 flat classes with the 4 base class system, 6 races, and 6-
 ---
 
 ## Phase 3: The World — Astir & Nations
-
 ### 3.1 Zone Architecture
 - Astir Central Plaza (hub, safe zone, no PVP)
   - Northern Confederation Road → Northern Soplar Highway → Mountains of Jortio → Varik Confederation → Leapoltz Gorge

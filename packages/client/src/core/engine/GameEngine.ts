@@ -1,20 +1,17 @@
 import {
-  Engine,
   Scene,
-  ArcRotateCamera,
+  AbstractMesh,
   Vector3 as V3,
-  HemisphericLight,
-  DirectionalLight,
-  MeshBuilder,
-  StandardMaterial,
+  AnimationGroup,
   Color3,
   Color4,
-  AbstractMesh,
-  ShadowGenerator,
-  FloatArray,
-  Scene as SceneType,
-  AnimationGroup,
+  StandardMaterial,
   Mesh,
+  MeshBuilder,
+  ArcRotateCamera,
+  Engine,
+  HemisphericLight,
+  DirectionalLight
 } from '@babylonjs/core';
 import { RecastJSPlugin } from '@babylonjs/core/Navigation/Plugins/recastJSPlugin';
 import { INavMeshParameters } from '@babylonjs/core/Navigation/INavigationEngine';
@@ -28,6 +25,7 @@ export interface EntityMeshGroup {
   healthBarFg?: AbstractMesh;
   namePlate?: AbstractMesh;
   selectionCircle?: AbstractMesh;
+  modelType?: string;
 }
 
 export class GameEngine {
@@ -35,7 +33,6 @@ export class GameEngine {
   private engine: Engine | null = null;
   private scene: Scene | null = null;
   private camera: ArcRotateCamera | null = null;
-  private shadowGenerator: ShadowGenerator | null = null;
   private meshes: Map<string, EntityMeshGroup> = new Map();
   private entityAnimations: Map<string, AnimationGroup[]> = new Map();
   private currentAnimation: Map<string, string> = new Map();
@@ -44,6 +41,8 @@ export class GameEngine {
   private playerMesh: AbstractMesh | null = null;
   private onClickCallbacks: Array<(entityId: string) => void> = [];
   private minimapCanvas: HTMLCanvasElement | null = null;
+  private minimapBgCanvas: HTMLCanvasElement | null = null;
+  private minimapBgDirty: boolean = true;
   private currentZoneDef: ZoneDefinition | null = null;
   private targetedEntityId: string | null = null;
   private aoeTargetCircle: AbstractMesh | null = null;
@@ -59,6 +58,13 @@ export class GameEngine {
   private moveIndicatorCallback: ((worldPos: V3) => void) | null = null;
   private songIndicator: { disc: AbstractMesh; material: StandardMaterial } | null = null;
   private songPulseEffects: Map<string, { disc: AbstractMesh; material: StandardMaterial; startTime: number }> = new Map();
+  private onBeforeRenderCallback: ((dt: number) => void) | null = null;
+  private static readonly _hpOffset = new V3(0, 2.5, 0);
+  private static readonly _nameOffsetHp = new V3(0, 3, 0);
+  private static readonly _nameOffsetNoHp = new V3(0, 2.8, 0);
+  private static readonly NAME_PLATE_DIST_SQ = 30 * 30;
+  private _lastVisibilityCheck = 0;
+  private _prevVisibilityState: Map<string, boolean> = new Map();
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.canvas = canvas;
@@ -68,16 +74,18 @@ export class GameEngine {
     if (!this.canvas) return;
 
     this.engine = new Engine(this.canvas, true, {
-      preserveDrawingBuffer: true,
+      preserveDrawingBuffer: false,
       stencil: true,
-      antialias: true
+      antialias: false
     });
+
+    (this.canvas as any).engineInstance = this.engine;
 
     this.scene = new Scene(this.engine);
     this.scene.clearColor = new Color4(0.5, 0.7, 1.0, 1);
     this.scene.ambientColor = new Color3(0.3, 0.3, 0.3);
 
-    this.scene.fogMode = SceneType.FOGMODE_EXP;
+    this.scene.fogMode = Scene.FOGMODE_EXP;
     this.scene.fogDensity = 0.003;
     this.scene.fogColor = new Color3(0.7, 0.85, 0.95);
 
@@ -101,6 +109,7 @@ export class GameEngine {
     this.camera.wheelPrecision = 30;
     this.camera.panningSensibility = 0;
     this.camera.inertia = 0.5;
+    this.camera.maxZ = 200;
 
     this.canvas.addEventListener('pointerdown', this.handlePointerDown);
     this.canvas.addEventListener('pointerup', this.handlePointerUp);
@@ -114,10 +123,6 @@ export class GameEngine {
     const dirLight = new DirectionalLight('dirLight', new V3(-1, -2, -1), this.scene);
     dirLight.intensity = 0.8;
     dirLight.position = new V3(50, 100, 50);
-
-    this.shadowGenerator = new ShadowGenerator(1024, dirLight);
-    this.shadowGenerator.useBlurExponentialShadowMap = true;
-    this.shadowGenerator.blurKernel = 32;
 
     this.scene.onPointerDown = (evt, pickResult) => {
       if (this.aoeTargetingActive) return;
@@ -141,6 +146,13 @@ export class GameEngine {
 
     this.engine.runRenderLoop(() => {
       if (this.scene) {
+        if (this.onBeforeRenderCallback) {
+          try {
+            this.onBeforeRenderCallback(this.engine!.getDeltaTime() / 1000);
+          } catch (e) {
+            console.error('Game update error:', e);
+          }
+        }
         const now = Date.now();
         this.updateAOEZoneMeshes(now);
         if (this.songIndicator && this.playerMesh) {
@@ -196,9 +208,7 @@ export class GameEngine {
     this.scene.fogDensity = zoneDef.fogDensity;
 
     const ground = this.createGround(zoneDef);
-    if (ground && this.shadowGenerator) {
-      ground.receiveShadows = true;
-    }
+    ground.receiveShadows = false;
 
     await this.createEnvironmentObjects(zoneDef);
 
@@ -238,7 +248,7 @@ export class GameEngine {
       newPositions[i + 2] = positions[i + 2];
     }
 
-    ground.updateVerticesData('position', newPositions as FloatArray);
+    ground.updateVerticesData('position', newPositions as Float32Array);
     ground.createNormals(true);
 
     ground.receiveShadows = true;
@@ -268,9 +278,6 @@ export class GameEngine {
     if (result) {
       result.root.scaling = new V3(scale, scale, scale);
       result.root.name = `env_tree_${position.x}_${position.z}`;
-      if (this.shadowGenerator) {
-        this.shadowGenerator.addShadowCaster(result.root);
-      }
     } else {
       this.createFallbackTree(position, scale);
     }
@@ -302,10 +309,6 @@ export class GameEngine {
     leavesMat.diffuseColor = new Color3(0.15 + Math.random() * 0.15, 0.5 + Math.random() * 0.2, 0.15);
     leaves.material = leavesMat;
 
-    if (this.shadowGenerator) {
-      this.shadowGenerator.addShadowCaster(trunk);
-      this.shadowGenerator.addShadowCaster(leaves);
-    }
   }
 
   private async createRock(position: V3, scale: number): Promise<void> {
@@ -315,9 +318,6 @@ export class GameEngine {
     if (result) {
       result.root.scaling = new V3(scale, scale, scale);
       result.root.name = `env_rock_${position.x}_${position.z}`;
-      if (this.shadowGenerator) {
-        this.shadowGenerator.addShadowCaster(result.root);
-      }
     } else {
       this.createFallbackRock(position, scale);
     }
@@ -342,9 +342,7 @@ export class GameEngine {
     );
     rock.material = rockMat;
 
-    if (this.shadowGenerator) {
-      this.shadowGenerator.addShadowCaster(rock);
-    }
+    rock.freezeWorldMatrix();
   }
 
   async createPlayerEntity(entityId: string, position: V3, modelFile: string, name?: string): Promise<AbstractMesh | null> {
@@ -359,6 +357,9 @@ export class GameEngine {
         mesh.rotationQuaternion = null;
         this.entityAnimations.set(entityId, result.animations);
         this.startAnimation(entityId, 'Idle');
+        mesh.getChildMeshes().forEach(m => {
+          m.refreshBoundingInfo({ applySkeleton: false });
+        });
       }
     }
 
@@ -369,9 +370,6 @@ export class GameEngine {
     if (mesh) {
       mesh.name = `player_${entityId}`;
       mesh.scaling = new V3(0.7, 0.7, 0.7);
-      if (this.shadowGenerator) {
-        this.shadowGenerator.addShadowCaster(mesh);
-      }
     }
 
     const group: EntityMeshGroup = { root: mesh };
@@ -391,8 +389,8 @@ export class GameEngine {
     entityId: string,
     position: V3,
     modelFile: string,
-    health: number,
-    maxHealth: number,
+    _health: number,
+    _maxHealth: number,
     name: string
   ): Promise<AbstractMesh | null> {
     if (!this.scene || !this.assetManager) return null;
@@ -404,8 +402,11 @@ export class GameEngine {
       if (result) {
         mesh = result.root;
         mesh.rotationQuaternion = null;
-        this.entityAnimations.set(entityId, result.animations);
-        this.startAnimation(entityId, 'Idle');
+        mesh.scaling = new V3(0.6, 0.6, 0.6);
+        result.animations.forEach(ag => ag.stop());
+        mesh.getChildMeshes().forEach(m => {
+          m.refreshBoundingInfo({ applySkeleton: false });
+        });
       }
     }
 
@@ -415,29 +416,17 @@ export class GameEngine {
 
     if (mesh) {
       mesh.name = `enemy_${entityId}`;
-      mesh.scaling = new V3(0.6, 0.6, 0.6);
-      if (this.shadowGenerator) {
-        this.shadowGenerator.addShadowCaster(mesh);
-      }
     }
 
-    const hpBar = this.assetManager.createHealthBar(entityId);
-    hpBar.background.position = position.add(new V3(0, 2.5, 0));
-    hpBar.foreground.parent = hpBar.background;
-    hpBar.foreground.position = new V3(0, 0, -0.01);
-
     const namePlate = this.assetManager.createNamePlate(name, entityId);
-    namePlate.position = position.add(new V3(0, 3, 0));
+    namePlate.position = position.add(new V3(0, 2.5, 0));
 
     const group: EntityMeshGroup = {
       root: mesh,
-      healthBarBg: hpBar.background,
-      healthBarFg: hpBar.foreground,
-      namePlate
+      namePlate,
+      modelType: 'enemy'
     };
     this.meshes.set(entityId, group);
-
-    this.updateEntityHealth(entityId, health, maxHealth);
 
     return mesh;
   }
@@ -459,6 +448,9 @@ export class GameEngine {
         mesh.rotationQuaternion = null;
         this.entityAnimations.set(entityId, result.animations);
         this.startAnimation(entityId, 'Idle');
+        mesh.getChildMeshes().forEach(m => {
+          m.refreshBoundingInfo({ applySkeleton: false });
+        });
       }
     }
 
@@ -525,17 +517,43 @@ export class GameEngine {
       group.root.position = position;
 
       if (group.healthBarBg) {
-        group.healthBarBg.position = position.add(new V3(0, 2.5, 0));
+        group.healthBarBg.position.x = position.x + GameEngine._hpOffset.x;
+        group.healthBarBg.position.y = position.y + GameEngine._hpOffset.y;
+        group.healthBarBg.position.z = position.z + GameEngine._hpOffset.z;
       }
       if (group.namePlate) {
-        const hpOffset = group.healthBarBg ? 3 : 2.8;
-        group.namePlate.position = position.add(new V3(0, hpOffset, 0));
+        const off = group.healthBarBg ? GameEngine._nameOffsetHp : GameEngine._nameOffsetNoHp;
+        group.namePlate.position.x = position.x + off.x;
+        group.namePlate.position.y = position.y + off.y;
+        group.namePlate.position.z = position.z + off.z;
       }
       if (group.selectionCircle) {
         group.selectionCircle.position.x = position.x;
         group.selectionCircle.position.y = 0.05;
         group.selectionCircle.position.z = position.z;
       }
+    }
+  }
+
+  updateVisibility(cameraPosition: V3): void {
+    const now = Date.now();
+    if (now - this._lastVisibilityCheck < 200) return;
+    this._lastVisibilityCheck = now;
+
+    for (const [id, group] of this.meshes) {
+      if (!group.root) continue;
+      const dx = group.root.position.x - cameraPosition.x;
+      const dz = group.root.position.z - cameraPosition.z;
+      const distSq = dx * dx + dz * dz;
+
+      const near = distSq < GameEngine.NAME_PLATE_DIST_SQ;
+      const prev = this._prevVisibilityState.get(id);
+      if (prev === near) continue;
+      this._prevVisibilityState.set(id, near);
+
+      if (group.namePlate) group.namePlate.isVisible = near;
+      if (group.healthBarBg) group.healthBarBg.isVisible = near;
+      if (group.healthBarFg) group.healthBarFg.isVisible = near;
     }
   }
 
@@ -546,11 +564,13 @@ export class GameEngine {
     }
   }
 
-  updateEntityHealth(entityId: string, current: number, max: number): void {
+  updateEntityHealth(entityId: string, current: number, maxHealth: number): void {
     const group = this.meshes.get(entityId);
-    if (!group || !this.assetManager || !group.healthBarBg || !group.healthBarFg) return;
+    if (!group || !this.assetManager) return;
 
-    this.assetManager.updateHealthBar(entityId, current, max, group.healthBarBg, group.healthBarFg);
+    if (group.healthBarBg && group.healthBarFg) {
+      this.assetManager.updateHealthBar(entityId, current, maxHealth, group.healthBarBg, group.healthBarFg);
+    }
   }
 
   showDamageNumber(entityId: string, damage: number, isCritical: boolean, element?: string, miss?: boolean): void {
@@ -579,6 +599,7 @@ export class GameEngine {
       this.targetedEntityId = null;
     }
     this.entityAnimations.delete(entityId);
+    this._prevVisibilityState.delete(entityId);
   }
 
   focusCameraOnEntity(entityId: string): void {
@@ -642,44 +663,48 @@ export class GameEngine {
   private renderMinimap(zoneDef: ZoneDefinition): void {
     if (!this.minimapCanvas) return;
     this.currentZoneDef = zoneDef;
-    this.drawMinimapBackground();
+    this.minimapBgDirty = true;
   }
 
-  private drawMinimapBackground(): void {
+  private ensureMinimapBackground(): void {
     if (!this.minimapCanvas || !this.currentZoneDef) return;
-    const ctx = this.minimapCanvas.getContext('2d');
-    if (!ctx) return;
+    if (!this.minimapBgDirty && this.minimapBgCanvas) return;
+
+    if (!this.minimapBgCanvas) {
+      this.minimapBgCanvas = document.createElement('canvas');
+      this.minimapBgCanvas.width = this.minimapCanvas.width;
+      this.minimapBgCanvas.height = this.minimapCanvas.height;
+    }
 
     const size = this.minimapCanvas.width;
+    const ctx = this.minimapBgCanvas.getContext('2d');
+    if (!ctx) return;
     const gc = this.currentZoneDef.groundColor;
 
     ctx.fillStyle = `rgb(${Math.floor(gc.r * 255)}, ${Math.floor(gc.g * 255)}, ${Math.floor(gc.b * 255)})`;
     ctx.fillRect(0, 0, size, size);
-
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
     ctx.lineWidth = 1;
     ctx.strokeRect(0, 0, size, size);
+
+    this.minimapBgDirty = false;
   }
 
   updateMinimapPlayerDot(x: number, z: number, zoneSize: number): void {
     if (!this.minimapCanvas) return;
-    const ctx = this.minimapCanvas.getContext('2d');
-    if (!ctx) return;
+    this.ensureMinimapBackground();
 
-    this.drawMinimapBackground();
+    const ctx = this.minimapCanvas.getContext('2d');
+    if (!ctx || !this.minimapBgCanvas) return;
 
     const size = this.minimapCanvas.width;
-    const scale = size / zoneSize;
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(this.minimapBgCanvas, 0, 0);
 
+    const scale = size / zoneSize;
     ctx.fillStyle = '#4488ff';
     ctx.beginPath();
-    ctx.arc(
-      size / 2 + x * scale,
-      size / 2 + z * scale,
-      4,
-      0,
-      Math.PI * 2
-    );
+    ctx.arc(size / 2 + x * scale, size / 2 + z * scale, 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = 'white';
     ctx.lineWidth = 1;
@@ -1151,7 +1176,7 @@ export class GameEngine {
   updateSongPulses(now: number): void {
     const duration = 800;
     const toRemove: string[] = [];
-    for (const [entityId, entry] of this.songPulseEffects) {
+    this.songPulseEffects.forEach((entry, entityId) => {
       const elapsed = now - entry.startTime;
       if (elapsed > duration) {
         entry.disc.dispose();
@@ -1162,10 +1187,14 @@ export class GameEngine {
         entry.disc.scaling.set(1 + t * 3, 1, 1 + t * 3);
         entry.material.alpha = 0.6 * (1 - t);
       }
-    }
+    });
     for (const id of toRemove) {
       this.songPulseEffects.delete(id);
     }
+  }
+
+  setOnBeforeRender(cb: (dt: number) => void): void {
+    this.onBeforeRenderCallback = cb;
   }
 
   dispose(): void {
