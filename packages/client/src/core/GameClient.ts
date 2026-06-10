@@ -13,6 +13,7 @@ import {
   GROUND_TARGETED_AOE_SKILLS,
   DEFAULT_AOE_RADIUS,
   findSkillDefinition,
+  JOB_DEFINITIONS,
 } from '@dust-saga/shared';
 
 export interface GameCallbacks {
@@ -55,6 +56,8 @@ export class GameClient {
   private pendingSpawns: Array<{ id: string; type: string; position: any; data: any }> = [];
   private playerId: string | null = null;
   private playerMesh: any = null;
+  private spawnPosition: { x: number; y: number; z: number } | null = null;
+  private characterName: string | null = null;
   private callbacks: Partial<GameCallbacks> = {};
   private stats: PlayerStats | null = null;
   private statPoints: StatPoints | null = null;
@@ -293,6 +296,8 @@ export class GameClient {
     this.network.onPacket(PacketType.CHARACTER_SELECT, (packet: any) => {
       const data = packet.data;
       this.playerId = data.characterId;
+      this.spawnPosition = data.position ? { x: data.position.x, y: data.position.y, z: data.position.z } : null;
+      this.characterName = data.characterName || null;
       this.stats = data.stats;
       this.statPoints = data.statPoints;
       this.unspentStatPoints = data.unspentStatPoints || 0;
@@ -357,19 +362,27 @@ export class GameClient {
         this.entityManager.createEntity(player.id);
       }
 
-      if (this.playerId) {
-        this.engine.setPlayerMesh(this.playerId);
-        this.playerMesh = this.engine.getPlayerMesh();
-        if (this.playerMesh) {
-          this.engine.attachCameraToEntity(this.playerId);
-        }
-      }
-
       this.zoneLoading = false;
       const pending = [...this.pendingSpawns];
       this.pendingSpawns = [];
       for (const spawn of pending) {
         await this.processEntitySpawn(spawn.id, spawn.type, spawn.position, spawn.data);
+      }
+
+      if (this.playerId && !this.playerMesh) {
+        const pos = this.spawnPosition;
+        await this.engine.createPlayerEntity(
+          this.playerId,
+          new BabylonVector3(pos?.x ?? 0, pos?.y ?? 0, pos?.z ?? 0),
+          (JOB_DEFINITIONS as any)[this.currentJobId]?.modelFile || 'Player.glb',
+          this.characterName || 'Player'
+        );
+        this.entityManager.createEntity(this.playerId);
+        this.engine.setPlayerMesh(this.playerId);
+        this.playerMesh = this.engine.getPlayerMesh();
+        if (this.playerMesh) {
+          this.engine.attachCameraToEntity(this.playerId);
+        }
       }
 
       this.callbacks.onEnemyListUpdate?.(Array.from(this.enemies.values()));

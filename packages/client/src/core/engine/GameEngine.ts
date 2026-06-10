@@ -392,8 +392,8 @@ export class GameEngine {
     entityId: string,
     position: V3,
     modelFile: string,
-    health: number,
-    maxHealth: number,
+    _health: number,
+    _maxHealth: number,
     name: string
   ): Promise<AbstractMesh | null> {
     if (!this.scene || !this.assetManager) return null;
@@ -417,28 +417,16 @@ export class GameEngine {
     if (mesh) {
       mesh.name = `enemy_${entityId}`;
       mesh.scaling = new V3(0.6, 0.6, 0.6);
-      if (this.shadowGenerator) {
-        this.shadowGenerator.addShadowCaster(mesh);
-      }
     }
 
-    const hpBar = this.assetManager.createHealthBar(entityId);
-    hpBar.background.position = position.add(new V3(0, 2.5, 0));
-    hpBar.foreground.parent = hpBar.background;
-    hpBar.foreground.position = new V3(0, 0, -0.01);
-
     const namePlate = this.assetManager.createNamePlate(name, entityId);
-    namePlate.position = position.add(new V3(0, 3, 0));
+    namePlate.position = position.add(new V3(0, 2.5, 0));
 
     const group: EntityMeshGroup = {
       root: mesh,
-      healthBarBg: hpBar.background,
-      healthBarFg: hpBar.foreground,
       namePlate
     };
     this.meshes.set(entityId, group);
-
-    this.updateEntityHealth(entityId, health, maxHealth);
 
     return mesh;
   }
