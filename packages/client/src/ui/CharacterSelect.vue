@@ -125,7 +125,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'select-character': [characterId: string];
-  'create-character': [name: string, characterClass: string, race: string, racialPassive: string];
+  'create-character': [data: { name: string; characterClass: string; race: string; racialPassive: string }];
   'delete-character': [characterId: string];
 }>();
 
@@ -194,7 +194,7 @@ function capitalize(s: string): string {
 function handleCreate() {
   if (newName.value && newRace.value && newClass.value) {
     const jobId = Object.values(JOB_DEFINITIONS).find(j => j.baseClass === newClass.value && j.tier === 1)?.id || newClass.value;
-    emit('create-character', newName.value, jobId, newRace.value, newPassive.value);
+    emit('create-character', { name: newName.value, characterClass: jobId, race: newRace.value, racialPassive: newPassive.value });
     newName.value = '';
     newClass.value = BaseClass.WARRIOR;
     newRace.value = Race.HUMAN;

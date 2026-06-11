@@ -319,9 +319,9 @@ function handleSelectCharacter(characterId: string) {
   }, 1000);
 }
 
-async function handleCreateCharacter(name: string, characterClass: string, race: string, racialPassive: string) {
+async function handleCreateCharacter(data: { name: string; characterClass: string; race: string; racialPassive: string }) {
   if (!gameClient) return;
-  gameClient.createCharacter(name, characterClass, race, racialPassive);
+  gameClient.createCharacter(data.name, data.characterClass, data.race, data.racialPassive);
   setTimeout(() => {
     gameClient?.requestCharacterList();
   }, 500);
