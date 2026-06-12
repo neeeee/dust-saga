@@ -32,6 +32,7 @@ import { SkillSystem } from '../ecs/systems/SkillSystem';
 import { PartySystem } from '../ecs/systems/PartySystem';
 import { EnmitySystem } from '../ecs/systems/EnmitySystem';
 import { SpawnManager } from '../world/SpawnManager';
+import { SummonManager } from '../world/SummonManager';
 import { QuestSystem } from '../../systems/QuestSystem';
 import { v4 as uuidv4 } from 'uuid';
 import { NetworkContext, ServerGameState, PacketHandler } from './NetworkContext';
@@ -51,6 +52,7 @@ export class NetworkServer implements NetworkContext {
   readonly partySys: PartySystem;
   readonly enmity: EnmitySystem;
   readonly spawnMgr: SpawnManager;
+  readonly summonMgr: SummonManager;
   readonly questSys: QuestSystem;
   readonly state: ServerGameState;
   private tickRate: number = 30;
@@ -132,6 +134,7 @@ export class NetworkServer implements NetworkContext {
     this.enmity = new EnmitySystem();
     this.ai.enmitySys = this.enmity;
     this.spawnMgr = new SpawnManager();
+    this.summonMgr = new SummonManager();
     this.questSys = new QuestSystem();
     this.state = {
       players: new Map(),
@@ -1187,6 +1190,15 @@ export class NetworkServer implements NetworkContext {
           }
         }
 
+        const despawnedSummons = this.summonMgr.despawnAllForOwner(characterId);
+        for (const summonId of despawnedSummons) {
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.ENTITY_DESPAWN,
+            timestamp: Date.now(),
+            data: { id: summonId },
+          });
+        }
+
         this.removeSongProximityBuffs(session);
 
         for (const [dummyId, meta] of this.dummyMeta) {
@@ -1287,6 +1299,24 @@ export class NetworkServer implements NetworkContext {
       });
     });
 
+    const summons = this.summonMgr.getSummonsInZone(zoneId);
+    const summonData = summons.map(s => ({
+      id: s.id,
+      type: 'summon',
+      position: s.position,
+      rotation: { x: 0, y: s.rotation, z: 0, w: 1 },
+      data: {
+        summonType: s.summonType,
+        ownerId: s.ownerId,
+        ownerName: s.ownerName,
+        health: s.health,
+        maxHealth: s.maxHealth,
+        defense: s.defense,
+        element: s.element,
+        duration: s.duration,
+      },
+    }));
+
     this.sendToSocket(socket.id, {
       type: PacketType.WORLD_STATE,
       timestamp: Date.now(),
@@ -1295,7 +1325,8 @@ export class NetworkServer implements NetworkContext {
         zoneDef,
         enemies: enemyData,
         npcs: npcData,
-        players: otherPlayers
+        players: otherPlayers,
+        summons: summonData,
       }
     });
   }
@@ -2368,6 +2399,7 @@ export class NetworkServer implements NetworkContext {
     this.tickBlockingProximity(now);
     this.tickEnemyStatusEffects(now);
     this.tickDummies();
+    this.tickSummons(now);
     this.tickAI(now);
     this.tickEntityAOEEntries();
     this.updateEnemySpatialHash();
@@ -2684,6 +2716,53 @@ export class NetworkServer implements NetworkContext {
             timestamp: Date.now(),
             data: { targetId: session.characterId, amount: result.mpRestored, mpRestore: true }
           });
+        }
+
+        if (result.summonObject) {
+          const summonPos = session.position;
+          const summon = this.summonMgr.spawnSummon(
+            session.characterId,
+            session.characterName,
+            session.zoneId,
+            result.summonObject,
+            summonPos,
+            session.rotation?.y || 0,
+            result.element,
+          );
+          if (summon) {
+            this.broadcastInZone(session.zoneId, {
+              type: PacketType.ENTITY_SPAWN,
+              timestamp: Date.now(),
+              data: {
+                id: summon.id,
+                type: 'summon',
+                position: summon.position,
+                rotation: { x: 0, y: summon.rotation, z: 0, w: 1 },
+                data: {
+                  summonType: summon.summonType,
+                  ownerId: summon.ownerId,
+                  ownerName: summon.ownerName,
+                  health: summon.health,
+                  maxHealth: summon.maxHealth,
+                  defense: summon.defense,
+                  element: summon.element,
+                  duration: summon.duration,
+                },
+              },
+            });
+          }
+        }
+
+        if (result.banishObject) {
+          const owned = this.summonMgr.getSummonsForOwner(session.characterId);
+          for (const s of owned) {
+            this.summonMgr.despawnSummon(s.id);
+            this.broadcastInZone(s.zoneId, {
+              type: PacketType.ENTITY_DESPAWN,
+              timestamp: Date.now(),
+              data: { id: s.id },
+            });
+          }
         }
 
         this.sendToPlayer(session.characterId, {
@@ -3102,6 +3181,153 @@ export class NetworkServer implements NetworkContext {
     });
   }
 
+  private tickSummons(now: number): void {
+    const expired = this.summonMgr.tickExpired();
+    for (const id of expired) {
+      const s = this.summonMgr.getSummon(id);
+      if (s) {
+        this.broadcastInZone(s.zoneId, {
+          type: PacketType.ENTITY_DESPAWN,
+          timestamp: Date.now(),
+          data: { id },
+        });
+      }
+    }
+
+    const nowSec = now / 1000;
+    for (const zoneId of this.spawnMgr.getZoneIds()) {
+      const summons = this.summonMgr.getSummonsInZone(zoneId);
+      if (summons.length === 0) continue;
+
+      const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
+
+      for (const summon of summons) {
+        if (summon.health <= 0) {
+          this.summonMgr.despawnSummon(summon.id);
+          this.broadcastInZone(zoneId, {
+            type: PacketType.ENTITY_DESPAWN,
+            timestamp: Date.now(),
+            data: { id: summon.id },
+          });
+          continue;
+        }
+
+        if (summon.summonType === 'plant') {
+          this.tickPlantAttack(summon, zoneEnemies, nowSec);
+        } else if (summon.summonType === 'wyvern' || summon.summonType === 'turtle') {
+          this.tickCombatSummonMovement(summon, now);
+        }
+      }
+    }
+  }
+
+  private tickPlantAttack(summon: import('@dust-saga/shared').SummonInstance, zoneEnemies: Map<string, import('@dust-saga/shared').EnemyInstance>, nowSec: number): void {
+    if (nowSec - summon.lastAttackTime < summon.attackCooldown) return;
+
+    let closestId: string | null = null;
+    let closestDist = summon.attackRange;
+
+    for (const [enemyId, enemy] of zoneEnemies) {
+      if (enemy.state === 'dead') continue;
+      const dx = enemy.position.x - summon.position.x;
+      const dz = enemy.position.z - summon.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestId = enemyId;
+      }
+    }
+
+    if (!closestId) return;
+
+    summon.lastAttackTime = nowSec;
+    const enemy = zoneEnemies.get(closestId)!;
+    const enemyDef = this.getEnemyEffectiveDefense(enemy);
+    const damage = Math.max(1, summon.attackDamage - Math.floor(enemyDef * 0.5));
+
+    const { died } = this.damageEnemy(enemy, damage, summon.ownerId);
+
+    this.broadcastInZone(summon.zoneId, {
+      type: PacketType.ATTACK,
+      timestamp: Date.now(),
+      data: {
+        attackerId: summon.id,
+        targetId: closestId,
+        damage,
+        isCritical: false,
+        damageType: summon.element || 'physical',
+      },
+    });
+
+    if (died) {
+      this.handleEnemyKill(closestId, summon.ownerId);
+    }
+  }
+
+  private tickCombatSummonMovement(summon: import('@dust-saga/shared').SummonInstance, now: number): void {
+    const owner = this.state.players.get(summon.ownerId);
+    if (!owner) return;
+
+    const dx = owner.position.x - summon.position.x;
+    const dz = owner.position.z - summon.position.z;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+
+    if (dist > 2) {
+      const speed = 0.15;
+      summon.position.x += (dx / dist) * speed;
+      summon.position.z += (dz / dist) * speed;
+      summon.rotation = Math.atan2(dx, dz);
+    }
+
+    const nowSec = now / 1000;
+    if (nowSec - summon.lastAttackTime < summon.attackCooldown) return;
+
+    const targetId = owner.position ? this.findClosestEnemyToPosition(summon.zoneId, summon.position, summon.attackRange) : null;
+    if (!targetId) return;
+
+    const enemy = this.spawnMgr.getEnemy(targetId);
+    if (!enemy || enemy.state === 'dead') return;
+
+    summon.lastAttackTime = nowSec;
+    const enemyDef = this.getEnemyEffectiveDefense(enemy);
+    const damage = Math.max(1, summon.attackDamage - Math.floor(enemyDef * 0.5));
+
+    const { died } = this.damageEnemy(enemy, damage, summon.ownerId);
+
+    this.broadcastInZone(summon.zoneId, {
+      type: PacketType.ATTACK,
+      timestamp: Date.now(),
+      data: {
+        attackerId: summon.id,
+        targetId,
+        damage,
+        isCritical: false,
+        damageType: 'physical',
+      },
+    });
+
+    if (died) {
+      this.handleEnemyKill(targetId, summon.ownerId);
+    }
+  }
+
+  private findClosestEnemyToPosition(zoneId: string, pos: { x: number; y: number; z: number }, range: number): string | null {
+    const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
+    let closestId: string | null = null;
+    let closestDist = range;
+    for (const [id, enemy] of zoneEnemies) {
+      if (enemy.state === 'dead') continue;
+      const dx = enemy.position.x - pos.x;
+      const dz = enemy.position.z - pos.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestId = id;
+      }
+    }
+    return closestId;
+  }
+
   private tickAI(now: number): void {
     this.aiTickBucket = (this.aiTickBucket + 1) % this.AI_TICK_STAGGER;
 
@@ -3198,6 +3424,26 @@ export class NetworkServer implements NetworkContext {
                 targetId: e.targetId
               }))
             }
+          });
+        }
+      }
+
+      const zoneSummons = this.summonMgr.getSummonsInZone(zoneId);
+      if (zoneSummons.length > 0) {
+        const summonStates = zoneSummons.map(s => ({
+          id: s.id,
+          position: s.position,
+          rotation: { x: 0, y: s.rotation, z: 0, w: 1 },
+          health: s.health,
+          maxHealth: s.maxHealth,
+          summonType: s.summonType,
+          ownerId: s.ownerId,
+        }));
+        for (const characterId of zonePlayerIds) {
+          this.sendToPlayer(characterId, {
+            type: PacketType.PLAYER_POSITION_UPDATE,
+            timestamp: Date.now(),
+            data: { summons: summonStates },
           });
         }
       }

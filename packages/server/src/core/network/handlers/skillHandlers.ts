@@ -264,20 +264,51 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
     }
   }
 
-  if (result.summonObject && aoePosition) {
-    ctx.sendToPlayer(characterId, {
-      type: PacketType.NOTIFICATION,
-      timestamp: Date.now(),
-      data: { message: `Summoned ${result.summonObject.objectType}` }
-    });
+  if (result.summonObject) {
+    const summonPos = aoePosition || session.position;
+    const summon = ctx.summonMgr.spawnSummon(
+      characterId,
+      session.characterName,
+      session.zoneId,
+      result.summonObject,
+      summonPos,
+      session.rotation?.y || 0,
+      result.element,
+    );
+    if (summon) {
+      ctx.broadcastInZone(session.zoneId, {
+        type: PacketType.ENTITY_SPAWN,
+        timestamp: Date.now(),
+        data: {
+          id: summon.id,
+          type: 'summon',
+          position: summon.position,
+          rotation: { x: 0, y: summon.rotation, z: 0, w: 1 },
+          data: {
+            summonType: summon.summonType,
+            ownerId: summon.ownerId,
+            ownerName: summon.ownerName,
+            health: summon.health,
+            maxHealth: summon.maxHealth,
+            defense: summon.defense,
+            element: summon.element,
+            duration: summon.duration,
+          },
+        },
+      });
+    }
   }
 
   if (result.banishObject) {
-    ctx.sendToPlayer(characterId, {
-      type: PacketType.NOTIFICATION,
-      timestamp: Date.now(),
-      data: { message: 'Banished summoned object' }
-    });
+    const owned = ctx.summonMgr.getSummonsForOwner(characterId);
+    for (const s of owned) {
+      ctx.summonMgr.despawnSummon(s.id);
+      ctx.broadcastInZone(s.zoneId, {
+        type: PacketType.ENTITY_DESPAWN,
+        timestamp: Date.now(),
+        data: { id: s.id },
+      });
+    }
   }
 
   if (result.provoked && result.targetId) {

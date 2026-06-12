@@ -41,12 +41,24 @@ Replace the current 5 flat classes with the 4 base class system, 6 races, and 6-
 
 ### 1.6 Racial Passive System
 - Implement racial passives as always-on modifiers
-- Human: +10 melee skill (1H), ailment duration -50%, potion effectiveness +15%
-- Elf: +3 ranged range, spell MP cost -15%, charm resistance +20%
-- Dwarf: 1% chance take fatal damage for party member, axe/blunt damage +10%, 3% survive fatal with 1HP
-- Myrine: crit chance +5%, 5% dodge, chance convert damage to MP
-- Enkidu: physical damage taken -10%, 2H weapon damage +10%, boost Lapin party members' physical defense
-- Lapin: magic resistance +10%, MP regen +15%, boost Enkidu party members' magic defense
+- Human:  option 1 "Fighting Spirit": +10 melee skill (1H), 
+          option 2 "Adaptability": ailment duration -50%, 
+          option 3 "Brewer": potion effectiveness +15%
+- Elf:    option 1 "Hawkeye": +3 ranged range, 
+          option 2 "Nature's Harmony": spell MP cost -15%, 
+          option 3 "Steadfastness": charm resistance +20%
+- Dwarf:  option 1 "Stronghearted": 1% chance take fatal damage for party member, 
+          option 2 "Dwarf Spirit": axe/blunt damage +10%, 
+          option 3 "Filial Piety": 3% survive fatal with 1HP
+- Myrine: option 1 "Acute Senses": crit chance +5%, 
+          option 2 "Sharpness": 5% dodge, 
+          option 3 "Calmness": chance convert damage to MP
+- Enkidu: option 1 "Stone Skin": physical damage taken -10%, 
+          option 2 "Strong Arm": 2H weapon damage +10%, 
+          option 3 "Lapin Support": boost Lapin party members' physical defense
+- Lapin:  option 1 "Magic Resistance": magic resistance +10%, 
+          option 2 "Inner Light": MP regen +15%, 
+          option 3 "Enkidu Support": boost Enkidu party members' magic defense
 
 ---
 

@@ -15,6 +15,7 @@ import { SkillSystem } from '../ecs/systems/SkillSystem';
 import { PartySystem } from '../ecs/systems/PartySystem';
 import { EnmitySystem } from '../ecs/systems/EnmitySystem';
 import { SpawnManager } from '../world/SpawnManager';
+import { SummonManager } from '../world/SummonManager';
 import { QuestSystem } from '../../systems/QuestSystem';
 
 export interface ServerGameState {
@@ -36,6 +37,7 @@ export interface NetworkContext {
   readonly partySys: PartySystem;
   readonly enmity: EnmitySystem;
   readonly spawnMgr: SpawnManager;
+  readonly summonMgr: SummonManager;
   readonly questSys: QuestSystem;
 
   findCharacterBySocket(socketId: string): string | undefined;

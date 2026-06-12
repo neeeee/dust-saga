@@ -2296,9 +2296,8 @@ export const CLASS_SKILL_DATA: Record<
             cooldown: 60,
             duration: 180,
             description:
-              "Summon an elemental plant that damages all enemies in range. Element depends on weapon enhancement (+5 = 50, +8 = 70)",
-            isAOE: true,
-            summonObject: { objectType: "plant", duration: 180, aoeDamage: 50 },
+              "Summon an elemental plant turret that fires bolts at nearby enemies. Element matches weapon.",
+            summonObject: { objectType: "plant", duration: 180, hp: 500, defense: 50, attackDamage: 50, attackRange: 8, attackCooldown: 3 },
           },
           "Regia Pureizu": {
             name: "Regia Pureizu",
@@ -2322,7 +2321,7 @@ export const CLASS_SKILL_DATA: Record<
             description:
               "Summon a wyvern that damages all enemies in frontal cone, moving freely on the battlefield. Disappears after 60 seconds.",
             isAOE: true,
-            summonObject: { objectType: "wyvern", duration: 60, aoeDamage: 80 },
+            summonObject: { objectType: "wyvern", duration: 60, hp: 800, defense: 100, attackDamage: 80, attackRange: 3, attackCooldown: 4 },
           },
           "Summon Turtle": {
             name: "Summon Turtle",
@@ -2334,7 +2333,7 @@ export const CLASS_SKILL_DATA: Record<
             description:
               "Summon a turtle that damages all enemies in a circle around it. Disappears after 60 seconds.",
             isAOE: true,
-            summonObject: { objectType: "turtle", duration: 60, aoeDamage: 60 },
+            summonObject: { objectType: "turtle", duration: 60, hp: 1200, defense: 200, attackDamage: 60, attackRange: 3, attackCooldown: 5 },
           },
         },
       },

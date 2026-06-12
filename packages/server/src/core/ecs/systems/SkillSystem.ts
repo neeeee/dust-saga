@@ -122,6 +122,7 @@ export interface SkillUseResult {
   summonObject?: { objectType: string; duration: number; hp?: number; defense?: number; aoeDamage?: number };
   banishObject?: boolean;
   blockOnly?: boolean;
+  element?: string;
   songToggledOff?: boolean;
   defensiveMarchToggledOff?: boolean;
   guardianToggledOff?: boolean;
@@ -185,6 +186,16 @@ export class SkillSystem {
     return result;
   }
 
+  private getWeaponElement(session: PlayerSession): string | undefined {
+    const weapon = session.equipment?.weapon;
+    if (!weapon) return undefined;
+    const enh = weapon.stats?.enhancementElement;
+    if (enh) {
+      return enh.startsWith('magic_') ? enh.slice(6) : enh;
+    }
+    return weapon.stats?.weaponElement || undefined;
+  }
+
   private inferSkillType(skill: SkillDefinition): SkillType | undefined {
     if (skill.isPassive) return SkillType.PASSIVE;
     if (skill.isRevive) return SkillType.REVIVE;
@@ -199,6 +210,7 @@ export class SkillSystem {
     if (isMagical) return SkillType.DAMAGE_MAGICAL;
     if ((skill.basePower !== undefined && skill.basePower > 0) || skill.damageType === 'physical') return SkillType.DAMAGE_PHYSICAL;
     if (skill.createItems) return SkillType.CRAFT;
+    if (skill.summonObject) return SkillType.SUMMON;
     return undefined;
   }
 
@@ -537,9 +549,20 @@ export class SkillSystem {
       }
     }
 
+    if (st === SkillType.SUMMON && skill.summonObject) {
+      let element: string | undefined;
+      if (skill.summonObject.objectType === 'plant') {
+        element = this.getWeaponElement(session);
+      }
+      return {
+        success: true,
+        summonObject: { ...skill.summonObject },
+        element,
+      };
+    }
+
     return { success: true };
   }
-
   calculateAOEDamage(
     session: PlayerSession,
     skillName: string,

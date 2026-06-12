@@ -503,6 +503,59 @@ export class GameEngine {
     return mesh;
   }
 
+  async createSummonEntity(
+    entityId: string,
+    position: V3,
+    summonType: string,
+    _health: number,
+    _maxHealth: number,
+    ownerName: string,
+    element?: string,
+  ): Promise<AbstractMesh | null> {
+    if (!this.scene || !this.assetManager) return null;
+
+    let mesh: AbstractMesh | null = null;
+
+    if (summonType === 'wall') {
+      const wall = MeshBuilder.CreateBox(`summon_wall_${entityId}`, { width: 3, height: 2.5, depth: 0.4 }, this.scene);
+      wall.position = position;
+      const wallMat = new StandardMaterial(`summon_wall_mat_${entityId}`, this.scene);
+      wallMat.diffuseColor = new Color3(0.6, 0.6, 0.65);
+      wallMat.emissiveColor = new Color3(0.15, 0.15, 0.2);
+      wall.material = wallMat;
+      mesh = wall;
+    } else {
+      const modelFile = 'Enemy Small.glb';
+      const result = await this.assetManager.instantiateModel(modelFile, position);
+      if (result) {
+        mesh = result.root;
+        mesh.rotationQuaternion = null;
+        this.entityAnimations.set(entityId, result.animations);
+        this.startAnimation(entityId, 'Idle');
+      }
+    }
+
+    if (!mesh) {
+      mesh = this.createFallbackCharacter(entityId, position, new Color3(0.6, 0.3, 0.8));
+    }
+
+    if (mesh) {
+      mesh.name = `summon_${entityId}`;
+    }
+
+    const elementStr = element ? ` [${element}]` : '';
+    const namePlate = this.assetManager.createNamePlate(`${summonType}${elementStr} (${ownerName})`, entityId);
+    namePlate.position = position.add(new V3(0, summonType === 'wall' ? 3 : 2.8, 0));
+
+    const group: EntityMeshGroup = {
+      root: mesh,
+      namePlate,
+    };
+    this.meshes.set(entityId, group);
+
+    return mesh;
+  }
+
   private createFallbackCharacter(entityId: string, position: V3, color: Color3): AbstractMesh {
     const body = MeshBuilder.CreateCapsule(`fallback_${entityId}`, {
       height: 1.8,

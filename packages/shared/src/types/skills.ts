@@ -244,6 +244,9 @@ export interface SummonObject {
   hp?: number;
   defense?: number;
   aoeDamage?: number;
+  attackDamage?: number;
+  attackRange?: number;
+  attackCooldown?: number;
 }
 
 export const SKILL_TARGET_RULES: Record<string, SkillTargetType> = {

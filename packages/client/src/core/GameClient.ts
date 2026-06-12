@@ -319,7 +319,7 @@ export class GameClient {
 
     this.network.onPacket(PacketType.WORLD_STATE, async (packet: any) => {
       await this.engineReadyPromise;
-      const { zoneId, zoneDef, enemies, npcs, players } = packet.data;
+      const { zoneId, zoneDef, enemies, npcs, players, summons } = packet.data;
       this.currentZoneId = zoneId;
       this.zoneLoading = true;
 
@@ -362,6 +362,22 @@ export class GameClient {
         this.entityManager.createEntity(player.id);
       }
 
+      if (summons) {
+        for (const s of summons) {
+          await this.engine.createSummonEntity(
+            s.id,
+            new BabylonVector3(s.position.x, s.position.y, s.position.z),
+            s.data.summonType,
+            s.data.health,
+            s.data.maxHealth,
+            s.data.ownerName,
+            s.data.element,
+          );
+          this.knownEntities.set(s.id, { type: 'summon', data: s.data });
+          this.entityManager.createEntity(s.id);
+        }
+      }
+
       this.zoneLoading = false;
       const pending = [...this.pendingSpawns];
       this.pendingSpawns = [];
@@ -402,7 +418,7 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.ENTITY_DESPAWN, (packet: any) => {
-      const { entityId } = packet.data;
+      const entityId = packet.data.entityId || packet.data.id;
       this.engine.removeEntity(entityId);
       this.engine.removeAOEZoneMesh(entityId);
       this.entityManager.removeEntity(entityId);
@@ -457,6 +473,14 @@ export class GameClient {
             }
           }
         });
+
+        if (data.summons) {
+          data.summons.forEach((summon: any) => {
+            const pos = { x: summon.position.x, y: summon.position.y, z: summon.position.z };
+            this.interpolationManager.addPositionUpdate(summon.id, pos, Date.now());
+          });
+        }
+
         return;
       }
 
@@ -801,6 +825,8 @@ export class GameClient {
       this.callbacks.onEnemyListUpdate?.(Array.from(this.enemies.values()));
     } else if (type === 'npc') {
       await this.engine.createNPCEntity(id, pos, data.modelFile, data.name);
+    } else if (type === 'summon') {
+      await this.engine.createSummonEntity(id, pos, data.summonType, data.health, data.maxHealth, data.ownerName, data.element);
     }
   }
 

@@ -129,7 +129,7 @@ export interface PlayerData {
 
 export interface EntityData {
   id: string;
-  type: 'player' | 'npc' | 'enemy' | 'item' | 'loot' | 'aoe';
+  type: 'player' | 'npc' | 'enemy' | 'item' | 'loot' | 'aoe' | 'summon';
   position: PositionData;
   rotation: RotationData;
   data: any;
