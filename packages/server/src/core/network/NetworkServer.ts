@@ -538,6 +538,52 @@ export class NetworkServer implements NetworkContext {
       }
     }
 
+    // Elemental absorption check
+    for (let i = target.statusEffects.length - 1; i >= 0; i--) {
+      const e = target.statusEffects[i];
+      if (e.buffData?.elementalAbsorption) {
+        const abs = e.buffData.elementalAbsorption;
+        if (abs.elements.includes(damageType) || (damageType !== 'physical' && abs.elements.includes('all'))) {
+          const amount = Math.floor(damage * 0.5);
+          if (abs.convertTo === 'hp') {
+            target.stats.health = Math.min(target.stats.maxHealth, target.stats.health + amount);
+          } else {
+            target.stats.mana = Math.min(target.stats.maxMana, target.stats.mana + amount);
+          }
+          return { redirected: false, damageTaken: 0 };
+        }
+      }
+    }
+
+    // Barrier check — consume one barrier matching damage type
+    const barrierType = damageType === 'physical' ? StatusEffectType.BARRIER_PHYSICAL : StatusEffectType.BARRIER_MAGICAL;
+    for (let i = 0; i < target.statusEffects.length; i++) {
+      if (target.statusEffects[i].type === barrierType) {
+        target.statusEffects.splice(i, 1);
+        this.sendToPlayer(target.characterId, {
+          type: PacketType.STATUS_EFFECT_UPDATE,
+          timestamp: Date.now(),
+          data: { effects: target.statusEffects }
+        });
+        return { redirected: false, damageTaken: 0 };
+      }
+    }
+
+    // Mana Shield check — convert portion of damage to MP drain
+    for (let i = 0; i < target.statusEffects.length; i++) {
+      const e = target.statusEffects[i];
+      if (e.type === StatusEffectType.BUFF_MANA_SHIELD && e.buffData?.manaShield) {
+        const mpAvailable = target.stats.mana;
+        if (mpAvailable > 0) {
+          const mpDrain = Math.min(mpAvailable, damage);
+          target.stats.mana -= mpDrain;
+          damage = Math.max(0, damage - mpDrain);
+          if (damage <= 0) return { redirected: false, damageTaken: 0 };
+        }
+        break;
+      }
+    }
+
     if (protectedIdx !== -1) {
       const protectedEffect = target.statusEffects[protectedIdx];
       const blockerId = protectedEffect.buffData!.blockingProtectedBy!;
@@ -640,6 +686,29 @@ export class NetworkServer implements NetworkContext {
       this.tryInterruptCast(target);
       return { redirected: false, damageTaken: damage };
     }
+  }
+
+  private applyRemoveResistBuffs(target: { statusEffects: StatusEffect[] }, appliedEffect: StatusEffect): void {
+    if (!appliedEffect.removeResistBuffs || appliedEffect.removeResistBuffs.length === 0) return;
+    const toRemove = appliedEffect.removeResistBuffs;
+    for (let i = target.statusEffects.length - 1; i >= 0; i--) {
+      const e = target.statusEffects[i];
+      if (e.buffData?.resistMods) {
+        const hasMatching = Object.keys(e.buffData.resistMods).some(key => toRemove.includes(key));
+        if (hasMatching) {
+          target.statusEffects.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  private applyKnockback(target: { position: { x: number; y: number; z: number }; statusEffects: StatusEffect[] }, effect: StatusEffect, attackerPos: { x: number; z: number }, distance: number): void {
+    if (effect.debuffCategory !== 'knockback' || !effect.knockbackVelocity) return;
+    const dx = target.position.x - attackerPos.x;
+    const dz = target.position.z - attackerPos.z;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) return;
+    effect.knockbackVelocity = { dx: dx / len, dz: dz / len, remaining: distance };
   }
 
   private tryInterruptCast(target: PlayerSession): void {
@@ -1529,6 +1598,8 @@ export class NetworkServer implements NetworkContext {
             if (this.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
             const cloned = { ...effect, targetId: target.id };
             enemy.statusEffects.push(cloned);
+            this.applyRemoveResistBuffs(enemy, cloned);
+            this.applyKnockback(enemy, cloned, session.position, cloned.potency);
             anyApplied = true;
             if (effect.potency > maxPotency) maxPotency = effect.potency;
           }
@@ -2427,7 +2498,10 @@ export class NetworkServer implements NetworkContext {
       let maxPotency = 0;
       for (const effect of debuffEffects) {
         if (enemy.statusEffects.some(e => e.type === effect.type && e.skillName === skillName)) continue;
-        enemy.statusEffects.push({ ...effect, targetId });
+        const applied = { ...effect, targetId };
+        enemy.statusEffects.push(applied);
+        this.applyRemoveResistBuffs(enemy, applied);
+        this.applyKnockback(enemy, applied, caster.position, applied.potency);
         changed = true;
         if (effect.potency > maxPotency) maxPotency = effect.potency;
       }
@@ -2478,6 +2552,7 @@ export class NetworkServer implements NetworkContext {
     this.tickSummons(now);
     this.tickAI(now);
     this.tickEntityAOEEntries();
+    this.tickKnockback();
     this.updateEnemySpatialHash();
     this.broadcastEntityStates();
   }
@@ -3530,6 +3605,29 @@ export class NetworkServer implements NetworkContext {
           if (enemy.state === 'dead') continue;
           this.checkEntityAOEEntries(enemyId, enemy.position);
         }
+    }
+  }
+
+  private tickKnockback(): void {
+    const speed = 15;
+    const dt = 1 / this.tickRate;
+    for (const zoneId of this.spawnMgr.getZoneIds()) {
+      const enemies = this.spawnMgr.getEnemiesInZone(zoneId);
+      if (!enemies) continue;
+      for (const [, enemy] of enemies) {
+        if (enemy.state === 'dead') continue;
+        const kb = enemy.statusEffects?.find(e => e.debuffCategory === 'knockback' && e.knockbackVelocity && e.knockbackVelocity.remaining > 0);
+        if (!kb) continue;
+        const v = kb.knockbackVelocity!;
+        const step = Math.min(v.remaining, speed * dt);
+        enemy.position.x += v.dx * step;
+        enemy.position.z += v.dz * step;
+        v.remaining -= step;
+        if (v.remaining <= 0) {
+          const idx = enemy.statusEffects.indexOf(kb);
+          if (idx !== -1) enemy.statusEffects.splice(idx, 1);
+        }
+      }
     }
   }
 

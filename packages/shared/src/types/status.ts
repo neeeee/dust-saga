@@ -57,6 +57,9 @@ export enum StatusEffectType {
   PREVENT_FIELD_SPELLS = 'prevent_field_spells',
   PREVENT_RESSURECT = 'prevent_resurrect',
   MP_DAMAGE_DEBUFF = 'mp_damage_debuff',
+  INVISIBLE = 'invisible',
+  BARRIER_PHYSICAL = 'barrier_physical',
+  BARRIER_MAGICAL = 'barrier_magical',
 }
 
 export const SONG_TYPES: readonly StatusEffectType[] = [
@@ -70,6 +73,22 @@ export const CC_TYPES: readonly StatusEffectType[] = [
   StatusEffectType.STUN,
   StatusEffectType.FREEZE,
 ];
+
+export function isInvisible(activeEffects: StatusEffect[]): boolean {
+  return activeEffects.some(e => e.type === StatusEffectType.INVISIBLE);
+}
+
+export function hasBarrier(activeEffects: StatusEffect[], damageType: 'physical' | 'magical'): boolean {
+  if (damageType === 'physical') return activeEffects.some(e => e.type === StatusEffectType.BARRIER_PHYSICAL);
+  return activeEffects.some(e => e.type === StatusEffectType.BARRIER_MAGICAL);
+}
+
+export function consumeBarrier(activeEffects: StatusEffect[], damageType: 'physical' | 'magical'): void {
+  const idx = activeEffects.findIndex(e =>
+    e.type === (damageType === 'physical' ? StatusEffectType.BARRIER_PHYSICAL : StatusEffectType.BARRIER_MAGICAL)
+  );
+  if (idx !== -1) activeEffects.splice(idx, 1);
+}
 
 export function hasStatusEffectType(activeEffects: StatusEffect[], types: readonly StatusEffectType[]): boolean {
   return activeEffects.some(e => types.includes(e.type));
@@ -209,6 +228,16 @@ export interface BuffEffectTable {
     formula?: 'toxify';
   };
   resistMods?: Record<string, number>;
+  invisible?: { stationaryOnly: boolean; mpCostPerSec: number };
+  barrierPhysical?: boolean;
+  barrierMagical?: boolean;
+  elementalAbsorption?: { elements: string[]; convertTo: 'hp' | 'mp' };
+  removeResistBuffs?: string[];
+  manaSwap?: boolean;
+  soulSwap?: boolean;
+  devotion?: boolean;
+  magicalAid?: { mpRestorePercent: number };
+  knockback?: { distance: number };
 }
 
 export interface BuffData {
@@ -233,6 +262,12 @@ export interface BuffData {
   auraDamageReducePercent?: number;
   auraDamageIncreasePercent?: number;
   manaShield?: boolean;
+  invisible?: { stationaryOnly: boolean; mpCostPerSec: number };
+  barrierPhysical?: boolean;
+  barrierMagical?: boolean;
+  elementalAbsorption?: { elements: string[]; convertTo: 'hp' | 'mp' };
+  devotionLink?: { partnerId: string };
+  magicalAid?: { mpRestorePercent: number };
   spellInterruptResistPercent?: number;
   debuffResistPercent?: number;
   damageRedirectTargetId?: string;
@@ -287,6 +322,10 @@ export interface StatusEffect {
   preventResurrect?: boolean;
   preventFieldSpells?: boolean;
   fearDirection?: { x: number; y: number; z: number };
+  invisible?: boolean;
+  barrierType?: 'physical' | 'magical';
+  knockbackVelocity?: { dx: number; dz: number; remaining: number };
+  removeResistBuffs?: string[];
   lastInRangeAt?: number;
   songProximityBuff?: boolean;
   lastPulseAt?: number;
@@ -360,6 +399,9 @@ export const STATUS_EFFECT_DEFS: Partial<Record<StatusEffectType, StatusEffectDe
   [StatusEffectType.PREVENT_FIELD_SPELLS]: { type: StatusEffectType.PREVENT_FIELD_SPELLS, duration: 60000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.PREVENT_RESSURECT]: { type: StatusEffectType.PREVENT_RESSURECT, duration: 60000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
   [StatusEffectType.MP_DAMAGE_DEBUFF]: { type: StatusEffectType.MP_DAMAGE_DEBUFF, duration: 10000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.INVISIBLE]: { type: StatusEffectType.INVISIBLE, duration: 999999999, tickInterval: 1000, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BARRIER_PHYSICAL]: { type: StatusEffectType.BARRIER_PHYSICAL, duration: 30000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
+  [StatusEffectType.BARRIER_MAGICAL]: { type: StatusEffectType.BARRIER_MAGICAL, duration: 30000, tickInterval: 0, potency: 0, isDoT: false, isCC: false },
 };
 
 const STAT_TO_COMBAT: Record<string, (stat: number, stats: EffectiveStats) => void> = {

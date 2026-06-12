@@ -1,6 +1,7 @@
 import { Socket } from 'socket.io';
 import {
   Packet, PacketType, NATION_ZONE_MAP, getZoneDefinition,
+  StatusEffectType,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -97,6 +98,15 @@ function handleRevivePlayer(ctx: NetworkContext, socket: Socket, data: any): voi
   if (!targetId) return;
   const target = ctx.state.players.get(targetId);
   if (!target || !target.isDead) return;
+
+  if (target.statusEffects?.some(e => e.preventResurrect || e.type === StatusEffectType.PREVENT_RESSURECT)) {
+    ctx.sendToPlayer(reviverId, {
+      type: PacketType.CHAT_MESSAGE,
+      timestamp: Date.now(),
+      data: { sender: 'System', message: 'Target is cursed and cannot be resurrected.', channel: 'system' }
+    });
+    return;
+  }
 
   const dx = reviver.position.x - target.position.x;
   const dz = reviver.position.z - target.position.z;

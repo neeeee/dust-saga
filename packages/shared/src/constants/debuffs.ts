@@ -39,4 +39,7 @@ export interface DebuffEffectTable {
   preventResurrect?: boolean;
   curse?: boolean;
   revealInvisible?: boolean;
+  disablePhysicalAttacks?: boolean;
+  attackHalved?: boolean;
+  removeResistBuffs?: string[];
 }

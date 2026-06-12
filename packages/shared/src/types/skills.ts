@@ -100,6 +100,17 @@ export interface SkillDefinition {
   curse?: boolean;
   blockOnly?: boolean;
   shieldRequired?: boolean;
+  invisible?: { stationaryOnly: boolean; mpCostPerSec: number };
+  barrier?: 'physical' | 'magical';
+  elementalAbsorption?: { elements: string[]; convertTo: 'hp' | 'mp' };
+  manaShield?: { mpPerHp: number };
+  manaSwap?: boolean;
+  soulSwap?: boolean;
+  devotion?: boolean;
+  magicalAid?: { mpRestorePercent: number };
+  removeResistBuffs?: string[];
+  misdirection?: boolean;
+  lineOfSightRequired?: boolean;
 }
 
 export interface SkillSubCategory {
@@ -165,6 +176,17 @@ export interface ClassSpecificSkill {
   curse?: boolean;
   blockOnly?: boolean;
   shieldRequired?: boolean;
+  invisible?: { stationaryOnly: boolean; mpCostPerSec: number };
+  barrier?: 'physical' | 'magical';
+  elementalAbsorption?: { elements: string[]; convertTo: 'hp' | 'mp' };
+  manaShield?: { mpPerHp: number };
+  manaSwap?: boolean;
+  soulSwap?: boolean;
+  devotion?: boolean;
+  magicalAid?: { mpRestorePercent: number };
+  removeResistBuffs?: string[];
+  misdirection?: boolean;
+  lineOfSightRequired?: boolean;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;
@@ -219,6 +241,14 @@ export enum SkillType {
   FEAR = 'fear',
   PASSIVE = 'passive',
   PROVOKE = 'provoke',
+  INVISIBILITY = 'invisibility',
+  BARRIER = 'barrier',
+  MANA_SHIELD = 'mana_shield',
+  ABSORPTION = 'absorption',
+  MANA_SWAP = 'mana_swap',
+  SOUL_SWAP = 'soul_swap',
+  DEVOTION = 'devotion',
+  KNOCKBACK = 'knockback',
 }
 
 export interface OnHitEffect {

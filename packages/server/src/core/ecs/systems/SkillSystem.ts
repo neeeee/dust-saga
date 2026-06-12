@@ -318,6 +318,10 @@ export class SkillSystem {
       return { canUse: false, error: 'silenced' };
     }
 
+    if (session.statusEffects?.some(e => e.type === StatusEffectType.BURN) && skill.damageType === 'physical' && skill.basePower && skill.basePower > 0) {
+      return { canUse: false, error: 'burn' };
+    }
+
     const inferredType = skill.skillType ?? this.inferSkillType(skill);
     const isSinging = session.statusEffects?.some(e =>
       e.type === StatusEffectType.SONG_GREEN ||
@@ -621,6 +625,10 @@ export class SkillSystem {
     const secondaryStat = isMagical
       ? (session.statPoints.SPI || 0) + (baseStats.SPI || 0)
       : (session.statPoints.DEX || 0) + (baseStats.DEX || 0);
+
+    const hasBurn = !isMagical && session.statusEffects?.some(e => e.type === StatusEffectType.BURN);
+    const effectivePrimaryStat = hasBurn ? Math.floor(primaryStat * 0.5) : primaryStat;
+
     const defenseStat = isMagical ? target.magicDefense : target.defense;
 
     let attackMultiplier = 1;
@@ -630,7 +638,7 @@ export class SkillSystem {
     }
 
     const baseDamage = Math.floor(
-      basePower * (primaryStat + secondaryStat * 0.3) * attackMultiplier
+      basePower * (effectivePrimaryStat + secondaryStat * 0.3) * attackMultiplier
       - defenseStat * 0.5
     );
 
@@ -891,7 +899,7 @@ export class SkillSystem {
       { prop: 'hasSleep', effectType: StatusEffectType.SLEEP, extra: { duration: (dt.hasSleep as any)?.duration * 1000 } },
       { prop: 'hasStun', effectType: StatusEffectType.STUN, extra: { duration: (dt.hasStun as any)?.duration * 1000 } },
       { prop: 'hasSilence', effectType: StatusEffectType.SILENCE, extra: { duration: (dt.hasSilence as any)?.duration * 1000 } },
-      { prop: 'hasFear', effectType: StatusEffectType.FEAR },
+      { prop: 'hasKnockback', effectType: StatusEffectType.BUFF_GENERIC, extra: { debuffCategory: 'knockback', knockbackVelocity: { dx: 0, dz: 0, remaining: 0 } } },
       { prop: 'preventFieldSpells', effectType: StatusEffectType.PREVENT_FIELD_SPELLS },
       { prop: 'preventResurrect', effectType: StatusEffectType.PREVENT_RESSURECT },
       { prop: 'curse', effectType: StatusEffectType.CURSE },
@@ -901,7 +909,10 @@ export class SkillSystem {
     for (const mapping of DEBUFF_PROPERTY_MAP) {
       const value = dt[mapping.prop];
       if (value === undefined || value === null || value === false) continue;
-      const potency = typeof value === 'number' ? value : 0;
+      let potency = typeof value === 'number' ? value : 0;
+      if (mapping.prop === 'hasKnockback' && typeof value === 'object') {
+        potency = (value as any).knockbackDistance || 5;
+      }
       const extra = typeof value === 'object' && value !== null ? mapping.extra : undefined;
       const effect = this.createStatusEffect(mapping.effectType, potency, casterSession.characterId, '', {
         ...extra,
@@ -913,6 +924,15 @@ export class SkillSystem {
 
     if (dt.mpDamage && dt.mpDamageDirect) {
       const effect = this.createStatusEffect(StatusEffectType.MP_DAMAGE_DEBUFF, dt.mpDamage, casterSession.characterId, '', { mpDamageDirect: dt.mpDamage });
+      if (effect) effects.push(effect);
+    }
+
+    if (dt.removeResistBuffs && dt.removeResistBuffs.length > 0) {
+      const effect = this.createStatusEffect(StatusEffectType.BUFF_GENERIC, 0, casterSession.characterId, '', {
+        skillName: skill.name,
+        debuffCategory: category,
+        removeResistBuffs: dt.removeResistBuffs,
+      });
       if (effect) effects.push(effect);
     }
 
