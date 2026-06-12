@@ -15,6 +15,7 @@ import {
   Scene as SceneType,
   AnimationGroup,
   Mesh,
+  TransformNode,
 } from '@babylonjs/core';
 import { RecastJSPlugin } from '@babylonjs/core/Navigation/Plugins/recastJSPlugin';
 import { INavMeshParameters } from '@babylonjs/core/Navigation/INavigationEngine';
@@ -527,9 +528,13 @@ export class GameEngine {
 
     const height = summonType === 'wall' ? 2.5 : 1.8;
     const radius = summonType === 'wall' ? 0.8 : 0.35;
+
+    const root = new TransformNode(`summon_root_${entityId}`, this.scene);
+    root.position = position;
+
     const capsule = MeshBuilder.CreateCapsule(`summon_${entityId}`, { height, radius }, this.scene);
-    capsule.position = position;
-    capsule.position.y += height / 2;
+    capsule.parent = root;
+    capsule.position = new V3(0, height / 2, 0);
 
     const mat = new StandardMaterial(`summon_mat_${entityId}`, this.scene);
     mat.diffuseColor = color;
@@ -550,7 +555,7 @@ export class GameEngine {
     healthBar.fg.position = position.add(new V3(0, height + 0.2, 0.001));
 
     const group: EntityMeshGroup = {
-      root: capsule,
+      root: root as any,
       namePlate,
       healthBarBg: healthBar.bg,
       healthBarFg: healthBar.fg,
@@ -585,6 +590,11 @@ export class GameEngine {
 
   getPlayerMesh(): AbstractMesh | null {
     return this.playerMesh;
+  }
+
+  clearPlayerMesh(): void {
+    this.playerMesh = null;
+    this.playerEntityId = null;
   }
 
   updateEntityPosition(entityId: string, position: V3): void {

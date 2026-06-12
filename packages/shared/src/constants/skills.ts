@@ -24,6 +24,7 @@ export const GROUND_TARGETED_AOE_SKILLS = new Set([
   "Dark Frenzy",
   "Arrow Rain",
   "Banish",
+  "Summon Wall",
   "Summon Plant",
   "Summon Wyvern",
   "Summon Turtle",

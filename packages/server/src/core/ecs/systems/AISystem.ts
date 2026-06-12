@@ -198,12 +198,13 @@ export class AISystem extends System {
 
   private tryEngageFromEnmity(
     enemy: EnemyInstance,
-    players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>
+    players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>,
+    summons: Map<string, { position: { x: number; y: number; z: number }; summonId: string }>
   ): boolean {
     if (!this.enmitySys || !enemy.enmityTable || Object.keys(enemy.enmityTable).length === 0) return false;
     const topTarget = this.enmitySys.getTopTarget(enemy);
     if (!topTarget) return false;
-    const targetPos = this.findPlayerTarget(players, topTarget.characterId);
+    const targetPos = this.resolveTargetPosition(topTarget.characterId, players, summons);
     if (!targetPos) return false;
     enemy.state = 'chase';
     enemy.targetId = topTarget.characterId;
@@ -219,7 +220,7 @@ export class AISystem extends System {
   ): void {
     if (!def) return;
 
-    if (this.tryEngageFromEnmity(enemy, players)) return;
+    if (this.tryEngageFromEnmity(enemy, players, summons)) return;
 
     if (this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
 
@@ -243,7 +244,7 @@ export class AISystem extends System {
       return;
     }
 
-    if (this.tryEngageFromEnmity(enemy, players)) return;
+    if (this.tryEngageFromEnmity(enemy, players, summons)) return;
 
     if (this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
 
@@ -276,7 +277,7 @@ export class AISystem extends System {
       this.enmitySys.decay(enemy, deltaTime, true);
       const topTarget = this.enmitySys.getTopTarget(enemy);
       if (topTarget && topTarget.characterId !== enemy.targetId) {
-        const newTarget = this.findPlayerTarget(players, topTarget.characterId);
+        const newTarget = this.resolveTargetPosition(topTarget.characterId, players, summons);
         if (newTarget) {
           enemy.targetId = topTarget.characterId;
         }
@@ -316,7 +317,7 @@ export class AISystem extends System {
       this.enmitySys.decay(enemy, deltaTime, true);
       const topTarget = this.enmitySys.getTopTarget(enemy);
       if (topTarget && topTarget.characterId !== enemy.targetId) {
-        const newTarget = this.findPlayerTarget(players, topTarget.characterId);
+        const newTarget = this.resolveTargetPosition(topTarget.characterId, players, summons);
         if (newTarget) {
           enemy.targetId = topTarget.characterId;
         }
@@ -354,7 +355,7 @@ export class AISystem extends System {
   private updateReturn(enemy: EnemyInstance, enemies: Map<string, EnemyInstance>, players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>, summons: Map<string, { position: { x: number; y: number; z: number }; summonId: string }>, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
     if (!def) return;
 
-    if (this.tryEngageFromEnmity(enemy, players)) return;
+    if (this.tryEngageFromEnmity(enemy, players, summons)) return;
 
     if (this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
 

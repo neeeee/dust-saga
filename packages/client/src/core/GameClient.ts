@@ -322,8 +322,10 @@ export class GameClient {
       const { zoneId, zoneDef, enemies, npcs, players, summons } = packet.data;
       this.currentZoneId = zoneId;
       this.zoneLoading = true;
+      this.playerMesh = null;
 
       await this.engine.loadZone(zoneDef as ZoneDefinition);
+      this.engine.clearPlayerMesh();
       this.callbacks.onZoneChange?.(zoneId, (zoneDef as ZoneDefinition).name);
 
       for (const npc of npcs) {
@@ -473,29 +475,29 @@ export class GameClient {
             }
           }
         });
-
-        if (data.summons) {
-          data.summons.forEach((summon: any) => {
-            const pos = { x: summon.position.x, y: summon.position.y, z: summon.position.z };
-            this.interpolationManager.addPositionUpdate(summon.id, pos, Date.now());
-            if (summon.rotation) {
-              this.interpolationManager.addRotationUpdate(summon.id, summon.rotation, Date.now());
-            }
-            if (summon.health !== undefined && summon.maxHealth !== undefined) {
-              this.engine.updateEntityHealth(summon.id, summon.health, summon.maxHealth);
-            }
-          });
-        }
-
-        return;
       }
 
-      if (data.characterId === this.playerId) return;
+      if (data.summons) {
+        data.summons.forEach((summon: any) => {
+          const pos = { x: summon.position.x, y: summon.position.y, z: summon.position.z };
+          this.interpolationManager.addPositionUpdate(summon.id, pos, Date.now());
+          if (summon.rotation) {
+            this.interpolationManager.addRotationUpdate(summon.id, summon.rotation, Date.now());
+          }
+          if (summon.health !== undefined && summon.maxHealth !== undefined) {
+            this.engine.updateEntityHealth(summon.id, summon.health, summon.maxHealth);
+          }
+        });
+      }
 
-      const pos = { x: data.position.x, y: data.position.y, z: data.position.z };
-      this.interpolationManager.addPositionUpdate(data.characterId || data.socketId, pos, Date.now());
-      if (data.rotation) {
-        this.interpolationManager.addRotationUpdate(data.characterId || data.socketId, data.rotation, Date.now());
+      if (!data.entities && !data.summons) {
+        if (data.characterId === this.playerId) return;
+
+        const pos = { x: data.position.x, y: data.position.y, z: data.position.z };
+        this.interpolationManager.addPositionUpdate(data.characterId || data.socketId, pos, Date.now());
+        if (data.rotation) {
+          this.interpolationManager.addRotationUpdate(data.characterId || data.socketId, data.rotation, Date.now());
+        }
       }
     });
 

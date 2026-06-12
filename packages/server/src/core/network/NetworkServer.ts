@@ -2794,6 +2794,53 @@ export class NetworkServer implements NetworkContext {
           });
         }
 
+        if (result.summonObject) {
+          const summonPos = session.position;
+          const summon = this.summonMgr.spawnSummon(
+            session.characterId,
+            session.characterName,
+            session.zoneId,
+            result.summonObject,
+            summonPos,
+            session.rotation?.y || 0,
+            result.element,
+          );
+          if (summon) {
+            this.broadcastInZone(session.zoneId, {
+              type: PacketType.ENTITY_SPAWN,
+              timestamp: Date.now(),
+              data: {
+                id: summon.id,
+                type: 'summon',
+                position: summon.position,
+                rotation: { x: 0, y: summon.rotation, z: 0, w: 1 },
+                data: {
+                  summonType: summon.summonType,
+                  ownerId: summon.ownerId,
+                  ownerName: summon.ownerName,
+                  health: summon.health,
+                  maxHealth: summon.maxHealth,
+                  defense: summon.defense,
+                  element: summon.element,
+                  duration: summon.duration,
+                },
+              },
+            });
+          }
+        }
+
+        if (result.banishObject) {
+          const owned = this.summonMgr.getSummonsForOwner(session.characterId);
+          for (const s of owned) {
+            this.summonMgr.despawnSummon(s.id);
+            this.broadcastInZone(s.zoneId, {
+              type: PacketType.ENTITY_DESPAWN,
+              timestamp: Date.now(),
+              data: { entityId: s.id },
+            });
+          }
+        }
+
         this.sendToPlayer(session.characterId, {
           type: PacketType.STATS_UPDATE,
           timestamp: Date.now(),
@@ -3212,15 +3259,12 @@ export class NetworkServer implements NetworkContext {
 
   private tickSummons(now: number): void {
     const expired = this.summonMgr.tickExpired();
-    for (const id of expired) {
-      const s = this.summonMgr.getSummon(id);
-      if (s) {
-        this.broadcastInZone(s.zoneId, {
-          type: PacketType.ENTITY_DESPAWN,
-          timestamp: Date.now(),
-          data: { entityId: id },
-        });
-      }
+    for (const info of expired) {
+      this.broadcastInZone(info.zoneId, {
+        type: PacketType.ENTITY_DESPAWN,
+        timestamp: Date.now(),
+        data: { entityId: info.id },
+      });
     }
 
     const nowSec = now / 1000;
@@ -3277,6 +3321,7 @@ export class NetworkServer implements NetworkContext {
     const damage = Math.max(1, summon.attackDamage - Math.floor(enemyDef * 0.5));
 
     const { died } = this.damageEnemy(enemy, damage, summon.ownerId);
+    this.enmity.addDamageEnmity(enemy, summon.id, damage);
 
     this.broadcastInZone(summon.zoneId, {
       type: PacketType.ATTACK,
@@ -3296,28 +3341,22 @@ export class NetworkServer implements NetworkContext {
   }
 
   private tickWyvern(summon: import('@dust-saga/shared').SummonInstance, zoneEnemies: Map<string, import('@dust-saga/shared').EnemyInstance>, nowSec: number): void {
-    const WANDER_RADIUS = 10;
+    const FOLLOW_DISTANCE = 3;
     const dt = 1 / this.tickRate;
     const speed = SUMMON_STATS[summon.summonType as keyof typeof SUMMON_STATS].speed;
 
-    if (summon.wanderTarget) {
-      const wdx = summon.wanderTarget.x - summon.position.x;
-      const wdz = summon.wanderTarget.z - summon.position.z;
-      const wDist = Math.sqrt(wdx * wdx + wdz * wdz);
-      if (wDist > 1) {
-        summon.position.x += (wdx / wDist) * speed * dt;
-        summon.position.z += (wdz / wDist) * speed * dt;
-        summon.rotation = Math.atan2(wdx, wdz);
-      } else {
-        summon.wanderTarget = null;
-        summon.wanderCooldown = nowSec + 0.5 + Math.random() * 1;
+    const owner = this.state.players.get(summon.ownerId);
+    if (owner && owner.position) {
+      const dx = owner.position.x - summon.position.x;
+      const dz = owner.position.z - summon.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist > FOLLOW_DISTANCE) {
+        const moveX = (dx / dist) * speed * dt;
+        const moveZ = (dz / dist) * speed * dt;
+        summon.position.x += moveX;
+        summon.position.z += moveZ;
+        summon.rotation = Math.atan2(dx, dz);
       }
-    } else if (nowSec >= summon.wanderCooldown) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 3 + Math.random() * (WANDER_RADIUS - 3);
-      const tx = summon.spawnPosition.x + Math.cos(angle) * dist;
-      const tz = summon.spawnPosition.z + Math.sin(angle) * dist;
-      summon.wanderTarget = { x: tx, z: tz };
     }
 
     if (nowSec - summon.lastAttackTime < summon.attackCooldown) return;
@@ -3357,6 +3396,7 @@ export class NetworkServer implements NetworkContext {
       const enemyDef = this.getEnemyEffectiveDefense(enemy);
       const damage = Math.max(1, summon.attackDamage - Math.floor(enemyDef * 0.5));
       const { died } = this.damageEnemy(enemy, damage, summon.ownerId);
+      this.enmity.addDamageEnmity(enemy, summon.id, damage);
 
       this.broadcastInZone(summon.zoneId, {
         type: PacketType.DAMAGE,
@@ -3414,6 +3454,7 @@ export class NetworkServer implements NetworkContext {
       const enemyDef = this.getEnemyEffectiveDefense(enemy);
       const damage = Math.max(1, summon.attackDamage - Math.floor(enemyDef * 0.5));
       const { died } = this.damageEnemy(enemy, damage, summon.ownerId);
+      this.enmity.addDamageEnmity(enemy, summon.id, damage);
 
       this.broadcastInZone(summon.zoneId, {
         type: PacketType.DAMAGE,

@@ -159,15 +159,15 @@ export class SummonManager {
     });
   }
 
-  tickExpired(): string[] {
+  tickExpired(): Array<{ id: string; zoneId: string }> {
     const now = Date.now() / 1000;
-    const expired: string[] = [];
+    const expired: Array<{ id: string; zoneId: string }> = [];
     for (const [id, summon] of this.summons) {
       if (now - summon.spawnedAt >= summon.duration) {
-        expired.push(id);
+        expired.push({ id, zoneId: summon.zoneId });
       }
     }
-    for (const id of expired) {
+    for (const { id } of expired) {
       this.despawnSummon(id);
     }
     return expired;
