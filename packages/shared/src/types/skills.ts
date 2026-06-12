@@ -91,6 +91,7 @@ export interface SkillDefinition {
   revealInvisible?: boolean;
   summonObject?: SummonObject;
   banishObject?: boolean;
+  banishRadius?: number;
   negateFieldSpells?: boolean;
   fieldSpellNegationRadius?: number;
   damageVsLowDefense?: boolean;

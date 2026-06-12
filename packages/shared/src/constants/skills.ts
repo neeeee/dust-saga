@@ -23,6 +23,10 @@ export const GROUND_TARGETED_AOE_SKILLS = new Set([
   "Pestilence",
   "Dark Frenzy",
   "Arrow Rain",
+  "Banish",
+  "Summon Plant",
+  "Summon Wyvern",
+  "Summon Turtle",
 ]);
 
 export const DEFAULT_AOE_RADIUS = 5;
@@ -1802,8 +1806,11 @@ export const CLASS_SKILL_DATA: Record<
             cooldown: 10,
             duration: 0,
             isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 5,
             description: "Banish a summoned object or monster",
             banishObject: true,
+            banishRadius: 5,
           },
           Devotion: {
             name: "Devotion",
@@ -2273,9 +2280,10 @@ export const CLASS_SKILL_DATA: Record<
             summonObject: {
               objectType: "wall",
               duration: 180,
-              hp: 5000,
-              defense: 500,
             },
+            isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 1,
           },
           "Summon Sandman": {
             name: "Summon Sandman",
@@ -2296,8 +2304,11 @@ export const CLASS_SKILL_DATA: Record<
             cooldown: 60,
             duration: 180,
             description:
-              "Summon an elemental plant turret that fires bolts at nearby enemies. Element matches weapon.",
-            summonObject: { objectType: "plant", duration: 180, hp: 500, defense: 50, attackDamage: 50, attackRange: 8, attackCooldown: 3 },
+              "Summon an elemental plant turret that fires bolts at nearby enemies. Element matches weapon used when summoning.",
+            isAOE: true,
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 1,
+            summonObject: { objectType: "plant", duration: 180 },
           },
           "Regia Pureizu": {
             name: "Regia Pureizu",
@@ -2321,7 +2332,9 @@ export const CLASS_SKILL_DATA: Record<
             description:
               "Summon a wyvern that damages all enemies in frontal cone, moving freely on the battlefield. Disappears after 60 seconds.",
             isAOE: true,
-            summonObject: { objectType: "wyvern", duration: 60, hp: 800, defense: 100, attackDamage: 80, attackRange: 3, attackCooldown: 4 },
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 1,
+            summonObject: { objectType: "wyvern", duration: 60 },
           },
           "Summon Turtle": {
             name: "Summon Turtle",
@@ -2333,7 +2346,9 @@ export const CLASS_SKILL_DATA: Record<
             description:
               "Summon a turtle that damages all enemies in a circle around it. Disappears after 60 seconds.",
             isAOE: true,
-            summonObject: { objectType: "turtle", duration: 60, hp: 1200, defense: 200, attackDamage: 60, attackRange: 3, attackCooldown: 5 },
+            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeRadius: 1,
+            summonObject: { objectType: "turtle", duration: 60 },
           },
         },
       },

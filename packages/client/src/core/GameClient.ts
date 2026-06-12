@@ -418,7 +418,7 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.ENTITY_DESPAWN, (packet: any) => {
-      const entityId = packet.data.entityId || packet.data.id;
+      const entityId = packet.data.entityId;
       this.engine.removeEntity(entityId);
       this.engine.removeAOEZoneMesh(entityId);
       this.entityManager.removeEntity(entityId);
@@ -478,6 +478,12 @@ export class GameClient {
           data.summons.forEach((summon: any) => {
             const pos = { x: summon.position.x, y: summon.position.y, z: summon.position.z };
             this.interpolationManager.addPositionUpdate(summon.id, pos, Date.now());
+            if (summon.rotation) {
+              this.interpolationManager.addRotationUpdate(summon.id, summon.rotation, Date.now());
+            }
+            if (summon.health !== undefined && summon.maxHealth !== undefined) {
+              this.engine.updateEntityHealth(summon.id, summon.health, summon.maxHealth);
+            }
           });
         }
 
@@ -563,6 +569,29 @@ export class GameClient {
           }
         }
         this.callbacks.onStatsUpdate?.(this.stats);
+      }
+    });
+
+    this.network.onPacket(PacketType.ATTACK, (packet: any) => {
+      const { attackerId, targetId, damage } = packet.data;
+      const isSummonAttack = attackerId && this.knownEntities.get(attackerId)?.type === 'summon';
+      if (isSummonAttack) {
+        const attackerGroup = this.engine.getMeshGroup(attackerId);
+        if (packet.data.aoeRadius && attackerGroup?.root) {
+          if (packet.data.damageType === 'fire') {
+            this.engine.showFireBreath(attackerGroup.root.position, packet.data.aoeRadius);
+          } else if (packet.data.damageType === 'earth') {
+            this.engine.showEarthquake(attackerGroup.root.position, packet.data.aoeRadius);
+          }
+        } else if (targetId && attackerGroup?.root) {
+          const targetGroup = this.engine.getMeshGroup(targetId);
+          if (targetGroup?.root) {
+            this.engine.showSummonProjectile(attackerGroup.root.position, targetGroup.root.position, packet.data.damageType);
+          }
+        }
+      }
+      if (targetId) {
+        this.engine.showDamageNumber(targetId, damage || 0, packet.data.isCritical || false, packet.data.damageType, packet.data.missed);
       }
     });
 

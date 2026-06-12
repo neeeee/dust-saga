@@ -19,8 +19,77 @@ export class AssetManager {
   private loadingPromises: Map<string, Promise<AssetContainer | null>> = new Map();
   private basePath: string = '/models/';
 
+  private projectilePool: Array<{ mesh: AbstractMesh; active: boolean; from: Vector3; to: Vector3; elapsed: number; duration: number }> = [];
+
+  showFireBreath(position: Vector3, radius: number): void {
+    const sphere = MeshBuilder.CreateSphere(`fire_breath_${Date.now()}`, { diameter: 1, segments: 8 }, this.scene);
+    const mat = new StandardMaterial(`fire_breath_mat_${Date.now()}`, this.scene);
+    mat.diffuseColor = new Color3(1, 0.3, 0.05);
+    mat.emissiveColor = new Color3(0.8, 0.2, 0);
+    mat.alpha = 0.6;
+    mat.disableLighting = true;
+    sphere.material = mat;
+    sphere.position = position.clone();
+    sphere.position.y += 0.5;
+    sphere.isPickable = false;
+
+    const targetDiameter = radius * 2;
+    let elapsed = 0;
+    const anim = this.scene.onBeforeRenderObservable.add(() => {
+      elapsed += this.scene.getEngine().getDeltaTime() / 1000;
+      const t = Math.min(1, elapsed / 0.4);
+      const scale = t * (targetDiameter / 1);
+      sphere.scaling = new Vector3(scale, scale * 0.3, scale);
+      mat.alpha = 0.6 * (1 - t);
+      if (t >= 1) {
+        this.scene.onBeforeRenderObservable.remove(anim);
+        sphere.dispose();
+        mat.dispose();
+      }
+    });
+  }
+
+  showEarthquake(position: Vector3, radius: number): void {
+    const ring = MeshBuilder.CreateTorus(`earthquake_${Date.now()}`, { diameter: 1, thickness: 0.4, tessellation: 24 }, this.scene);
+    const mat = new StandardMaterial(`earthquake_mat_${Date.now()}`, this.scene);
+    mat.diffuseColor = new Color3(0.6, 0.4, 0.2);
+    mat.emissiveColor = new Color3(0.4, 0.25, 0.1);
+    mat.alpha = 0.7;
+    mat.disableLighting = true;
+    ring.material = mat;
+    ring.position = position.clone();
+    ring.position.y += 0.1;
+    ring.isPickable = false;
+
+    const targetDiameter = radius * 2;
+    let elapsed = 0;
+    const anim = this.scene.onBeforeRenderObservable.add(() => {
+      elapsed += this.scene.getEngine().getDeltaTime() / 1000;
+      const t = Math.min(1, elapsed / 0.6);
+      const scale = t * (targetDiameter / 1);
+      ring.scaling = new Vector3(scale, scale * 0.15, scale);
+      mat.alpha = 0.7 * (1 - t);
+      if (t >= 1) {
+        this.scene.onBeforeRenderObservable.remove(anim);
+        ring.dispose();
+        mat.dispose();
+      }
+    });
+  }
+
   constructor(scene: Scene) {
     this.scene = scene;
+    for (let i = 0; i < 10; i++) {
+      const sphere = MeshBuilder.CreateSphere(`proj_pool_${i}`, { diameter: 0.3, segments: 6 }, this.scene);
+      const mat = new StandardMaterial(`proj_mat_${i}`, this.scene);
+      mat.diffuseColor = new Color3(1, 0.8, 0.3);
+      mat.emissiveColor = new Color3(0.6, 0.4, 0.1);
+      mat.disableLighting = true;
+      sphere.material = mat;
+      sphere.setEnabled(false);
+      sphere.isPickable = false;
+      this.projectilePool.push({ mesh: sphere, active: false, from: Vector3.Zero(), to: Vector3.Zero(), elapsed: 0, duration: 300 });
+    }
   }
 
   createNamePlate(name: string, parentId: string): Mesh {
@@ -203,7 +272,66 @@ export class AssetManager {
     return beacon;
   }
 
+  createHealthBar(entityId: string): { bg: AbstractMesh; fg: AbstractMesh } {
+    const bg = MeshBuilder.CreatePlane(`hp_bg_${entityId}`, { width: 1.2, height: 0.12 }, this.scene);
+    const bgMat = new StandardMaterial(`hp_bg_mat_${entityId}`, this.scene);
+    bgMat.diffuseColor = new Color3(0.2, 0.2, 0.2);
+    bgMat.disableLighting = true;
+    bgMat.backFaceCulling = false;
+    bgMat.alpha = 0.7;
+    bg.material = bgMat;
+    bg.billboardMode = 7;
+    bg.isPickable = false;
+
+    const fg = MeshBuilder.CreatePlane(`hp_fg_${entityId}`, { width: 1.2, height: 0.12 }, this.scene);
+    const fgMat = new StandardMaterial(`hp_fg_mat_${entityId}`, this.scene);
+    fgMat.diffuseColor = new Color3(0.2, 0.8, 0.2);
+    fgMat.emissiveColor = new Color3(0.1, 0.4, 0.1);
+    fgMat.disableLighting = true;
+    fgMat.backFaceCulling = false;
+    fg.material = fgMat;
+    fg.billboardMode = 7;
+    fg.isPickable = false;
+
+    fg.position.z = 0.001;
+
+    return { bg, fg };
+  }
+
+  fireProjectile(from: Vector3, to: Vector3, color?: Color3): void {
+    const entry = this.projectilePool.find(p => !p.active);
+    if (!entry) return;
+    entry.active = true;
+    entry.from = from.clone();
+    entry.to = to.clone();
+    entry.elapsed = 0;
+    entry.duration = 300;
+    entry.mesh.position = from.clone();
+    entry.mesh.setEnabled(true);
+    if (color) {
+      (entry.mesh.material as StandardMaterial).diffuseColor = color;
+    }
+  }
+
+  tickProjectiles(dt: number): void {
+    for (const entry of this.projectilePool) {
+      if (!entry.active) continue;
+      entry.elapsed += dt;
+      const t = Math.min(1, entry.elapsed / entry.duration);
+      entry.mesh.position = Vector3.Lerp(entry.from, entry.to, t);
+      if (t >= 1) {
+        entry.active = false;
+        entry.mesh.setEnabled(false);
+      }
+    }
+  }
+
   dispose(): void {
+    for (const entry of this.projectilePool) {
+      entry.mesh.dispose();
+      (entry.mesh.material as StandardMaterial).dispose();
+    }
+    this.projectilePool.length = 0;
     this.containers.forEach(container => {
       container.dispose();
     });

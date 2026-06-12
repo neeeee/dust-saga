@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import {
   SummonInstance, SummonType, SummonObject, COMBAT_SUMMON_TYPES, MAX_PLANTS,
+  SUMMON_STATS, BANISH_RADIUS,
 } from '@dust-saga/shared';
 
 export class SummonManager {
@@ -20,6 +21,7 @@ export class SummonManager {
     const summonType = summonObj.objectType as SummonType;
     this.enforceLimits(ownerId, summonType);
 
+    const baseStats = SUMMON_STATS[summonType];
     const now = Date.now() / 1000;
     const summon: SummonInstance = {
       id: uuidv4(),
@@ -27,20 +29,23 @@ export class SummonManager {
       ownerName,
       summonType,
       position: { ...position },
+      spawnPosition: { ...position },
       rotation,
-      health: summonObj.hp || 500,
-      maxHealth: summonObj.hp || 500,
-      defense: summonObj.defense || 0,
+      health: summonObj.hp ?? baseStats.hp,
+      maxHealth: summonObj.hp ?? baseStats.hp,
+      defense: summonObj.defense ?? baseStats.defense,
       element,
-      attackDamage: summonObj.attackDamage || summonObj.aoeDamage || 0,
-      attackRange: summonObj.attackRange || 3,
-      attackCooldown: summonObj.attackCooldown || 3,
+      attackDamage: summonObj.attackDamage ?? summonObj.aoeDamage ?? baseStats.attackDamage,
+      attackRange: summonObj.attackRange ?? baseStats.attackRange,
+      attackCooldown: summonObj.attackCooldown ?? baseStats.attackCooldown,
       lastAttackTime: 0,
       duration: summonObj.duration,
       spawnedAt: now,
       targetId: null,
       state: summonType === SummonType.WALL ? 'idle' : 'follow',
       zoneId,
+      wanderTarget: null,
+      wanderCooldown: 0,
     };
 
     this.summons.set(summon.id, summon);
@@ -135,6 +140,23 @@ export class SummonManager {
       if (s) result.push(s);
     }
     return result;
+  }
+
+  damageSummon(id: string, damage: number): boolean {
+    const summon = this.summons.get(id);
+    if (!summon) return false;
+    summon.health = Math.max(0, summon.health - damage);
+    return summon.health <= 0;
+  }
+
+  getSummonsInRadius(zoneId: string, center: { x: number; z: number }, radius: number): SummonInstance[] {
+    const zoneSummons = this.getSummonsInZone(zoneId);
+    const rSq = radius * radius;
+    return zoneSummons.filter(s => {
+      const dx = s.position.x - center.x;
+      const dz = s.position.z - center.z;
+      return dx * dx + dz * dz <= rSq;
+    });
   }
 
   tickExpired(): string[] {

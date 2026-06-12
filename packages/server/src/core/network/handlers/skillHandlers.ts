@@ -5,6 +5,7 @@ import {
   GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
   StatusEffectType, StatusEffect,
   getSkillTargetType,
+  BANISH_RADIUS,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -300,13 +301,15 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
   }
 
   if (result.banishObject) {
-    const owned = ctx.summonMgr.getSummonsForOwner(characterId);
-    for (const s of owned) {
+    const center = aoePosition || session.position;
+    const banishRadius = result.banishRadius || BANISH_RADIUS;
+    const targets = ctx.summonMgr.getSummonsInRadius(session.zoneId, { x: center.x, z: center.z }, banishRadius);
+    for (const s of targets) {
       ctx.summonMgr.despawnSummon(s.id);
       ctx.broadcastInZone(s.zoneId, {
         type: PacketType.ENTITY_DESPAWN,
         timestamp: Date.now(),
-        data: { id: s.id },
+        data: { entityId: s.id },
       });
     }
   }

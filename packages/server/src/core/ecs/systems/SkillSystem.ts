@@ -121,6 +121,7 @@ export interface SkillUseResult {
   provoked?: boolean;
   summonObject?: { objectType: string; duration: number; hp?: number; defense?: number; aoeDamage?: number };
   banishObject?: boolean;
+  banishRadius?: number;
   blockOnly?: boolean;
   element?: string;
   songToggledOff?: boolean;
@@ -558,6 +559,14 @@ export class SkillSystem {
         success: true,
         summonObject: { ...skill.summonObject },
         element,
+      };
+    }
+
+    if (skill.banishObject) {
+      return {
+        success: true,
+        banishObject: true,
+        banishRadius: skill.banishRadius || 5,
       };
     }
 

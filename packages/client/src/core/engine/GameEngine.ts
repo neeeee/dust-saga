@@ -155,6 +155,9 @@ export class GameEngine {
           this.lastPerfTick = now;
         }
         this.updateAOEZoneMeshes(now);
+        if (this.assetManager) {
+          this.assetManager.tickProjectiles(this.scene.getEngine().getDeltaTime());
+        }
         if (this.songIndicator && this.playerMesh) {
           const pos = this.playerMesh.position;
           this.updateSongIndicator({ x: pos.x, y: pos.y, z: pos.z }, now);
@@ -514,46 +517,47 @@ export class GameEngine {
   ): Promise<AbstractMesh | null> {
     if (!this.scene || !this.assetManager) return null;
 
-    let mesh: AbstractMesh | null = null;
+    const colorMap: Record<string, Color3> = {
+      wall: new Color3(0.6, 0.6, 0.65),
+      plant: new Color3(0.2, 0.7, 0.2),
+      wyvern: new Color3(0.9, 0.4, 0.15),
+      turtle: new Color3(0.2, 0.4, 0.9),
+    };
+    const color = colorMap[summonType] || new Color3(0.6, 0.3, 0.8);
 
-    if (summonType === 'wall') {
-      const wall = MeshBuilder.CreateBox(`summon_wall_${entityId}`, { width: 3, height: 2.5, depth: 0.4 }, this.scene);
-      wall.position = position;
-      const wallMat = new StandardMaterial(`summon_wall_mat_${entityId}`, this.scene);
-      wallMat.diffuseColor = new Color3(0.6, 0.6, 0.65);
-      wallMat.emissiveColor = new Color3(0.15, 0.15, 0.2);
-      wall.material = wallMat;
-      mesh = wall;
-    } else {
-      const modelFile = 'Enemy Small.glb';
-      const result = await this.assetManager.instantiateModel(modelFile, position);
-      if (result) {
-        mesh = result.root;
-        mesh.rotationQuaternion = null;
-        this.entityAnimations.set(entityId, result.animations);
-        this.startAnimation(entityId, 'Idle');
-      }
-    }
+    const height = summonType === 'wall' ? 2.5 : 1.8;
+    const radius = summonType === 'wall' ? 0.8 : 0.35;
+    const capsule = MeshBuilder.CreateCapsule(`summon_${entityId}`, { height, radius }, this.scene);
+    capsule.position = position;
+    capsule.position.y += height / 2;
 
-    if (!mesh) {
-      mesh = this.createFallbackCharacter(entityId, position, new Color3(0.6, 0.3, 0.8));
-    }
+    const mat = new StandardMaterial(`summon_mat_${entityId}`, this.scene);
+    mat.diffuseColor = color;
+    mat.emissiveColor = new Color3(color.r * 0.3, color.g * 0.3, color.b * 0.3);
+    capsule.material = mat;
+    capsule.isPickable = true;
 
-    if (mesh) {
-      mesh.name = `summon_${entityId}`;
+    if (this.shadowGenerator) {
+      this.shadowGenerator.addShadowCaster(capsule);
     }
 
     const elementStr = element ? ` [${element}]` : '';
     const namePlate = this.assetManager.createNamePlate(`${summonType}${elementStr} (${ownerName})`, entityId);
-    namePlate.position = position.add(new V3(0, summonType === 'wall' ? 3 : 2.8, 0));
+    namePlate.position = position.add(new V3(0, height + 0.5, 0));
+
+    const healthBar = this.assetManager.createHealthBar(entityId);
+    healthBar.bg.position = position.add(new V3(0, height + 0.2, 0));
+    healthBar.fg.position = position.add(new V3(0, height + 0.2, 0.001));
 
     const group: EntityMeshGroup = {
-      root: mesh,
+      root: capsule,
       namePlate,
+      healthBarBg: healthBar.bg,
+      healthBarFg: healthBar.fg,
     };
     this.meshes.set(entityId, group);
 
-    return mesh;
+    return capsule;
   }
 
   private createFallbackCharacter(entityId: string, position: V3, color: Color3): AbstractMesh {
@@ -599,6 +603,11 @@ export class GameEngine {
       if (group.healthBarBg) {
         group.healthBarBg.position = position.add(new V3(0, 2.5, 0));
       }
+      if (group.healthBarFg) {
+        group.healthBarFg.position = position.add(new V3(0, 2.5, 0.001));
+        const scaleX = group.healthBarFg.scaling.x;
+        group.healthBarFg.position.x = group.healthBarBg!.position.x - (1 - scaleX) * 0.6;
+      }
       if (group.namePlate) {
         const hpOffset = group.healthBarBg ? 3 : 2.8;
         group.namePlate.position = position.add(new V3(0, hpOffset, 0));
@@ -623,7 +632,45 @@ export class GameEngine {
     }
   }
 
-  updateEntityHealth(_entityId: string, _current: number, _max: number): void {
+  updateEntityHealth(entityId: string, current: number, max: number): void {
+    const group = this.meshes.get(entityId);
+    if (!group?.healthBarFg || !group?.healthBarBg || max <= 0) return;
+    const ratio = Math.max(0, Math.min(1, current / max));
+    group.healthBarFg.scaling.x = ratio;
+    group.healthBarFg.position.x = group.healthBarBg.position.x - (1 - ratio) * 0.6;
+
+    const fgMat = group.healthBarFg.material as StandardMaterial;
+    if (ratio > 0.5) {
+      fgMat.diffuseColor = new Color3(0.2, 0.8, 0.2);
+    } else if (ratio > 0.25) {
+      fgMat.diffuseColor = new Color3(0.8, 0.8, 0.2);
+    } else {
+      fgMat.diffuseColor = new Color3(0.8, 0.2, 0.2);
+    }
+  }
+
+  showSummonProjectile(from: V3, to: V3, element?: string): void {
+    if (!this.assetManager) return;
+    const colorMap: Record<string, Color3> = {
+      fire: new Color3(1, 0.4, 0.1),
+      ice: new Color3(0.3, 0.7, 1),
+      lightning: new Color3(1, 1, 0.3),
+      holy: new Color3(1, 1, 0.9),
+      dark: new Color3(0.6, 0.2, 0.9),
+      poison: new Color3(0.3, 0.9, 0.3),
+    };
+    const color = element ? colorMap[element] : undefined;
+    this.assetManager.fireProjectile(from, to, color);
+  }
+
+  showFireBreath(position: V3, radius: number): void {
+    if (!this.assetManager) return;
+    this.assetManager.showFireBreath(new V3(position.x, position.y, position.z), radius);
+  }
+
+  showEarthquake(position: V3, radius: number): void {
+    if (!this.assetManager) return;
+    this.assetManager.showEarthquake(new V3(position.x, position.y, position.z), radius);
   }
 
   showDamageNumber(entityId: string, damage: number, isCritical: boolean, element?: string, miss?: boolean): void {
