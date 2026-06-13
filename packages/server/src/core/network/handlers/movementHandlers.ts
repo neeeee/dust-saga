@@ -52,12 +52,32 @@ function handlePlayerMove(ctx: NetworkContext, socket: Socket, data: any): void 
       });
       ctx.broadcastEntityEffects(session);
     }
+
+    const invisIdx = session.statusEffects?.findIndex(
+      (e: any) => e.type === StatusEffectType.INVISIBLE && e.buffData?.invisible?.stationaryOnly
+    );
+    if (invisIdx !== undefined && invisIdx !== -1) {
+      session.statusEffects.splice(invisIdx, 1);
+      ctx.sendToPlayer(session.characterId, {
+        type: PacketType.STATUS_EFFECT_UPDATE,
+        timestamp: Date.now(),
+        data: { effects: session.statusEffects }
+      });
+      ctx.playerSys.recalcStats(session);
+      ctx.sendToPlayer(session.characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+      });
+      ctx.broadcastEntityEffects(session);
+    }
   }
 
   const now = Date.now();
   const last = ctx.getLastMoveBroadcast(characterId);
   if (now - last >= MOVE_BROADCAST_INTERVAL) {
     ctx.setLastMoveBroadcast(characterId, now);
+    const isInvis = session.statusEffects?.some((e: any) => e.type === StatusEffectType.INVISIBLE) || false;
     ctx.broadcastInZone(session.zoneId, {
       type: PacketType.PLAYER_POSITION_UPDATE,
       timestamp: Date.now(),
@@ -65,7 +85,8 @@ function handlePlayerMove(ctx: NetworkContext, socket: Socket, data: any): void 
         socketId: socket.id,
         characterId,
         position: data.position,
-        rotation: data.rotation || session.rotation
+        rotation: data.rotation || session.rotation,
+        invisible: isInvis
       }
     }, characterId);
   }

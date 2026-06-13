@@ -8,6 +8,7 @@ import {
   BANISH_RADIUS,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
+import { hasLineOfSight } from '../../world/LineOfSight';
 
 export function registerHandlers(registry: Map<PacketType, PacketHandler>): void {
   registry.set(PacketType.SKILL_USE, handleSkillUse);
@@ -28,6 +29,8 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
     return;
   }
 
+  const earlySkillDef = ctx.skillSys.findSkillDefinition(skillName);
+
   const check = ctx.skillSys.canUseSkill(session, skillName, targetId || null);
   if (!check.canUse) {
     ctx.sendToPlayer(characterId, {
@@ -38,8 +41,23 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
     return;
   }
 
+  if (earlySkillDef?.lineOfSightRequired && targetId) {
+    const targetSession = ctx.state.players.get(targetId);
+    const targetEnemy = ctx.spawnMgr.getEnemy(targetId);
+    if (targetSession || targetEnemy) {
+      const targetPos = targetSession?.position || targetEnemy?.position;
+      if (targetPos && !hasLineOfSight(session.zoneId, { x: session.position.x, z: session.position.z }, { x: targetPos.x, z: targetPos.z })) {
+        ctx.sendToPlayer(characterId, {
+          type: PacketType.SKILL_USE,
+          timestamp: Date.now(),
+          data: { skillName, error: 'no_los' }
+        });
+        return;
+      }
+    }
+  }
+
   const skillTargetRule = SKILL_TARGET_RULES[skillName];
-  const earlySkillDef = ctx.skillSys.findSkillDefinition(skillName);
   const effectiveTargetType = earlySkillDef ? getSkillTargetType(earlySkillDef) : undefined;
   const resolvedTargetType = effectiveTargetType || skillTargetRule;
   const isHarmfulSkill = !resolvedTargetType || resolvedTargetType === SkillTargetType.OTHER_ONLY;
@@ -95,6 +113,20 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
 
   const { started, castTime } = ctx.skillSys.beginCast(session, skillName, targetId || null);
   if (!started) return;
+
+  const invIdx = session.statusEffects?.findIndex(e => e.type === StatusEffectType.INVISIBLE);
+  if (invIdx !== undefined && invIdx !== -1) {
+    const skill = ctx.skillSys.findSkillDefinition(skillName);
+    if (skill && (skill.basePower || skill.damageType || skill.debuffEffectTable || skill.summonObject || skill.banishObject)) {
+      session.statusEffects.splice(invIdx, 1);
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.STATUS_EFFECT_UPDATE,
+        timestamp: Date.now(),
+        data: { effects: session.statusEffects }
+      });
+      ctx.broadcastEntityEffects(session);
+    }
+  }
 
   if (castTime > 0) {
     ctx.sendToPlayer(characterId, {

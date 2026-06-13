@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import {
-  Packet, PacketType, ZoneType, JOB_DEFINITIONS, getZoneDefinition,
+  Packet, PacketType, ZoneType, JOB_DEFINITIONS, getZoneDefinition, StatusEffectType,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -40,7 +40,7 @@ function handleEnterZone(ctx: NetworkContext, socket: Socket, data: any): void {
       type: 'player',
       position: session.position,
       rotation: session.rotation,
-      data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth, modelFile: JOB_DEFINITIONS[session.jobId]?.modelFile }
+      data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth, modelFile: JOB_DEFINITIONS[session.jobId]?.modelFile, invisible: session.statusEffects?.some((e: any) => e.type === StatusEffectType.INVISIBLE) || false }
     }
   });
 

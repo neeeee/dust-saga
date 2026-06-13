@@ -2,7 +2,7 @@ import { Socket } from 'socket.io';
 import {
   Packet, PacketType, PlayerSession, Validator,
   JOB_DEFINITIONS, RACE_DATA, createDefaultStatPoints, createDefaultSkillProficiencies, createDefaultSkillAdeptness,
-  getDesignJobId, JobId, Race,
+  getDesignJobId, JobId, Race, StatusEffectType,
   getZoneDefinition, normalizeEquipment,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
@@ -182,7 +182,7 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
       type: 'player',
       position: session.position,
       rotation: session.rotation,
-      data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth, modelFile: JOB_DEFINITIONS[session.jobId]?.modelFile }
+      data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth, modelFile: JOB_DEFINITIONS[session.jobId]?.modelFile, invisible: session.statusEffects?.some((e: any) => e.type === StatusEffectType.INVISIBLE) || false }
     }
   });
 }

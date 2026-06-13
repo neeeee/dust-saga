@@ -129,6 +129,8 @@ export interface SkillUseResult {
   guardianToggledOff?: boolean;
   guardianApplied?: string;
   guardianRemovedTarget?: string;
+  manaSwap?: boolean;
+  soulSwap?: boolean;
 }
 
 type DamageType = 'physical' | 'magical';
@@ -204,6 +206,8 @@ export class SkillSystem {
     if (skill.sacrificeHeal) return SkillType.SACRIFICE_HEAL;
     if (skill.mpDamage) return SkillType.MP_DAMAGE;
     if (skill.isDebuff || skill.debuffEffectTable) return SkillType.DEBUFF;
+    if (skill.invisible) return SkillType.INVISIBILITY;
+    if (skill.barrier) return SkillType.BARRIER;
     if (skill.healing) return SkillType.HEAL;
     if (skill.isBuff || skill.buffEffectTable) return SkillType.BUFF;
     const isMagical = skill.damageType === 'magical'
@@ -278,7 +282,10 @@ export class SkillSystem {
     }
 
     if (session.stats.mana < skill.mpCost) {
-      return { canUse: false, error: 'no_mana' };
+      const hasDevotion = session.statusEffects?.some(e => e.buffData?.devotionLink);
+      if (!hasDevotion) {
+        return { canUse: false, error: 'no_mana' };
+      }
     }
 
     if (skill.blockOnly) {
@@ -432,7 +439,9 @@ export class SkillSystem {
     if (!session.skillCooldowns) session.skillCooldowns = [];
     const totalINT = (session.statPoints.INT || 0) + (session.baseStats?.INT || 0);
     const cooldownReduction = Math.floor(totalINT / 10) * 2;
-    const cooldownMultiplier = Math.max(0, 100 - cooldownReduction) / 100;
+    const magicalAidFx = session.statusEffects?.find(e => e.buffData?.magicalAid);
+    const magicalAidCdReduction = magicalAidFx ? 20 : 0;
+    const cooldownMultiplier = Math.max(0, 100 - cooldownReduction - magicalAidCdReduction) / 100;
     const effectiveCooldown = Math.floor(skill.cooldown * 1000 * cooldownMultiplier);
     if (cooldownReduction > 0) {
       this.lastCooldownDebug = { skillName, totalINT, cooldownReduction, baseCd: skill.cooldown, effective: effectiveCooldown / 1000 };
@@ -491,7 +500,8 @@ export class SkillSystem {
 
     const isBuffLike = st === SkillType.BUFF || st === SkillType.SONG
       || st === SkillType.HP_BUFF || st === SkillType.MP_RESTORE
-      || st === SkillType.HEAL_OVER_TIME;
+      || st === SkillType.HEAL_OVER_TIME
+      || st === SkillType.INVISIBILITY || st === SkillType.BARRIER;
     if ((isBuffLike && skill.duration > 0) || (skill.buffEffectTable && skill.duration === 0)) {
       if (skill.buffEffectTable?.defensiveMarch) {
         const existing = session.statusEffects?.find(e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.defensiveMarch && e.skillName === skillName);
@@ -574,6 +584,14 @@ export class SkillSystem {
       };
     }
 
+    if (skill.manaSwap) {
+      return { success: true, manaSwap: true };
+    }
+
+    if (skill.soulSwap) {
+      return { success: true, soulSwap: true };
+    }
+
     return { success: true };
   }
   calculateAOEDamage(
@@ -635,6 +653,11 @@ export class SkillSystem {
     const attackBuff = session.statusEffects?.find(e => e.type === StatusEffectType.BUFF_ATTACK);
     if (attackBuff && !isMagical) {
       attackMultiplier = attackBuff.potency;
+    }
+
+    const magicalAidBuff = isMagical ? session.statusEffects?.find(e => e.buffData?.magicalAid) : null;
+    if (magicalAidBuff) {
+      attackMultiplier *= 1.2;
     }
 
     const baseDamage = Math.floor(
@@ -1207,6 +1230,30 @@ export class SkillSystem {
       pushEffect(StatusEffectType.BUFF_MANA_SHIELD, 0, { manaShield: true });
     }
 
+    if (bt.invisible) {
+      target.statusEffects = target.statusEffects.filter(e => e.type !== StatusEffectType.INVISIBLE);
+      pushEffect(StatusEffectType.INVISIBLE, 0, { invisible: bt.invisible }, { invisible: true, tickInterval: 1000 });
+    }
+
+    if (bt.barrierPhysical) {
+      target.statusEffects = target.statusEffects.filter(e => e.type !== StatusEffectType.BARRIER_PHYSICAL);
+      pushEffect(StatusEffectType.BARRIER_PHYSICAL, 0, { barrierPhysical: true }, { barrierType: 'physical' });
+    }
+
+    if (bt.barrierMagical) {
+      target.statusEffects = target.statusEffects.filter(e => e.type !== StatusEffectType.BARRIER_MAGICAL);
+      pushEffect(StatusEffectType.BARRIER_MAGICAL, 0, { barrierMagical: true }, { barrierType: 'magical' });
+    }
+
+    if (bt.elementalAbsorption) {
+      pushEffect(StatusEffectType.BUFF_GENERIC, 0, { elementalAbsorption: bt.elementalAbsorption });
+    }
+
+    if (bt.devotion && casterSession) {
+      target.statusEffects = target.statusEffects.filter(e => !(e.skillName === skill.name && e.buffData?.devotionLink));
+      pushEffect(StatusEffectType.BUFF_GENERIC, 0, { devotionLink: { partnerId: sourceId } });
+    }
+
     if (bt.spellInterruptResist) {
       pushEffect(StatusEffectType.BUFF_SPELL_INTERRUPT_RESIST, bt.spellInterruptResist, { spellInterruptResistPercent: bt.spellInterruptResist });
     }
@@ -1454,6 +1501,17 @@ export class SkillSystem {
       if (effect.buffData?.mpRestorePerTick && now - effect.lastTickAt >= effect.buffData.mpRestorePerTick.tickInterval) {
         effect.lastTickAt = now;
         mpRestored += effect.buffData.mpRestorePerTick.mpPerTick;
+      }
+
+      if (effect.type === StatusEffectType.INVISIBLE && effect.buffData?.invisible && effect.tickInterval > 0 && now - effect.lastTickAt >= effect.tickInterval) {
+        effect.lastTickAt = now;
+        const mpDrain = effect.buffData.invisible.mpCostPerSec;
+        mpDamage += mpDrain;
+        if (effect.buffData.invisible.stationaryOnly) {
+          if (session.stats.mana - mpDamage <= 0) {
+            expired.push(effect);
+          }
+        }
       }
 
       const songTypes = SONG_TYPES;

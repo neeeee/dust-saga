@@ -114,6 +114,9 @@ export const CLASS_SKILL_DATA: Record<
             isAOE: true,
             aoeRadius: 1,
             aoeTargetMode: AOETargetMode.SELF_CENTERED,
+            hasDebuff: true,
+            debuffDuration: 1,
+            debuffEffectTable: { hasKnockback: { knockbackDistance: 2 } },
           },
           Parry: {
             name: "Parry",
@@ -384,6 +387,9 @@ export const CLASS_SKILL_DATA: Record<
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.THRUST,
             basePower: 3,
+            hasDebuff: true,
+            debuffDuration: 1,
+            debuffEffectTable: { hasKnockback: { knockbackDistance: 4 } },
           },
         },
       },
@@ -818,6 +824,9 @@ export const CLASS_SKILL_DATA: Record<
             description: "Deal damage and knockback target (bow, crossbow)",
             damageType: DamageType.PHYSICAL,
             basePower: 1,
+            hasDebuff: true,
+            debuffDuration: 1,
+            debuffEffectTable: { hasKnockback: { knockbackDistance: 3 } },
           },
           "Silence Arrow": {
             name: "Silence Arrow",
@@ -1640,8 +1649,10 @@ export const CLASS_SKILL_DATA: Record<
             castTime: 1,
             cooldown: 1.5,
             duration: 120,
+            barrier: 'physical',
             buffEffectTable: {
               physicalDamageReduction: "formula:(10 + blessing / 5) / 100",
+              barrierPhysical: true,
             },
             description:
               "Physical damage reduction on all party members in range. Reduction based on caster's Blessing proficiency",
@@ -1744,8 +1755,10 @@ export const CLASS_SKILL_DATA: Record<
             cooldown: 10,
             duration: 60,
             description: "Reduce elemental damage taken",
+            elementalAbsorption: { elements: ['fire', 'ice', 'lightning'], convertTo: 'hp' },
             buffEffectTable: {
               resistMods: { fire: 7, ice: 7, lightning: 7 },
+              elementalAbsorption: { elements: ['fire', 'ice', 'lightning'], convertTo: 'hp' },
             },
           },
           "Bless Weapon": {
@@ -1825,8 +1838,10 @@ export const CLASS_SKILL_DATA: Record<
             duration: 300,
             description:
               "All MP costs of targeted party member are taken from your MP pool",
+            devotion: true,
             buffEffectTable: {
               damageRedirect: { targetId: "" },
+              devotion: true,
             },
           },
           "Silent Void": {
@@ -2107,6 +2122,9 @@ export const CLASS_SKILL_DATA: Record<
             aoeRadius: 6,
             pulseCount: 3,
             pulseInterval: 1000,
+            hasDebuff: true,
+            debuffDuration: 1,
+            debuffEffectTable: { hasKnockback: { knockbackDistance: 2 } },
           },
           "Delay Bomb": {
             name: "Delay Bomb",
@@ -2193,6 +2211,9 @@ export const CLASS_SKILL_DATA: Record<
             basePower: 5,
             pulseCount: 10,
             pulseInterval: 1000,
+            hasDebuff: true,
+            debuffDuration: 1,
+            debuffEffectTable: { hasKnockback: { knockbackDistance: 2 } },
           },
           Cremation: {
             name: "Cremation",
@@ -2240,6 +2261,7 @@ export const CLASS_SKILL_DATA: Record<
             duration: 0,
             isBuff: true,
             selfBuffOnly: true,
+            manaShield: { mpPerHp: 2 },
             description: "Damage taken is reduced, taking some damage as MP",
             buffEffectTable: {
               manaShield: true,
@@ -2296,6 +2318,9 @@ export const CLASS_SKILL_DATA: Record<
             description:
               "Summon a sandstorm that knocks back enemies, sleeping, and damaging them",
             basePower: 3,
+            hasDebuff: true,
+            debuffDuration: 2,
+            debuffEffectTable: { hasKnockback: { knockbackDistance: 3 }, hasSleep: { duration: 3 } },
           },
           "Summon Plant": {
             name: "Summon Plant",
@@ -2524,6 +2549,7 @@ export const CLASS_SKILL_DATA: Record<
             debuffDuration: 6,
             debuffEffectTable: {
               debuffCategory: "weaken",
+              removeResistBuffs: ['fire', 'ice', 'lightning', 'dark', 'holy'],
             },
           },
           Ramkyado: {

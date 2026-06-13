@@ -512,6 +512,19 @@ export class NetworkServer implements NetworkContext {
   applyPlayerDamage(target: PlayerSession, damage: number, attackerId: string, damageType: string, isCritical: boolean, zoneId: string, attackerPosition?: { x: number; y: number; z: number }): { redirected: boolean; damageTaken: number } {
     if (damage <= 0) return { redirected: false, damageTaken: 0 };
 
+    if (target.statusEffects) {
+      const invIdx = target.statusEffects.findIndex(e => e.type === StatusEffectType.INVISIBLE);
+      if (invIdx !== -1) {
+        target.statusEffects.splice(invIdx, 1);
+        this.sendToPlayer(target.characterId, {
+          type: PacketType.STATUS_EFFECT_UPDATE,
+          timestamp: Date.now(),
+          data: { effects: target.statusEffects }
+        });
+        this.broadcastEntityEffects(target);
+      }
+    }
+
     if (!target.statusEffects || target.statusEffects.length === 0) {
       return this._applyRawDamage(target, damage, attackerId, damageType, isCritical, zoneId);
     }
@@ -1391,7 +1404,7 @@ export class NetworkServer implements NetworkContext {
         type: 'player',
         position: player.position,
         rotation: player.rotation,
-        data: { name: player.characterName, class: player.jobId, race: player.race, jobId: player.jobId, level: player.stats.level, health: player.stats.health, maxHealth: player.stats.maxHealth, modelFile: JOB_DEFINITIONS[player.jobId]?.modelFile }
+        data: { name: player.characterName, class: player.jobId, race: player.race, jobId: player.jobId, level: player.stats.level, health: player.stats.health, maxHealth: player.stats.maxHealth, modelFile: JOB_DEFINITIONS[player.jobId]?.modelFile, invisible: player.statusEffects?.some(e => e.type === StatusEffectType.INVISIBLE) || false }
       });
     });
 
@@ -2599,6 +2612,26 @@ export class NetworkServer implements NetworkContext {
           return;
         }
 
+        const devotionFx = session.statusEffects?.find(e => e.buffData?.devotionLink);
+        if (devotionFx && result.success) {
+          const skillDef = this.skillSys.findSkillDefinition(castResult.skillName);
+          const mpCost = skillDef?.mpCost || 0;
+          if (mpCost > 0) {
+            const partnerId = devotionFx.buffData!.devotionLink!.partnerId;
+            const partner = this.state.players.get(partnerId);
+            session.stats.mana += mpCost;
+            if (partner) {
+              partner.stats.mana = Math.max(0, partner.stats.mana - mpCost);
+              this.sendToPlayer(partnerId, {
+                type: PacketType.STATS_UPDATE,
+                timestamp: Date.now(),
+                data: { characterId: partnerId, stats: partner.stats, statBreakdown: partner.statBreakdown }
+              });
+              this.refreshPartyForMember(partnerId);
+            }
+          }
+        }
+
         if (result.defensiveMarchToggledOff) {
           this.removeBlockingProtectedBuffs(session.characterId);
           this.sendToPlayer(session.characterId, {
@@ -2867,6 +2900,62 @@ export class NetworkServer implements NetworkContext {
             timestamp: Date.now(),
             data: { targetId: session.characterId, amount: result.mpRestored, mpRestore: true }
           });
+        }
+
+        if (result.manaSwap && castResult.targetId) {
+          const target = this.state.players.get(castResult.targetId);
+          if (target) {
+            const casterMana = session.stats.mana;
+            const targetMana = target.stats.mana;
+            session.stats.mana = targetMana;
+            target.stats.mana = casterMana;
+            this.sendToPlayer(session.characterId, {
+              type: PacketType.STATS_UPDATE,
+              timestamp: Date.now(),
+              data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown }
+            });
+            this.sendToPlayer(castResult.targetId, {
+              type: PacketType.STATS_UPDATE,
+              timestamp: Date.now(),
+              data: { characterId: castResult.targetId, stats: target.stats, statBreakdown: target.statBreakdown }
+            });
+            this.refreshPartyForMember(session.characterId);
+            this.refreshPartyForMember(castResult.targetId);
+          }
+        }
+
+        if (result.soulSwap && castResult.targetId) {
+          const target = this.state.players.get(castResult.targetId);
+          if (target) {
+            const casterBuffs = session.statusEffects.filter(e => !e.type.startsWith('DEBUFF_') && e.type !== StatusEffectType.CURSE);
+            const targetBuffs = target.statusEffects.filter(e => !e.type.startsWith('DEBUFF_') && e.type !== StatusEffectType.CURSE);
+            session.statusEffects = [...session.statusEffects.filter(e => e.type.startsWith('DEBUFF_') || e.type === StatusEffectType.CURSE), ...targetBuffs.map(b => ({ ...b, sourceId: session.characterId, targetId: session.characterId }))];
+            target.statusEffects = [...target.statusEffects.filter(e => e.type.startsWith('DEBUFF_') || e.type === StatusEffectType.CURSE), ...casterBuffs.map(b => ({ ...b, sourceId: target.characterId, targetId: target.characterId }))];
+            this.playerSys.recalcStats(session);
+            this.playerSys.recalcStats(target);
+            this.sendToPlayer(session.characterId, {
+              type: PacketType.STATUS_EFFECT_UPDATE,
+              timestamp: Date.now(),
+              data: { effects: session.statusEffects }
+            });
+            this.sendToPlayer(castResult.targetId, {
+              type: PacketType.STATUS_EFFECT_UPDATE,
+              timestamp: Date.now(),
+              data: { effects: target.statusEffects }
+            });
+            this.sendToPlayer(session.characterId, {
+              type: PacketType.STATS_UPDATE,
+              timestamp: Date.now(),
+              data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown }
+            });
+            this.sendToPlayer(castResult.targetId, {
+              type: PacketType.STATS_UPDATE,
+              timestamp: Date.now(),
+              data: { characterId: castResult.targetId, stats: target.stats, statBreakdown: target.statBreakdown }
+            });
+            this.broadcastEntityEffects(session);
+            this.broadcastEntityEffects(target);
+          }
         }
 
         if (result.summonObject) {
@@ -3583,6 +3672,7 @@ export class NetworkServer implements NetworkContext {
         for (const cid of zonePlayerIds) {
           const s = this.state.players.get(cid);
           if (!s || s.isDead || s.invulnerableUntil > now) continue;
+          if (s.statusEffects?.some(e => e.type === StatusEffectType.INVISIBLE)) continue;
           zonePlayers.set(cid, { position: s.position, characterId: cid });
         }
       }

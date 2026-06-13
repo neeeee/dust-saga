@@ -85,6 +85,7 @@ const SKILLS: Record<string, ClassSpecificSkill> = {
     duration: 0,
     description: "Stationary invisibility (2MP per second)",
     skillType: SkillType.UTILITY,
+    buffEffectTable: { invisible: { stationaryOnly: true, mpCostPerSec: 2 } },
   },
   "Hawkeye (Passive)": {
     reqLevel: 20,
@@ -112,6 +113,7 @@ const SKILLS: Record<string, ClassSpecificSkill> = {
     duration: 0,
     description: "Mobile invisibility (3MP per second)",
     skillType: SkillType.UTILITY,
+    buffEffectTable: { invisible: { stationaryOnly: false, mpCostPerSec: 3 } },
   },
   "Third Eye": {
     reqLevel: 28,
@@ -565,6 +567,7 @@ const SKILLS: Record<string, ClassSpecificSkill> = {
     duration: 0,
     description: "Swap MP with target",
     skillType: SkillType.UTILITY,
+    manaSwap: true,
   },
   "Soul Swap": {
     reqLevel: 50,
@@ -574,6 +577,7 @@ const SKILLS: Record<string, ClassSpecificSkill> = {
     duration: 0,
     description: "Swap buffs with target",
     skillType: SkillType.UTILITY,
+    soulSwap: true,
   },
   Teleport: {
     reqLevel: 45,
@@ -621,6 +625,8 @@ const SKILLS: Record<string, ClassSpecificSkill> = {
     description: "Increase magical damage and decrease skill cooldowns",
     skillType: SkillType.BUFF,
     isAOE: true,
+    magicalAid: { mpRestorePercent: 20 },
+    buffEffectTable: { magicalAid: { mpRestorePercent: 20 } },
   },
   "Discomfort (Passive)": {
     reqLevel: 20,

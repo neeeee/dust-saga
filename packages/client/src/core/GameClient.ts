@@ -14,6 +14,7 @@ import {
   DEFAULT_AOE_RADIUS,
   findSkillDefinition,
   JOB_DEFINITIONS,
+  StatusEffectType,
 } from '@dust-saga/shared';
 
 export interface GameCallbacks {
@@ -83,6 +84,7 @@ export class GameClient {
   private clickToMovePath: BabylonVector3[] = [];
   private clickToMoveTargetIndex: number = 0;
   private isClickToMoveActive: boolean = false;
+  private partyMemberIds: Set<string> = new Set();
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.engine = new GameEngine(canvas);
@@ -93,6 +95,22 @@ export class GameClient {
 
   setCallbacks(callbacks: Partial<GameCallbacks>): void {
     this.callbacks = { ...this.callbacks, ...callbacks };
+  }
+
+  updatePartyMembers(memberIds: string[]): void {
+    this.partyMemberIds = new Set(memberIds);
+    for (const [entityId, entity] of this.knownEntities) {
+      if (entity.type === 'player' && entityId !== this.playerId) {
+        const invisible = entity.data?.statusEffects?.some((e: any) => e.type === StatusEffectType.INVISIBLE) || entity.data?.invisible || false;
+        this.applyEntityVisibility(entityId, invisible);
+      }
+    }
+  }
+
+  private applyEntityVisibility(entityId: string, invisible: boolean): void {
+    if (entityId === this.playerId) return;
+    const isParty = this.partyMemberIds.has(entityId);
+    this.engine.setEntityInvisible(entityId, invisible, isParty);
   }
 
   async initialize(): Promise<void> {
@@ -362,6 +380,10 @@ export class GameClient {
         );
         this.knownEntities.set(player.id, { type: 'player', data: player.data });
         this.entityManager.createEntity(player.id);
+
+        if (player.data?.invisible && player.id !== this.playerId) {
+          this.applyEntityVisibility(player.id, true);
+        }
       }
 
       if (summons) {
@@ -417,6 +439,10 @@ export class GameClient {
       }
 
       await this.processEntitySpawn(id, type, position, data);
+
+      if (type === 'player' && data?.invisible && id !== this.playerId) {
+        this.applyEntityVisibility(id, true);
+      }
     });
 
     this.network.onPacket(PacketType.ENTITY_DESPAWN, (packet: any) => {
@@ -497,6 +523,9 @@ export class GameClient {
         this.interpolationManager.addPositionUpdate(data.characterId || data.socketId, pos, Date.now());
         if (data.rotation) {
           this.interpolationManager.addRotationUpdate(data.characterId || data.socketId, data.rotation, Date.now());
+        }
+        if (data.invisible !== undefined) {
+          this.applyEntityVisibility(data.characterId, data.invisible);
         }
       }
     });
@@ -809,6 +838,19 @@ export class GameClient {
         entity.data.statusEffects = effects || [];
       }
       this.callbacks.onEntityStatusEffects?.(entityId, effects || []);
+
+      if (entity?.type === 'player' && entityId !== this.playerId) {
+        const invisible = (effects || []).some((e: any) => e.type === StatusEffectType.INVISIBLE);
+        this.applyEntityVisibility(entityId, invisible);
+      }
+
+      const barrierEffect = (effects || []).find((e: any) => e.type === StatusEffectType.BARRIER_PHYSICAL || e.type === StatusEffectType.BARRIER_MAGICAL);
+      if (barrierEffect) {
+        const barrierType = barrierEffect.barrierType || (barrierEffect.type === StatusEffectType.BARRIER_PHYSICAL ? 'physical' : 'magical');
+        this.engine.setEntityBarrier(entityId, barrierType);
+      } else {
+        this.engine.setEntityBarrier(entityId, null);
+      }
     });
 
     this.network.onPacket(PacketType.SONG_PULSE, (packet: any) => {

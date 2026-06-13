@@ -1341,6 +1341,71 @@ export class GameEngine {
     }
   }
 
+  setEntityBarrier(entityId: string, barrierType: 'physical' | 'magical' | null): void {
+    const existingKey = `barrier_${entityId}`;
+    const existing = this.scene?.getMeshByName(existingKey);
+    if (existing) {
+      existing.dispose();
+    }
+
+    if (!barrierType || !this.scene) return;
+
+    const group = this.meshes.get(entityId);
+    if (!group) return;
+
+    const sphere = MeshBuilder.CreateSphere(existingKey, { diameter: 2.2, segments: 16 }, this.scene);
+    const mat = new StandardMaterial(`barrier_mat_${entityId}`, this.scene);
+    mat.alpha = 0.25;
+    mat.disableLighting = true;
+    mat.backFaceCulling = false;
+
+    if (barrierType === 'physical') {
+      mat.diffuseColor = new Color3(0.3, 0.5, 1.0);
+      mat.emissiveColor = new Color3(0.2, 0.3, 0.8);
+    } else {
+      mat.diffuseColor = new Color3(0.7, 0.3, 1.0);
+      mat.emissiveColor = new Color3(0.5, 0.2, 0.8);
+    }
+    sphere.material = mat;
+    sphere.isPickable = false;
+    sphere.parent = group.root;
+    sphere.position.y = 0.8;
+  }
+
+  setEntityInvisible(entityId: string, invisible: boolean, isPartyMember: boolean): void {
+    const group = this.meshes.get(entityId);
+    if (!group) return;
+
+    const root = group.root;
+    const childMeshes = root.getChildMeshes();
+
+    if (!invisible) {
+      root.isVisible = true;
+      childMeshes.forEach(m => {
+        m.isVisible = true;
+        m.visibility = 1;
+      });
+      if (group.namePlate) group.namePlate.isVisible = true;
+      if (group.selectionCircle) group.selectionCircle.isVisible = true;
+      return;
+    }
+
+    if (isPartyMember) {
+      root.isVisible = true;
+      childMeshes.forEach(m => {
+        m.isVisible = true;
+        m.visibility = 0.3;
+      });
+      if (group.namePlate) group.namePlate.isVisible = true;
+      if (group.selectionCircle) group.selectionCircle.isVisible = true;
+    } else {
+      root.isVisible = false;
+      childMeshes.forEach(m => { m.isVisible = false; });
+      if (group.namePlate) group.namePlate.isVisible = false;
+      if (group.selectionCircle) group.selectionCircle.isVisible = false;
+    }
+  }
+
   dispose(): void {
     if (this.isRotating) document.exitPointerLock();
     this.canvas?.removeEventListener('pointerdown', this.handlePointerDown);

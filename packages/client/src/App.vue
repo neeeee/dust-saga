@@ -781,6 +781,9 @@ onMounted(async () => {
       settings: packet.data.settings,
     };
     partyLootPool.value = packet.data.lootPool || [];
+    if (gameClient) {
+      gameClient.updatePartyMembers((packet.data.members || []).map((m: any) => m.characterId));
+    }
   });
 
   network.onPacket(PacketType.PARTY_INVITE, (packet: any) => {
@@ -796,6 +799,9 @@ onMounted(async () => {
   network.onPacket(PacketType.PARTY_DISBAND, () => {
     partyData.value = null;
     partyLootPool.value = [];
+    if (gameClient) {
+      gameClient.updatePartyMembers([]);
+    }
   });
 
   network.onPacket(PacketType.PARTY_LOOT_ROLL, (packet: any) => {
