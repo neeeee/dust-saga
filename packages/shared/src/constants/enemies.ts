@@ -28,6 +28,7 @@ export interface EnemyDefinition {
   patrolStrategy?: 'random' | 'sequential';
   skills?: Array<string>;
   immunities?: string[];
+  knockbackImmune?: boolean;
   magicDefense?: number;
 }
 

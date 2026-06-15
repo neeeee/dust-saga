@@ -578,6 +578,7 @@ export class NetworkServer implements NetworkContext {
           timestamp: Date.now(),
           data: { effects: target.statusEffects }
         });
+        this.broadcastEntityEffects(target);
         return { redirected: false, damageTaken: 0 };
       }
     }
@@ -591,6 +592,11 @@ export class NetworkServer implements NetworkContext {
           const mpDrain = Math.min(mpAvailable, damage);
           target.stats.mana -= mpDrain;
           damage = Math.max(0, damage - mpDrain);
+          this.sendToPlayer(target.characterId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: target.characterId, stats: target.stats }
+          });
           if (damage <= 0) return { redirected: false, damageTaken: 0 };
         }
         break;
@@ -717,6 +723,7 @@ export class NetworkServer implements NetworkContext {
 
   private applyKnockback(target: { position: { x: number; y: number; z: number }; statusEffects: StatusEffect[] }, effect: StatusEffect, attackerPos: { x: number; z: number }, distance: number): void {
     if (effect.debuffCategory !== 'knockback' || !effect.knockbackVelocity) return;
+    if (target.statusEffects.some(e => e.type === StatusEffectType.STUN || e.type === StatusEffectType.FREEZE)) return;
     const dx = target.position.x - attackerPos.x;
     const dz = target.position.z - attackerPos.z;
     const len = Math.sqrt(dx * dx + dz * dz);
@@ -2534,7 +2541,9 @@ export class NetworkServer implements NetworkContext {
       for (const effect of debuffEffects) {
         if (!this.shouldApplyDebuff(effect, targetId, caster.characterId)) continue;
         if (player.statusEffects.some(e => e.type === effect.type && e.skillName === skillName)) continue;
-        player.statusEffects.push({ ...effect, targetId });
+        const applied = { ...effect, targetId };
+        player.statusEffects.push(applied);
+        this.applyKnockback(player, applied, caster.position, applied.potency);
         changed = true;
       }
       if (changed) {
@@ -2619,9 +2628,12 @@ export class NetworkServer implements NetworkContext {
           if (mpCost > 0) {
             const partnerId = devotionFx.buffData!.devotionLink!.partnerId;
             const partner = this.state.players.get(partnerId);
-            session.stats.mana += mpCost;
-            if (partner) {
-              partner.stats.mana = Math.max(0, partner.stats.mana - mpCost);
+            const mpShortfall = Math.max(0, -session.stats.mana);
+            session.stats.mana = Math.max(0, session.stats.mana);
+            if (partner && mpShortfall > 0) {
+              const partnerContribution = Math.min(partner.stats.mana, mpShortfall);
+              partner.stats.mana -= partnerContribution;
+              session.stats.mana = Math.max(0, session.stats.mana - (mpShortfall - partnerContribution));
               this.sendToPlayer(partnerId, {
                 type: PacketType.STATS_UPDATE,
                 timestamp: Date.now(),
@@ -2955,53 +2967,6 @@ export class NetworkServer implements NetworkContext {
             });
             this.broadcastEntityEffects(session);
             this.broadcastEntityEffects(target);
-          }
-        }
-
-        if (result.summonObject) {
-          const summonPos = session.position;
-          const summon = this.summonMgr.spawnSummon(
-            session.characterId,
-            session.characterName,
-            session.zoneId,
-            result.summonObject,
-            summonPos,
-            session.rotation?.y || 0,
-            result.element,
-          );
-          if (summon) {
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.ENTITY_SPAWN,
-              timestamp: Date.now(),
-              data: {
-                id: summon.id,
-                type: 'summon',
-                position: summon.position,
-                rotation: { x: 0, y: summon.rotation, z: 0, w: 1 },
-                data: {
-                  summonType: summon.summonType,
-                  ownerId: summon.ownerId,
-                  ownerName: summon.ownerName,
-                  health: summon.health,
-                  maxHealth: summon.maxHealth,
-                  defense: summon.defense,
-                  element: summon.element,
-                  duration: summon.duration,
-                },
-              },
-            });
-          }
-        }
-
-        if (result.banishObject) {
-          const owned = this.summonMgr.getSummonsForOwner(session.characterId);
-          for (const s of owned) {
-            this.summonMgr.despawnSummon(s.id);
-            this.broadcastInZone(s.zoneId, {
-              type: PacketType.ENTITY_DESPAWN,
-              timestamp: Date.now(),
-              data: { entityId: s.id },
-            });
           }
         }
 
@@ -3505,22 +3470,29 @@ export class NetworkServer implements NetworkContext {
   }
 
   private tickWyvern(summon: import('@dust-saga/shared').SummonInstance, zoneEnemies: Map<string, import('@dust-saga/shared').EnemyInstance>, nowSec: number): void {
-    const FOLLOW_DISTANCE = 3;
+    const WANDER_RADIUS = 10;
     const dt = 1 / this.tickRate;
     const speed = SUMMON_STATS[summon.summonType as keyof typeof SUMMON_STATS].speed;
 
-    const owner = this.state.players.get(summon.ownerId);
-    if (owner && owner.position) {
-      const dx = owner.position.x - summon.position.x;
-      const dz = owner.position.z - summon.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist > FOLLOW_DISTANCE) {
-        const moveX = (dx / dist) * speed * dt;
-        const moveZ = (dz / dist) * speed * dt;
-        summon.position.x += moveX;
-        summon.position.z += moveZ;
-        summon.rotation = Math.atan2(dx, dz);
+    if (summon.wanderTarget) {
+      const wdx = summon.wanderTarget.x - summon.position.x;
+      const wdz = summon.wanderTarget.z - summon.position.z;
+      const wDist = Math.sqrt(wdx * wdx + wdz * wdz);
+      if (wDist > 1) {
+        summon.position.x += (wdx / wDist) * speed * dt;
+        summon.position.z += (wdz / wDist) * speed * dt;
+        summon.rotation = Math.atan2(wdx, wdz);
+      } else {
+        summon.wanderTarget = null;
+        summon.wanderCooldown = nowSec + 0.5 + Math.random() * 1.5;
       }
+    } else if (nowSec >= summon.wanderCooldown) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 3 + Math.random() * (WANDER_RADIUS - 3);
+      summon.wanderTarget = {
+        x: summon.spawnPosition.x + Math.cos(angle) * dist,
+        z: summon.spawnPosition.z + Math.sin(angle) * dist,
+      };
     }
 
     if (nowSec - summon.lastAttackTime < summon.attackCooldown) return;
@@ -3673,6 +3645,7 @@ export class NetworkServer implements NetworkContext {
           const s = this.state.players.get(cid);
           if (!s || s.isDead || s.invulnerableUntil > now) continue;
           if (s.statusEffects?.some(e => e.type === StatusEffectType.INVISIBLE)) continue;
+          if (s.statusEffects?.some(e => e.buffData?.misdirection)) continue;
           zonePlayers.set(cid, { position: s.position, characterId: cid });
         }
       }
@@ -3703,19 +3676,41 @@ export class NetworkServer implements NetworkContext {
     const dt = 1 / this.tickRate;
     for (const zoneId of this.spawnMgr.getZoneIds()) {
       const enemies = this.spawnMgr.getEnemiesInZone(zoneId);
-      if (!enemies) continue;
-      for (const [, enemy] of enemies) {
-        if (enemy.state === 'dead') continue;
-        const kb = enemy.statusEffects?.find(e => e.debuffCategory === 'knockback' && e.knockbackVelocity && e.knockbackVelocity.remaining > 0);
-        if (!kb) continue;
-        const v = kb.knockbackVelocity!;
-        const step = Math.min(v.remaining, speed * dt);
-        enemy.position.x += v.dx * step;
-        enemy.position.z += v.dz * step;
-        v.remaining -= step;
-        if (v.remaining <= 0) {
-          const idx = enemy.statusEffects.indexOf(kb);
-          if (idx !== -1) enemy.statusEffects.splice(idx, 1);
+      if (enemies) {
+        for (const [, enemy] of enemies) {
+          if (enemy.state === 'dead') continue;
+          const def = getEnemyDefinition(enemy.enemyType);
+          if (def?.knockbackImmune) continue;
+          const kb = enemy.statusEffects?.find(e => e.debuffCategory === 'knockback' && e.knockbackVelocity && e.knockbackVelocity.remaining > 0);
+          if (!kb) continue;
+          const v = kb.knockbackVelocity!;
+          const step = Math.min(v.remaining, speed * dt);
+          enemy.position.x += v.dx * step;
+          enemy.position.z += v.dz * step;
+          v.remaining -= step;
+          if (v.remaining <= 0) {
+            const idx = enemy.statusEffects.indexOf(kb);
+            if (idx !== -1) enemy.statusEffects.splice(idx, 1);
+          }
+        }
+      }
+
+      const zonePlayerIds = this.zonePlayerIndex.get(zoneId);
+      if (zonePlayerIds) {
+        for (const cid of zonePlayerIds) {
+          const player = this.state.players.get(cid);
+          if (!player || player.isDead) continue;
+          const kb = player.statusEffects?.find(e => e.debuffCategory === 'knockback' && e.knockbackVelocity && e.knockbackVelocity.remaining > 0);
+          if (!kb) continue;
+          const v = kb.knockbackVelocity!;
+          const step = Math.min(v.remaining, speed * dt);
+          player.position.x += v.dx * step;
+          player.position.z += v.dz * step;
+          v.remaining -= step;
+          if (v.remaining <= 0) {
+            const idx = player.statusEffects.indexOf(kb);
+            if (idx !== -1) player.statusEffects.splice(idx, 1);
+          }
         }
       }
     }

@@ -29,7 +29,6 @@ export interface DebuffEffectTable {
   hasKnockback?: {
     knockbackDistance: number;
   };
-  hasFear?: boolean;
   preventEquipment?: {
     equipmentSlotDisabled: string;
   };

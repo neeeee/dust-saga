@@ -238,6 +238,7 @@ export interface BuffEffectTable {
   devotion?: boolean;
   magicalAid?: { mpRestorePercent: number };
   knockback?: { distance: number };
+  misdirection?: boolean;
 }
 
 export interface BuffData {
@@ -268,6 +269,7 @@ export interface BuffData {
   elementalAbsorption?: { elements: string[]; convertTo: 'hp' | 'mp' };
   devotionLink?: { partnerId: string };
   magicalAid?: { mpRestorePercent: number };
+  misdirection?: boolean;
   spellInterruptResistPercent?: number;
   debuffResistPercent?: number;
   damageRedirectTargetId?: string;
@@ -326,6 +328,8 @@ export interface StatusEffect {
   barrierType?: 'physical' | 'magical';
   knockbackVelocity?: { dx: number; dz: number; remaining: number };
   removeResistBuffs?: string[];
+  disablePhysicalAttacks?: boolean;
+  attackHalved?: boolean;
   lastInRangeAt?: number;
   songProximityBuff?: boolean;
   lastPulseAt?: number;

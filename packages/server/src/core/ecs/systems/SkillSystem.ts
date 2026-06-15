@@ -282,8 +282,8 @@ export class SkillSystem {
     }
 
     if (session.stats.mana < skill.mpCost) {
-      const hasDevotion = session.statusEffects?.some(e => e.buffData?.devotionLink);
-      if (!hasDevotion) {
+      const devotionFx = session.statusEffects?.find(e => e.buffData?.devotionLink);
+      if (!devotionFx) {
         return { canUse: false, error: 'no_mana' };
       }
     }
@@ -327,6 +327,13 @@ export class SkillSystem {
 
     if (session.statusEffects?.some(e => e.type === StatusEffectType.BURN) && skill.damageType === 'physical' && skill.basePower && skill.basePower > 0) {
       return { canUse: false, error: 'burn' };
+    }
+
+    if (session.statusEffects?.some(e => e.disablePhysicalAttacks)) {
+      const isPhysicalDamage = skill.damageType === 'physical' && skill.basePower && skill.basePower > 0;
+      if (isPhysicalDamage) {
+        return { canUse: false, error: 'disabled' };
+      }
     }
 
     const inferredType = skill.skillType ?? this.inferSkillType(skill);
@@ -645,7 +652,8 @@ export class SkillSystem {
       : (session.statPoints.DEX || 0) + (baseStats.DEX || 0);
 
     const hasBurn = !isMagical && session.statusEffects?.some(e => e.type === StatusEffectType.BURN);
-    const effectivePrimaryStat = hasBurn ? Math.floor(primaryStat * 0.5) : primaryStat;
+    const hasAttackHalved = !isMagical && session.statusEffects?.some(e => e.attackHalved);
+    const effectivePrimaryStat = hasBurn ? Math.floor(primaryStat * 0.5) : hasAttackHalved ? Math.floor(primaryStat * 0.5) : primaryStat;
 
     const defenseStat = isMagical ? target.magicDefense : target.defense;
 
@@ -923,6 +931,8 @@ export class SkillSystem {
       { prop: 'hasStun', effectType: StatusEffectType.STUN, extra: { duration: (dt.hasStun as any)?.duration * 1000 } },
       { prop: 'hasSilence', effectType: StatusEffectType.SILENCE, extra: { duration: (dt.hasSilence as any)?.duration * 1000 } },
       { prop: 'hasKnockback', effectType: StatusEffectType.BUFF_GENERIC, extra: { debuffCategory: 'knockback', knockbackVelocity: { dx: 0, dz: 0, remaining: 0 } } },
+      { prop: 'disablePhysicalAttacks', effectType: StatusEffectType.BUFF_GENERIC, extra: { disablePhysicalAttacks: true } },
+      { prop: 'attackHalved', effectType: StatusEffectType.BUFF_GENERIC, extra: { attackHalved: true } },
       { prop: 'preventFieldSpells', effectType: StatusEffectType.PREVENT_FIELD_SPELLS },
       { prop: 'preventResurrect', effectType: StatusEffectType.PREVENT_RESSURECT },
       { prop: 'curse', effectType: StatusEffectType.CURSE },
@@ -1252,6 +1262,11 @@ export class SkillSystem {
     if (bt.devotion && casterSession) {
       target.statusEffects = target.statusEffects.filter(e => !(e.skillName === skill.name && e.buffData?.devotionLink));
       pushEffect(StatusEffectType.BUFF_GENERIC, 0, { devotionLink: { partnerId: sourceId } });
+    }
+
+    if (bt.misdirection) {
+      target.statusEffects = target.statusEffects.filter(e => !(e.skillName === skill.name && e.buffData?.misdirection));
+      pushEffect(StatusEffectType.BUFF_GENERIC, 0, { misdirection: true });
     }
 
     if (bt.spellInterruptResist) {

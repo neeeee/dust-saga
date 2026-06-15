@@ -10,6 +10,16 @@ import {
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 import { hasLineOfSight } from '../../world/LineOfSight';
 
+function checkDevotionMana(ctx: NetworkContext, session: PlayerSession, mpCost: number): boolean {
+  if (session.stats.mana >= mpCost) return true;
+  const devotionFx = session.statusEffects?.find(e => e.buffData?.devotionLink);
+  if (!devotionFx) return false;
+  const partnerId = devotionFx.buffData!.devotionLink!.partnerId;
+  const partner = ctx.state.players.get(partnerId);
+  const combined = session.stats.mana + (partner?.stats.mana || 0);
+  return combined >= mpCost;
+}
+
 export function registerHandlers(registry: Map<PacketType, PacketHandler>): void {
   registry.set(PacketType.SKILL_USE, handleSkillUse);
 }
@@ -37,6 +47,16 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
       type: PacketType.SKILL_USE,
       timestamp: Date.now(),
       data: { skillName, error: check.error }
+    });
+    return;
+  }
+
+  const mpCost = earlySkillDef?.mpCost || 0;
+  if (mpCost > 0 && !checkDevotionMana(ctx, session, mpCost)) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.SKILL_USE,
+      timestamp: Date.now(),
+      data: { skillName, error: 'no_mana' }
     });
     return;
   }
@@ -550,6 +570,16 @@ function handleGroundAOESkillUse(
   }
 
   const groundSkillDef = ctx.skillSys.findSkillDefinition(skillName);
+  const groundMpCost = groundSkillDef?.mpCost || 0;
+  if (groundMpCost > 0 && !checkDevotionMana(ctx, session, groundMpCost)) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.SKILL_USE,
+      timestamp: Date.now(),
+      data: { skillName, error: 'no_mana' }
+    });
+    return;
+  }
+
   if (groundSkillDef?.consumableItem) {
     const needed = groundSkillDef.consumableItemQuantity || 1;
     const count = session.inventory.filter(i => i.itemId === groundSkillDef.consumableItem).reduce((s, i) => s + i.quantity, 0);
