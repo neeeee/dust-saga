@@ -531,43 +531,33 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.DAMAGE, (packet: any) => {
-      const { targetId, damage, isCritical, elementalDamage, missed } = packet.data;
+      const { targetId, damage, isCritical, elementalDamage, missed, physicalDamage, physicalElementalDamage } = packet.data;
+
       if (missed) {
         this.engine.showDamageNumber(targetId, 0, false, undefined, true);
-      } else {
-        this.engine.showDamageNumber(targetId, damage, isCritical);
-
-        if (elementalDamage && Array.isArray(elementalDamage)) {
-          for (const el of elementalDamage) {
-            this.engine.showDamageNumber(targetId, el.damage, false, el.element);
-          }
-        }
-
-        const entity = this.knownEntities.get(targetId);
-        if (entity?.type === 'enemy') {
-          const enemyData = this.enemies.get(targetId);
-          if (enemyData) {
-            enemyData.health = Math.max(0, enemyData.health - damage);
-            if (elementalDamage) {
-              for (const el of elementalDamage) {
-                enemyData.health = Math.max(0, enemyData.health - el.damage);
-              }
-            }
-          }
-        }
-        if (entity?.type === 'player') {
-          entity.data.health = Math.max(0, (entity.data.health || 0) - damage);
-          if (elementalDamage) {
-            for (const el of elementalDamage) {
-              entity.data.health = Math.max(0, (entity.data.health || 0) - el.damage);
-            }
-          }
-        }
+        return;
       }
+
+      let totalDamage = damage || 0;
+
+      this.engine.showDamageNumber(targetId, damage, isCritical);
 
       if (elementalDamage && Array.isArray(elementalDamage)) {
         for (const el of elementalDamage) {
           this.engine.showDamageNumber(targetId, el.damage, false, el.element);
+          totalDamage += el.damage;
+        }
+      }
+
+      if (physicalDamage) {
+        this.engine.showDamageNumber(targetId, physicalDamage, false);
+        totalDamage += physicalDamage;
+      }
+
+      if (physicalElementalDamage && Array.isArray(physicalElementalDamage)) {
+        for (const el of physicalElementalDamage) {
+          this.engine.showDamageNumber(targetId, el.damage, false, el.element);
+          totalDamage += el.damage;
         }
       }
 
@@ -575,30 +565,15 @@ export class GameClient {
       if (entity?.type === 'enemy') {
         const enemyData = this.enemies.get(targetId);
         if (enemyData) {
-          enemyData.health = Math.max(0, enemyData.health - damage);
-          if (elementalDamage) {
-            for (const el of elementalDamage) {
-              enemyData.health = Math.max(0, enemyData.health - el.damage);
-            }
-          }
+          enemyData.health = Math.max(0, enemyData.health - totalDamage);
         }
       }
       if (entity?.type === 'player') {
-        entity.data.health = Math.max(0, (entity.data.health || 0) - damage);
-        if (elementalDamage) {
-          for (const el of elementalDamage) {
-            entity.data.health = Math.max(0, entity.data.health - el.damage);
-          }
-        }
+        entity.data.health = Math.max(0, (entity.data.health || 0) - totalDamage);
       }
 
       if (targetId === this.playerId && this.stats) {
-        this.stats.health = Math.max(0, this.stats.health - damage);
-        if (elementalDamage) {
-          for (const el of elementalDamage) {
-            this.stats.health = Math.max(0, this.stats.health - el.damage);
-          }
-        }
+        this.stats.health = Math.max(0, this.stats.health - totalDamage);
         this.callbacks.onStatsUpdate?.(this.stats);
       }
     });

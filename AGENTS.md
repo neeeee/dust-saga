@@ -470,3 +470,11 @@ These are all data-driven via `innateProcs` on the weapon definition. The `eleme
 4. **Integration**: Hook into auto-attack, manual attack, physical skill damage
 5. **Dark enhancement**: Recoil damage + element-locked procs
 6. **Souls UI**: Client socketing interface (deferred)
+
+
+## Important Notes
+
+1. Proficiency and skill point allocation are two separate systems
+  - A player can allocate 26 points into a skill category and have 0 proficiency
+  - Skills that scale off proficiency require PROFICIENCY at or above the thresholds in the definition
+  - Consider this case: class can allocate 41 points in category. player allocates points to reach 26 in category, starting with 5 base in category. player proficiency in category is 0/26. player uses skills in category enough to get 3 proficiency points. player proficiency in category is now 3/26.

@@ -624,13 +624,6 @@ export interface StatBonusBreakdown {
   totalDisorderResist?: number;
   buffCooldownReduction?: number;
   healPercent?: number;
-  auraDamage?: AuraDamageStats;
-}
-
-export interface AuraDamageStats {
-  gloomActive: boolean;
-  gloomDamage: number;
-  gloomRecoil: number;
 }
 
 export function computeStatBreakdown(

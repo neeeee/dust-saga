@@ -113,6 +113,11 @@ export interface SkillDefinition {
   lineOfSightRequired?: boolean;
   scalingStat?: 'STR' | 'DEX' | 'INT' | 'SPI' | 'AGI' | 'STA';
   proficiencyBonus?: number;
+  dualPhysical?: {
+    basePower: number;
+    damageSubType?: PhysicalDamageSubType;
+    scalingStat?: 'STR' | 'DEX' | 'INT' | 'SPI' | 'AGI' | 'STA';
+  };
 }
 
 export interface SkillSubCategory {
@@ -191,6 +196,11 @@ export interface ClassSpecificSkill {
   lineOfSightRequired?: boolean;
   scalingStat?: 'STR' | 'DEX' | 'INT' | 'SPI' | 'AGI' | 'STA';
   proficiencyBonus?: number;
+  dualPhysical?: {
+    basePower: number;
+    damageSubType?: PhysicalDamageSubType;
+    scalingStat?: 'STR' | 'DEX' | 'INT' | 'SPI' | 'AGI' | 'STA';
+  };
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;

@@ -93,6 +93,8 @@ export interface TargetStats {
 export interface SkillUseResult {
   success: boolean;
   damage?: number;
+  physicalDamage?: number;
+  physicalElementalDamage?: Array<{ element: string; damage: number }>;
   healing?: number;
   mpRestored?: number;
   mpDamage?: number;
@@ -567,6 +569,7 @@ export class SkillSystem {
             result.statusEffects = debuffEffects;
           }
         }
+        this.applyDualPhysical(session, skill, target, result);
         return result;
       }
     }
@@ -613,6 +616,28 @@ export class SkillSystem {
 
     return { success: true };
   }
+
+  private applyDualPhysical(
+    session: PlayerSession,
+    skill: SkillDefinition,
+    target: TargetStats,
+    result: SkillUseResult
+  ): void {
+    if (!skill.dualPhysical) return;
+    const physSkill: SkillDefinition = {
+      ...skill,
+      basePower: skill.dualPhysical.basePower,
+      damageType: 'physical' as SkillDefinition['damageType'],
+      damageSubType: (skill.dualPhysical.damageSubType ?? 'slash') as SkillDefinition['damageSubType'],
+      scalingStat: skill.dualPhysical.scalingStat,
+      debuffEffectTable: undefined,
+      hasDebuff: false,
+    };
+    const physResult = this.calculateSkillDamageInternal(session, physSkill, target, 'physical');
+    result.physicalDamage = physResult.damage;
+    result.physicalElementalDamage = physResult.elementalDamage;
+  }
+
   calculateAOEDamage(
     session: PlayerSession,
     skillName: string,
@@ -637,6 +662,9 @@ export class SkillSystem {
       if (debuffEffects.length > 0) {
         result.statusEffects = debuffEffects;
       }
+    }
+    if (skill.dualPhysical) {
+      this.applyDualPhysical(session, skill, target, result);
     }
     return result;
   }

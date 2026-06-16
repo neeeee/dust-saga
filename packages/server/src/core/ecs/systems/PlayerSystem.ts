@@ -26,9 +26,6 @@ import {
   computeAilmentResist,
   computeDisorderResist,
   getMaxPotential,
-  getGloomDamage,
-  getGloomRecoil,
-  isGloomActive,
 } from '@dust-saga/shared';
 
 export class PlayerSystem extends System {
@@ -394,17 +391,6 @@ export class PlayerSystem extends System {
     session.statBreakdown.totalAilmentResist = computeAilmentResist(totalSTA, ailmentResist);
     session.statBreakdown.totalDisorderResist = computeDisorderResist(totalSPI, disorderResist);
     session.statBreakdown.healPercent = gear.healPercent + effective.healPercent;
-
-    const darknessProf = session.skillProficiencies['Darkness'] || 0;
-    const gloomActive = isGloomActive(darknessProf);
-    if (gloomActive) {
-      const auraMult = effective.auraDamageMultiplier || 1;
-      const gloomDmg = getGloomDamage(totalSPI, auraMult);
-      const gloomRecoil = getGloomRecoil(gloomDmg, darknessProf);
-      session.statBreakdown.auraDamage = { gloomActive: true, gloomDamage: gloomDmg, gloomRecoil };
-    } else {
-      session.statBreakdown.auraDamage = { gloomActive: false, gloomDamage: 0, gloomRecoil: 0 };
-    }
   }
 
   healPlayer(session: PlayerSession): void {

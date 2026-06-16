@@ -758,12 +758,21 @@ onMounted(async () => {
 
   network.onPacket(PacketType.DAMAGE, (packet: any) => {
     if (packet.data.targetId === targetId.value && !packet.data.missed) {
-      targetHealth.value = Math.max(0, targetHealth.value - packet.data.damage);
+      let total = packet.data.damage || 0;
       if (packet.data.elementalDamage) {
         for (const el of packet.data.elementalDamage) {
-          targetHealth.value = Math.max(0, targetHealth.value - el.damage);
+          total += el.damage;
         }
       }
+      if (packet.data.physicalDamage) {
+        total += packet.data.physicalDamage;
+      }
+      if (packet.data.physicalElementalDamage) {
+        for (const el of packet.data.physicalElementalDamage) {
+          total += el.damage;
+        }
+      }
+      targetHealth.value = Math.max(0, targetHealth.value - total);
     }
   });
 

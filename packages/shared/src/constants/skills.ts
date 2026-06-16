@@ -2540,10 +2540,10 @@ export const CLASS_SKILL_DATA: Record<
             cooldown: 10,
             duration: 6,
             description:
-              "Summon darkness from the abyss to damage all enemies in range",
+              "Pulses of darkness that deal both magical and physical damage to all enemies in range",
             damageType: DamageType.MAGICAL,
             damageSubType: MagicalDamageSubType.DARK,
-            basePower: 5,
+            basePower: 3,
             isAOE: true,
             aoeTargetMode: AOETargetMode.SELF_CENTERED,
             aoeRadius: 6,
@@ -2554,6 +2554,10 @@ export const CLASS_SKILL_DATA: Record<
             debuffEffectTable: {
               debuffCategory: "weaken",
               removeResistBuffs: ['fire', 'ice', 'lightning', 'dark', 'holy'],
+            },
+            dualPhysical: {
+              basePower: 2,
+              damageSubType: PhysicalDamageSubType.SLASH,
             },
           },
           Ramkyado: {

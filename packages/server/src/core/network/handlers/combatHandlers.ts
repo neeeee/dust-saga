@@ -34,14 +34,13 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
     if (player && data.targetId !== characterId) {
       const totalAutoDmg = damageInfo.damage + (damageInfo.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
       const autoDmgResult = ctx.applyPlayerDamage(player, totalAutoDmg, characterId, damageInfo.damageType || 'physical', damageInfo.isCritical || false, session.zoneId, session.position);
-      let auraDamage = null;
-      if (!autoDmgResult.redirected && !damageInfo.missed && damageInfo.damage > 0) {
-        auraDamage = ctx.processGloomAura(session, data.targetId);
+      if (!damageInfo.missed && damageInfo.damage > 0) {
+        ctx.processGloomRecoil(session);
       }
       ctx.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
-        data: { ...damageInfo, damage: autoDmgResult.redirected ? 0 : autoDmgResult.damageTaken, missed: autoDmgResult.redirected ? true : damageInfo.missed, auraDamage: auraDamage ?? undefined }
+        data: { ...damageInfo, damage: autoDmgResult.redirected ? 0 : autoDmgResult.damageTaken, missed: autoDmgResult.redirected ? true : damageInfo.missed }
       });
       if (!autoDmgResult.redirected) {
         ctx.sendToPlayer(data.targetId, {
@@ -57,14 +56,13 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
         }
       }
     } else {
-      let auraDamage = null;
       if (!damageInfo.missed && damageInfo.damage > 0) {
-        auraDamage = ctx.processGloomAura(session, data.targetId);
+        ctx.processGloomRecoil(session);
       }
       ctx.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
-        data: { ...damageInfo, auraDamage: auraDamage ?? undefined }
+        data: { ...damageInfo }
       });
     }
 
@@ -116,14 +114,13 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
     if (pTarget && info.targetId !== characterId) {
       const manualTotal = info.damage + (info.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
       const manualDmgResult = ctx.applyPlayerDamage(pTarget, manualTotal, characterId, info.damageType || 'physical', info.isCritical || false, session.zoneId, session.position);
-      let auraDamage = null;
-      if (!manualDmgResult.redirected && !info.missed && info.damage > 0) {
-        auraDamage = ctx.processGloomAura(session, info.targetId);
+      if (!info.missed && info.damage > 0) {
+        ctx.processGloomRecoil(session);
       }
       ctx.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
-        data: { ...info, damage: manualDmgResult.redirected ? 0 : manualDmgResult.damageTaken, missed: manualDmgResult.redirected ? true : info.missed, auraDamage: auraDamage ?? undefined }
+        data: { ...info, damage: manualDmgResult.redirected ? 0 : manualDmgResult.damageTaken, missed: manualDmgResult.redirected ? true : info.missed }
       });
       if (!manualDmgResult.redirected) {
         ctx.sendToPlayer(info.targetId, {
@@ -139,14 +136,13 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
         }
       }
     } else {
-      let auraDamage = null;
       if (!info.missed && info.damage > 0) {
-        auraDamage = ctx.processGloomAura(session, info.targetId);
+        ctx.processGloomRecoil(session);
       }
       ctx.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
-        data: { ...info, auraDamage: auraDamage ?? undefined }
+        data: { ...info }
       });
     }
 
