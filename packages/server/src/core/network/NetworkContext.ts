@@ -86,6 +86,7 @@ export interface NetworkContext {
   applyAOEDamageToTargets(session: PlayerSession, skillName: string, aoePosition: { x: number; y: number; z: number }, aoeRadius: number, primaryResult?: any): void;
   applySingleTargetSkillDamage(session: PlayerSession, skillName: string, targetId: string, result: any): void;
   processOnHitProcs(session: PlayerSession, targetId: string, damageDealt: number, isPhysical: boolean): void;
+  processGloomAura(session: PlayerSession, targetId: string): { gloom: number; gloomRecoil: number } | null;
   spawnAOEZone(session: PlayerSession, skillName: string, position: { x: number; y: number; z: number }, radius: number): void;
   executeAOESkillInternal(session: PlayerSession, skillName: string, aoePosition: { x: number; y: number; z: number }): void;
   consumeDebuffsOnHit(targetSession: PlayerSession): void;

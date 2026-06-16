@@ -44,3 +44,4 @@ export * from './utils/enhancement';
 export { safeFormulaEval } from './utils/safeFormula';
 export { SpatialHash } from './utils/spatialHash';
 export type { SpatialEntry } from './utils/spatialHash';
+export * from './constants/aura';

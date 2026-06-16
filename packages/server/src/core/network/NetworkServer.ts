@@ -39,7 +39,7 @@ import { QuestSystem } from '../../systems/QuestSystem';
 import { v4 as uuidv4 } from 'uuid';
 import { NetworkContext, ServerGameState, PacketHandler } from './NetworkContext';
 import { registerAllHandlers } from './handlers';
-import { collectProcs, buildProcStatusEffect, getProcResistCategory, isDrainLifeProc } from '../combat/ProcSystem';
+import { collectProcs, buildProcStatusEffect, getProcResistCategory, isDrainLifeProc, getDarkRecoilPercent } from '../combat/ProcSystem';
 
 const STA_DEBUFF_CATEGORIES = new Set(['ailment', 'stun', 'trip', 'knockdown', 'knockback', 'bleed']);
 const SPI_DEBUFF_CATEGORIES = new Set(['disorder', 'freeze', 'burn', 'curse', 'sleep', 'weakness', 'weaken']);
@@ -995,8 +995,8 @@ export class NetworkServer implements NetworkContext {
       this.applyProcEffect(proc, session, targetId, damageDealt);
     }
 
-    if (enhancementElement === 'dark' && enhancementLevel < 10) {
-      const recoilMultiplier = Math.max(0, 0.05 - enhancementLevel * 0.004);
+    if (enhancementElement === 'dark') {
+      const recoilMultiplier = getDarkRecoilPercent(enhancementLevel);
       const recoilDamage = Math.floor(damageDealt * recoilMultiplier);
       if (recoilDamage > 0) {
         session.stats.health = Math.max(0, session.stats.health - recoilDamage);
@@ -1053,6 +1053,43 @@ export class NetworkServer implements NetworkContext {
       });
       this.broadcastEntityEffects(player);
     }
+  }
+
+  processGloomAura(session: PlayerSession, targetId: string): { gloom: number; gloomRecoil: number } | null {
+    const aura = session.statBreakdown?.auraDamage;
+    if (!aura?.gloomActive || aura.gloomDamage <= 0) return null;
+
+    const baseGloom = aura.gloomDamage;
+    let actualGloom = baseGloom;
+
+    const enemy = this.spawnMgr.getEnemy(targetId);
+    if (enemy && enemy.state !== 'dead' && enemy.health > 0) {
+      const def = getEnemyDefinition(enemy.enemyType);
+      const darkResist = def?.darkResist ?? 0;
+      actualGloom = Math.max(1, Math.floor(baseGloom * (1 - darkResist / 100)));
+      this.damageEnemy(enemy, actualGloom, session.characterId);
+    } else {
+      const playerTarget = this.state.players.get(targetId);
+      if (playerTarget) {
+        const darkResist = playerTarget.statBreakdown?.gearCombat?.darkResist ?? 0;
+        actualGloom = Math.max(1, Math.floor(baseGloom * (1 - darkResist / 100)));
+        playerTarget.stats.health = Math.max(0, playerTarget.stats.health - actualGloom);
+      }
+    }
+
+    if (aura.gloomRecoil > 0) {
+      session.stats.health = Math.max(0, session.stats.health - aura.gloomRecoil);
+      this.sendToPlayer(session.characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown }
+      });
+      if (session.stats.health <= 0) {
+        this.handlePlayerDeath(session);
+      }
+    }
+
+    return { gloom: actualGloom, gloomRecoil: aura.gloomRecoil };
   }
 
   private findGuardian(targetId: string): PlayerSession | null {
@@ -1776,12 +1813,18 @@ export class NetworkServer implements NetworkContext {
 
       const enemy = this.spawnMgr.getEnemy(target.id);
       if (enemy) {
-        const { died } = this.damageEnemy(enemy, targetResult.damage, characterId);
+        const { died: mainDied } = this.damageEnemy(enemy, targetResult.damage, characterId);
         if (targetResult.elementalDamage) {
           for (const el of targetResult.elementalDamage) {
             this.damageEnemy(enemy, el.damage, characterId);
           }
         }
+        let auraDamage: { gloom: number; gloomRecoil: number } | null = null;
+        const isPhysical = (targetResult.damageType || 'physical') === 'physical';
+        if (isPhysical && enemy.health > 0) {
+          auraDamage = this.processGloomAura(session, target.id);
+        }
+        const died = mainDied || enemy.health <= 0;
         this.broadcastInZone(session.zoneId, {
           type: PacketType.DAMAGE,
           timestamp: Date.now(),
@@ -1793,6 +1836,7 @@ export class NetworkServer implements NetworkContext {
             damageType: targetResult.damageType || 'physical',
             skillName,
             elementalDamage: targetResult.elementalDamage,
+            auraDamage: auraDamage ?? undefined,
           }
         });
 
@@ -1861,12 +1905,18 @@ export class NetworkServer implements NetworkContext {
           }
         }
 
-        this.processOnHitProcs(session, target.id, targetResult.damage, (targetResult.damageType || 'physical') === 'physical');
+        if (enemy.state !== 'dead') {
+          this.processOnHitProcs(session, target.id, targetResult.damage, (targetResult.damageType || 'physical') === 'physical');
+        }
       } else {
         const playerTarget = this.state.players.get(target.id);
         if (playerTarget && target.id !== characterId) {
           const coneTotalDmg = targetResult.damage + (targetResult.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
           const coneDmgRslt = this.applyPlayerDamage(playerTarget, coneTotalDmg, characterId, targetResult.damageType || 'physical', targetResult.isCritical || false, session.zoneId);
+          let auraDamage: { gloom: number; gloomRecoil: number } | null = null;
+          if (!coneDmgRslt.redirected && (targetResult.damageType || 'physical') === 'physical') {
+            auraDamage = this.processGloomAura(session, target.id);
+          }
           this.broadcastInZone(session.zoneId, {
             type: PacketType.DAMAGE,
             timestamp: Date.now(),
@@ -1879,6 +1929,7 @@ export class NetworkServer implements NetworkContext {
               skillName,
               elementalDamage: coneDmgRslt.redirected ? [] : targetResult.elementalDamage,
               missed: coneDmgRslt.redirected ? true : undefined,
+              auraDamage: auraDamage ?? undefined,
             }
           });
           if (!coneDmgRslt.redirected) {
@@ -1887,7 +1938,7 @@ export class NetworkServer implements NetworkContext {
               timestamp: Date.now(),
               data: { characterId: target.id, stats: playerTarget.stats, statBreakdown: playerTarget.statBreakdown, skillProficiencies: playerTarget.skillProficiencies, skillAdeptness: playerTarget.skillAdeptness }
             });
-            this.processOnHitProcs(session, target.id, coneDmgRslt.damageTaken, (targetResult.damageType || 'physical') === 'physical');
+            this.processOnHitProcs(session, target.id, targetResult.damage, (targetResult.damageType || 'physical') === 'physical');
             this.broadcastInZone(session.zoneId, {
               type: PacketType.STATS_UPDATE,
               timestamp: Date.now(),
@@ -1921,12 +1972,18 @@ export class NetworkServer implements NetworkContext {
           if (hit.damage > 0) {
             const { died } = this.damageEnemy(enemy, hit.damage, characterId);
             if (died) enemyDied = true;
-            this.processOnHitProcs(session, targetId, hit.damage, (result.damageType || 'physical') === 'physical');
+            if (enemy.health > 0) {
+              this.processOnHitProcs(session, targetId, hit.damage, (result.damageType || 'physical') === 'physical');
+            }
           }
           if (hit.elementalDamage) {
             for (const el of hit.elementalDamage) {
               this.damageEnemy(enemy, el.damage, characterId);
             }
+          }
+          let auraDamage: { gloom: number; gloomRecoil: number } | null = null;
+          if ((result.damageType || 'physical') === 'physical' && enemy.health > 0 && hit.damage > 0) {
+            auraDamage = this.processGloomAura(session, targetId);
           }
           this.broadcastInZone(session.zoneId, {
             type: PacketType.DAMAGE,
@@ -1939,6 +1996,7 @@ export class NetworkServer implements NetworkContext {
               damageType: result.damageType || 'physical',
               skillName,
               elementalDamage: hit.elementalDamage,
+              auraDamage: auraDamage ?? undefined,
             }
           });
         }
@@ -1947,7 +2005,7 @@ export class NetworkServer implements NetworkContext {
           timestamp: Date.now(),
           data: { entityId: targetId, health: enemy.health, maxHealth: enemy.maxHealth }
         });
-        if (enemyDied) {
+        if (enemyDied || enemy.health <= 0) {
           this.handleEnemyKill(targetId, characterId);
         }
         return;
@@ -1958,6 +2016,10 @@ export class NetworkServer implements NetworkContext {
         for (const hit of hits) {
           const hitTotal = hit.damage + (hit.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
           const coneDmgResult = this.applyPlayerDamage(playerTarget, hitTotal, characterId, result.damageType || 'physical', hit.isCritical, session.zoneId);
+          let auraDamage: { gloom: number; gloomRecoil: number } | null = null;
+          if (!coneDmgResult.redirected && hit.damage > 0 && (result.damageType || 'physical') === 'physical') {
+            auraDamage = this.processGloomAura(session, targetId);
+          }
           this.broadcastInZone(session.zoneId, {
             type: PacketType.DAMAGE,
             timestamp: Date.now(),
@@ -1970,10 +2032,11 @@ export class NetworkServer implements NetworkContext {
               skillName,
               elementalDamage: coneDmgResult.redirected ? [] : hit.elementalDamage,
               missed: coneDmgResult.redirected ? true : undefined,
+              auraDamage: auraDamage ?? undefined,
             }
           });
-          if (!coneDmgResult.redirected && coneDmgResult.damageTaken > 0) {
-            this.processOnHitProcs(session, targetId, coneDmgResult.damageTaken, (result.damageType || 'physical') === 'physical');
+          if (!coneDmgResult.redirected && hit.damage > 0) {
+            this.processOnHitProcs(session, targetId, hit.damage, (result.damageType || 'physical') === 'physical');
           }
         }
         if (playerTarget.stats.health > 0) {
@@ -1992,13 +2055,20 @@ export class NetworkServer implements NetworkContext {
 
     const enemy = this.spawnMgr.getEnemy(targetId);
     if (enemy) {
-      const { died } = this.damageEnemy(enemy, result.damage!, characterId);
+      const { died: mainDied } = this.damageEnemy(enemy, result.damage!, characterId);
       if (result.elementalDamage) {
         for (const el of result.elementalDamage) {
           this.damageEnemy(enemy, el.damage, characterId);
         }
       }
-      this.processOnHitProcs(session, targetId, result.damage || 0, (result.damageType || 'physical') === 'physical');
+      if (enemy.health > 0) {
+        this.processOnHitProcs(session, targetId, result.damage || 0, (result.damageType || 'physical') === 'physical');
+      }
+      let auraDamage: { gloom: number; gloomRecoil: number } | null = null;
+      if ((result.damageType || 'physical') === 'physical' && enemy.health > 0) {
+        auraDamage = this.processGloomAura(session, targetId);
+      }
+      const died = mainDied || enemy.health <= 0;
       this.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
@@ -2010,6 +2080,7 @@ export class NetworkServer implements NetworkContext {
           damageType: result.damageType || 'physical',
           skillName,
           elementalDamage: result.elementalDamage,
+          auraDamage: auraDamage ?? undefined,
         }
       });
       this.broadcastInZone(session.zoneId, {
@@ -2027,6 +2098,10 @@ export class NetworkServer implements NetworkContext {
     if (playerTarget && targetId !== characterId) {
       const totalPvpDmg = (result.damage || 0) + (result.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
       const skillPvpDmgResult = this.applyPlayerDamage(playerTarget, totalPvpDmg, characterId, result.damageType || 'physical', result.isCritical || false, session.zoneId);
+      let auraDamage: { gloom: number; gloomRecoil: number } | null = null;
+      if (!skillPvpDmgResult.redirected && (result.damageType || 'physical') === 'physical' && result.damage > 0) {
+        auraDamage = this.processGloomAura(session, targetId);
+      }
       this.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
@@ -2039,6 +2114,7 @@ export class NetworkServer implements NetworkContext {
           skillName,
           elementalDamage: skillPvpDmgResult.redirected ? [] : result.elementalDamage,
           missed: skillPvpDmgResult.redirected ? true : undefined,
+          auraDamage: auraDamage ?? undefined,
         }
       });
       if (!skillPvpDmgResult.redirected) {
@@ -2047,8 +2123,8 @@ export class NetworkServer implements NetworkContext {
           timestamp: Date.now(),
           data: { characterId: targetId, stats: playerTarget.stats, statBreakdown: playerTarget.statBreakdown, skillProficiencies: playerTarget.skillProficiencies, skillAdeptness: playerTarget.skillAdeptness }
         });
-        if (skillPvpDmgResult.damageTaken > 0) {
-          this.processOnHitProcs(session, targetId, skillPvpDmgResult.damageTaken, (result.damageType || 'physical') === 'physical');
+        if (result.damage > 0) {
+          this.processOnHitProcs(session, targetId, result.damage, (result.damageType || 'physical') === 'physical');
         }
         if (playerTarget.stats.health <= 0) {
           this.handlePlayerDeath(playerTarget);

@@ -34,10 +34,14 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
     if (player && data.targetId !== characterId) {
       const totalAutoDmg = damageInfo.damage + (damageInfo.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
       const autoDmgResult = ctx.applyPlayerDamage(player, totalAutoDmg, characterId, damageInfo.damageType || 'physical', damageInfo.isCritical || false, session.zoneId, session.position);
+      let auraDamage = null;
+      if (!autoDmgResult.redirected && !damageInfo.missed && damageInfo.damage > 0) {
+        auraDamage = ctx.processGloomAura(session, data.targetId);
+      }
       ctx.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
-        data: { ...damageInfo, damage: autoDmgResult.redirected ? 0 : autoDmgResult.damageTaken, missed: autoDmgResult.redirected ? true : damageInfo.missed }
+        data: { ...damageInfo, damage: autoDmgResult.redirected ? 0 : autoDmgResult.damageTaken, missed: autoDmgResult.redirected ? true : damageInfo.missed, auraDamage: auraDamage ?? undefined }
       });
       if (!autoDmgResult.redirected) {
         ctx.sendToPlayer(data.targetId, {
@@ -45,18 +49,22 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
           timestamp: Date.now(),
           data: { characterId: data.targetId, stats: player.stats, statBreakdown: player.statBreakdown, skillProficiencies: player.skillProficiencies, skillAdeptness: player.skillAdeptness }
         });
-        if (!damageInfo.missed && autoDmgResult.damageTaken > 0) {
-          ctx.processOnHitProcs(session, data.targetId, autoDmgResult.damageTaken, (damageInfo.damageType || 'physical') === 'physical');
+        if (!damageInfo.missed && damageInfo.damage > 0) {
+          ctx.processOnHitProcs(session, data.targetId, damageInfo.damage, (damageInfo.damageType || 'physical') === 'physical');
         }
         if (player.stats.health <= 0) {
           ctx.handlePlayerDeath(player);
         }
       }
     } else {
+      let auraDamage = null;
+      if (!damageInfo.missed && damageInfo.damage > 0) {
+        auraDamage = ctx.processGloomAura(session, data.targetId);
+      }
       ctx.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
-        data: damageInfo
+        data: { ...damageInfo, auraDamage: auraDamage ?? undefined }
       });
     }
 
@@ -68,7 +76,9 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
       }
       if (!damageInfo.missed && damageInfo.damage > 0) {
         ctx.enmity.addDamageEnmity(enemy, characterId, damageInfo.damage);
-        ctx.processOnHitProcs(session, data.targetId, damageInfo.damage, true);
+        if (enemy.health > 0) {
+          ctx.processOnHitProcs(session, data.targetId, damageInfo.damage, true);
+        }
       } else if (damageInfo.missed) {
         ctx.enmity.addEnmity(enemy, characterId, 50, 0);
       }
@@ -106,10 +116,14 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
     if (pTarget && info.targetId !== characterId) {
       const manualTotal = info.damage + (info.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
       const manualDmgResult = ctx.applyPlayerDamage(pTarget, manualTotal, characterId, info.damageType || 'physical', info.isCritical || false, session.zoneId, session.position);
+      let auraDamage = null;
+      if (!manualDmgResult.redirected && !info.missed && info.damage > 0) {
+        auraDamage = ctx.processGloomAura(session, info.targetId);
+      }
       ctx.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
-        data: { ...info, damage: manualDmgResult.redirected ? 0 : manualDmgResult.damageTaken, missed: manualDmgResult.redirected ? true : info.missed }
+        data: { ...info, damage: manualDmgResult.redirected ? 0 : manualDmgResult.damageTaken, missed: manualDmgResult.redirected ? true : info.missed, auraDamage: auraDamage ?? undefined }
       });
       if (!manualDmgResult.redirected) {
         ctx.sendToPlayer(info.targetId, {
@@ -117,18 +131,22 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
           timestamp: Date.now(),
           data: { characterId: info.targetId, stats: pTarget.stats, statBreakdown: pTarget.statBreakdown, skillProficiencies: pTarget.skillProficiencies, skillAdeptness: pTarget.skillAdeptness }
         });
-        if (!info.missed && manualDmgResult.damageTaken > 0) {
-          ctx.processOnHitProcs(session, info.targetId, manualDmgResult.damageTaken, (info.damageType || 'physical') === 'physical');
+        if (!info.missed && info.damage > 0) {
+          ctx.processOnHitProcs(session, info.targetId, info.damage, (info.damageType || 'physical') === 'physical');
         }
         if (pTarget.stats.health <= 0) {
           ctx.handlePlayerDeath(pTarget);
         }
       }
     } else {
+      let auraDamage = null;
+      if (!info.missed && info.damage > 0) {
+        auraDamage = ctx.processGloomAura(session, info.targetId);
+      }
       ctx.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
-        data: info
+        data: { ...info, auraDamage: auraDamage ?? undefined }
       });
     }
 
@@ -136,7 +154,9 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
       if (!info.missed && info.damage > 0) {
         const manualTotalDmg = info.damage + (info.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
         ctx.enmity.addDamageEnmity(enemy, characterId, manualTotalDmg);
-        ctx.processOnHitProcs(session, info.targetId, info.damage, true);
+        if (enemy.health > 0) {
+          ctx.processOnHitProcs(session, info.targetId, info.damage, true);
+        }
       } else if (info.missed) {
         ctx.enmity.addEnmity(enemy, characterId, 50, 0);
       }

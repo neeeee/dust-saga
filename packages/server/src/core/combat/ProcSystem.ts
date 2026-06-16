@@ -1,5 +1,5 @@
 import {
-  PlayerSession, EnemyInstance, StatusEffect, StatusEffectType,
+  PlayerSession, StatusEffect, StatusEffectType,
   OnHitProc, ProcEffectType, STATUS_EFFECT_DEFS,
   getItem,
 } from '@dust-saga/shared';
@@ -50,9 +50,9 @@ export function collectProcs(session: PlayerSession): CollectedProcs {
   let enhancementElement: string | undefined;
 
   if (weapon) {
-    enhancementLevel = (weapon as any).enhancementLevel || 0;
-    enhancementElement = (weapon as any).enhancementElement;
-    const weaponDef = getItem((weapon as any).itemId);
+    enhancementLevel = weapon.enhancementLevel || 0;
+    enhancementElement = weapon.enhancementElement;
+    const weaponDef = getItem(weapon.itemId);
     if (weaponDef?.innateProcs) {
       for (const proc of weaponDef.innateProcs) {
         if (proc.element && proc.element !== enhancementElement) continue;
@@ -101,4 +101,13 @@ export function getProcResistCategory(proc: OnHitProc): string | undefined {
 
 export function isDrainLifeProc(proc: OnHitProc): boolean {
   return proc.effect === 'drainLife';
+}
+
+const DARK_RECOIL_TABLE: Record<number, number> = {
+  0: 0.50, 1: 0.50, 2: 0.50, 3: 0.50, 4: 0.50,
+  5: 0.40, 6: 0.36, 7: 0.30, 8: 0.25, 9: 0.15, 10: 0.12,
+};
+
+export function getDarkRecoilPercent(enhancementLevel: number): number {
+  return DARK_RECOIL_TABLE[enhancementLevel] ?? 0;
 }

@@ -123,4 +123,5 @@ export interface DamageInfo {
   damageType: 'physical' | 'magical';
   elementalDamage?: Array<{ element: string; damage: number }>;
   missed?: boolean;
+  auraDamage?: { gloom: number; gloomRecoil: number };
 }
