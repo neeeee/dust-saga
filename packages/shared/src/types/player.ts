@@ -72,6 +72,7 @@ export interface PlayerSession {
     ring_1: any | null;
     ring_2: any | null;
   };
+  socketedSouls?: (InventoryItem | null)[];
   quests: Array<{
     questId: string;
     status: string;

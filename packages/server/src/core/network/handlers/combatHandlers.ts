@@ -45,6 +45,9 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
           timestamp: Date.now(),
           data: { characterId: data.targetId, stats: player.stats, statBreakdown: player.statBreakdown, skillProficiencies: player.skillProficiencies, skillAdeptness: player.skillAdeptness }
         });
+        if (!damageInfo.missed && autoDmgResult.damageTaken > 0) {
+          ctx.processOnHitProcs(session, data.targetId, autoDmgResult.damageTaken, (damageInfo.damageType || 'physical') === 'physical');
+        }
         if (player.stats.health <= 0) {
           ctx.handlePlayerDeath(player);
         }
@@ -65,6 +68,7 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
       }
       if (!damageInfo.missed && damageInfo.damage > 0) {
         ctx.enmity.addDamageEnmity(enemy, characterId, damageInfo.damage);
+        ctx.processOnHitProcs(session, data.targetId, damageInfo.damage, true);
       } else if (damageInfo.missed) {
         ctx.enmity.addEnmity(enemy, characterId, 50, 0);
       }
@@ -113,6 +117,9 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
           timestamp: Date.now(),
           data: { characterId: info.targetId, stats: pTarget.stats, statBreakdown: pTarget.statBreakdown, skillProficiencies: pTarget.skillProficiencies, skillAdeptness: pTarget.skillAdeptness }
         });
+        if (!info.missed && manualDmgResult.damageTaken > 0) {
+          ctx.processOnHitProcs(session, info.targetId, manualDmgResult.damageTaken, (info.damageType || 'physical') === 'physical');
+        }
         if (pTarget.stats.health <= 0) {
           ctx.handlePlayerDeath(pTarget);
         }
@@ -129,6 +136,7 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
       if (!info.missed && info.damage > 0) {
         const manualTotalDmg = info.damage + (info.elementalDamage?.reduce((s: number, e: any) => s + e.damage, 0) || 0);
         ctx.enmity.addDamageEnmity(enemy, characterId, manualTotalDmg);
+        ctx.processOnHitProcs(session, info.targetId, info.damage, true);
       } else if (info.missed) {
         ctx.enmity.addEnmity(enemy, characterId, 50, 0);
       }

@@ -82,6 +82,30 @@ export interface ItemStats {
   healPercent?: number;
 }
 
+export type ProcEffectType =
+  | 'weaken'
+  | 'burn'
+  | 'sleep'
+  | 'freeze'
+  | 'drainLife'
+  | 'trip'
+  | 'stun'
+  | 'poison'
+  | 'bleed'
+  | 'silence'
+  | 'castSpeedDown'
+  | 'slow';
+
+export interface OnHitProc {
+  effect: ProcEffectType;
+  baseChance: number;
+  chancePerLevel?: number;
+  minLevel?: number;
+  duration?: number;
+  potency?: number;
+  element?: string;
+}
+
 export interface ItemDefinition {
   id: string;
   name: string;
@@ -95,6 +119,8 @@ export interface ItemDefinition {
   requiredLevel: number;
   equipmentSlot?: EquipmentSlot;
   soulSlots?: number;
+  onHitProcs?: OnHitProc[];
+  innateProcs?: OnHitProc[];
 }
 
 export interface InventoryItem {

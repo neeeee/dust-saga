@@ -85,11 +85,13 @@ export interface NetworkContext {
   findAllEntitiesInRadius(session: PlayerSession, pos: { x: number; y: number; z: number }, radius: number): Array<{ id: string; distance: number }>;
   applyAOEDamageToTargets(session: PlayerSession, skillName: string, aoePosition: { x: number; y: number; z: number }, aoeRadius: number, primaryResult?: any): void;
   applySingleTargetSkillDamage(session: PlayerSession, skillName: string, targetId: string, result: any): void;
+  processOnHitProcs(session: PlayerSession, targetId: string, damageDealt: number, isPhysical: boolean): void;
   spawnAOEZone(session: PlayerSession, skillName: string, position: { x: number; y: number; z: number }, radius: number): void;
   executeAOESkillInternal(session: PlayerSession, skillName: string, aoePosition: { x: number; y: number; z: number }): void;
   consumeDebuffsOnHit(targetSession: PlayerSession): void;
   shouldApplyDebuff(effect: StatusEffect, targetId: string, casterId?: string): boolean;
   hasActiveDebuff(targetId: string, effectType: StatusEffectType, skillName?: string): boolean;
+  getDebuffResist(targetId: string, category: string): number;
   removeBlockingProtectedBuffs(blockerId: string): void;
   removeSongProximityBuffs(caster: PlayerSession): void;
   applySongPulseImmediate(caster: PlayerSession): void;

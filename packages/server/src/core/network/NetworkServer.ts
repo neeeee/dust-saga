@@ -12,6 +12,7 @@ import {
   GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
   StatusEffectType, StatusEffect, EnemyInstance,
   BuffData, resolveStatTieredValue,
+  OnHitProc,
   getEffectiveStats,
   computeAilmentResist, computeDisorderResist, computeDebuffAccuracy, rollDebuffApplication,
   calculateWeaponElementalDamage,
@@ -38,6 +39,7 @@ import { QuestSystem } from '../../systems/QuestSystem';
 import { v4 as uuidv4 } from 'uuid';
 import { NetworkContext, ServerGameState, PacketHandler } from './NetworkContext';
 import { registerAllHandlers } from './handlers';
+import { collectProcs, buildProcStatusEffect, getProcResistCategory, isDrainLifeProc } from '../combat/ProcSystem';
 
 const STA_DEBUFF_CATEGORIES = new Set(['ailment', 'stun', 'trip', 'knockdown', 'knockback', 'bleed']);
 const SPI_DEBUFF_CATEGORIES = new Set(['disorder', 'freeze', 'burn', 'curse', 'sleep', 'weakness', 'weaken']);
@@ -934,7 +936,7 @@ export class NetworkServer implements NetworkContext {
     return applied;
   }
 
-  private getDebuffResist(targetId: string, category: string): number {
+  getDebuffResist(targetId: string, category: string): number {
     const player = this.state.players.get(targetId);
     if (player) {
       const baseStats = player.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
@@ -969,6 +971,88 @@ export class NetworkServer implements NetworkContext {
       return enemy.statusEffects.some(e => e.type === effectType && (!skillName || e.skillName === skillName) && e.duration > 0);
     }
     return false;
+  }
+
+  processOnHitProcs(session: PlayerSession, targetId: string, damageDealt: number, isPhysical: boolean): void {
+    if (!isPhysical || damageDealt <= 0) return;
+
+    const { procs, enhancementLevel, enhancementElement } = collectProcs(session);
+
+    for (const proc of procs) {
+      if (proc.minLevel && enhancementLevel < proc.minLevel) continue;
+
+      let chance = proc.baseChance + (proc.chancePerLevel || 0) * enhancementLevel;
+      if (chance <= 0) continue;
+
+      const resistCategory = getProcResistCategory(proc);
+      if (resistCategory) {
+        const resistPercent = this.getDebuffResist(targetId, resistCategory);
+        chance *= (1 - resistPercent / 100);
+      }
+
+      if (Math.random() >= chance) continue;
+
+      this.applyProcEffect(proc, session, targetId, damageDealt);
+    }
+
+    if (enhancementElement === 'dark' && enhancementLevel < 10) {
+      const recoilMultiplier = Math.max(0, 0.05 - enhancementLevel * 0.004);
+      const recoilDamage = Math.floor(damageDealt * recoilMultiplier);
+      if (recoilDamage > 0) {
+        session.stats.health = Math.max(0, session.stats.health - recoilDamage);
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown }
+        });
+        if (session.stats.health <= 0) {
+          this.handlePlayerDeath(session);
+        }
+      }
+    }
+  }
+
+  private applyProcEffect(proc: OnHitProc, session: PlayerSession, targetId: string, damageDealt: number): void {
+    if (isDrainLifeProc(proc)) {
+      const healAmount = Math.floor(damageDealt * (proc.potency || 0));
+      if (healAmount > 0) {
+        session.stats.health = Math.min(session.stats.maxHealth, session.stats.health + healAmount);
+        this.sendToPlayer(session.characterId, {
+          type: PacketType.STATS_UPDATE,
+          timestamp: Date.now(),
+          data: { characterId: session.characterId, stats: session.stats, statBreakdown: session.statBreakdown }
+        });
+      }
+      return;
+    }
+
+    const effect = buildProcStatusEffect(proc, session.characterId, targetId);
+    if (!effect) return;
+
+    if (this.hasActiveDebuff(targetId, effect.type, effect.skillName)) return;
+
+    const enemy = this.spawnMgr.getEnemy(targetId);
+    if (enemy) {
+      enemy.statusEffects.push(effect);
+      this.enmity.addDebuffEnmity(enemy, session.characterId, effect.potency, true);
+      this.broadcastInZone(session.zoneId, {
+        type: PacketType.ENTITY_STATUS_EFFECTS,
+        timestamp: Date.now(),
+        data: { entityId: targetId, effects: enemy.statusEffects }
+      });
+      return;
+    }
+
+    const player = this.state.players.get(targetId);
+    if (player) {
+      player.statusEffects.push(effect);
+      this.sendToPlayer(targetId, {
+        type: PacketType.STATUS_EFFECT_UPDATE,
+        timestamp: Date.now(),
+        data: { effects: player.statusEffects }
+      });
+      this.broadcastEntityEffects(player);
+    }
   }
 
   private findGuardian(targetId: string): PlayerSession | null {
@@ -1644,7 +1728,12 @@ export class NetworkServer implements NetworkContext {
 
     session.stats.mana += mpCost;
     if (partner) {
-      partner.stats.mana = Math.max(0, partner.stats.mana - mpCost);
+      const partnerContribution = Math.min(partner.stats.mana, mpCost);
+      partner.stats.mana -= partnerContribution;
+      const remainder = mpCost - partnerContribution;
+      if (remainder > 0) {
+        session.stats.mana = Math.max(0, session.stats.mana - remainder);
+      }
       this.sendToPlayer(partnerId, {
         type: PacketType.STATS_UPDATE,
         timestamp: Date.now(),
@@ -1756,11 +1845,11 @@ export class NetworkServer implements NetworkContext {
           for (const effect of targetResult.statusEffects) {
             if (!this.shouldApplyDebuff(effect, target.id, characterId)) continue;
             if (this.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
-            effect.targetId = target.id;
-            enemy.statusEffects.push(effect);
-            this.applyKnockback(enemy, effect, session.position, effect.potency);
+            const applied = { ...effect, targetId: target.id };
+            enemy.statusEffects.push(applied);
+            this.applyKnockback(enemy, applied, session.position, applied.potency);
             anyApplied = true;
-            if (effect.potency > maxPotency) maxPotency = effect.potency;
+            if (applied.potency > maxPotency) maxPotency = applied.potency;
           }
           if (anyApplied) {
             this.enmity.addDebuffEnmity(enemy, characterId, maxPotency, true);
@@ -1771,6 +1860,8 @@ export class NetworkServer implements NetworkContext {
             });
           }
         }
+
+        this.processOnHitProcs(session, target.id, targetResult.damage, (targetResult.damageType || 'physical') === 'physical');
       } else {
         const playerTarget = this.state.players.get(target.id);
         if (playerTarget && target.id !== characterId) {
@@ -1796,6 +1887,7 @@ export class NetworkServer implements NetworkContext {
               timestamp: Date.now(),
               data: { characterId: target.id, stats: playerTarget.stats, statBreakdown: playerTarget.statBreakdown, skillProficiencies: playerTarget.skillProficiencies, skillAdeptness: playerTarget.skillAdeptness }
             });
+            this.processOnHitProcs(session, target.id, coneDmgRslt.damageTaken, (targetResult.damageType || 'physical') === 'physical');
             this.broadcastInZone(session.zoneId, {
               type: PacketType.STATS_UPDATE,
               timestamp: Date.now(),
@@ -1829,6 +1921,7 @@ export class NetworkServer implements NetworkContext {
           if (hit.damage > 0) {
             const { died } = this.damageEnemy(enemy, hit.damage, characterId);
             if (died) enemyDied = true;
+            this.processOnHitProcs(session, targetId, hit.damage, (result.damageType || 'physical') === 'physical');
           }
           if (hit.elementalDamage) {
             for (const el of hit.elementalDamage) {
@@ -1879,6 +1972,9 @@ export class NetworkServer implements NetworkContext {
               missed: coneDmgResult.redirected ? true : undefined,
             }
           });
+          if (!coneDmgResult.redirected && coneDmgResult.damageTaken > 0) {
+            this.processOnHitProcs(session, targetId, coneDmgResult.damageTaken, (result.damageType || 'physical') === 'physical');
+          }
         }
         if (playerTarget.stats.health > 0) {
           this.sendToPlayer(targetId, {
@@ -1902,6 +1998,7 @@ export class NetworkServer implements NetworkContext {
           this.damageEnemy(enemy, el.damage, characterId);
         }
       }
+      this.processOnHitProcs(session, targetId, result.damage || 0, (result.damageType || 'physical') === 'physical');
       this.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
         timestamp: Date.now(),
@@ -1950,6 +2047,9 @@ export class NetworkServer implements NetworkContext {
           timestamp: Date.now(),
           data: { characterId: targetId, stats: playerTarget.stats, statBreakdown: playerTarget.statBreakdown, skillProficiencies: playerTarget.skillProficiencies, skillAdeptness: playerTarget.skillAdeptness }
         });
+        if (skillPvpDmgResult.damageTaken > 0) {
+          this.processOnHitProcs(session, targetId, skillPvpDmgResult.damageTaken, (result.damageType || 'physical') === 'physical');
+        }
         if (playerTarget.stats.health <= 0) {
           this.handlePlayerDeath(playerTarget);
         }
