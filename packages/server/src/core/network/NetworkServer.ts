@@ -1634,9 +1634,35 @@ export class NetworkServer implements NetworkContext {
     }
   }
 
+  applyDevotionRefund(session: PlayerSession, skillName: string, devotionFx: StatusEffect): void {
+    const skillDef = this.skillSys.findSkillDefinition(skillName);
+    const mpCost = skillDef?.mpCost || 0;
+    if (mpCost <= 0) return;
+
+    const partnerId = devotionFx.buffData!.devotionLink!.partnerId;
+    const partner = this.state.players.get(partnerId);
+
+    session.stats.mana += mpCost;
+    if (partner) {
+      partner.stats.mana = Math.max(0, partner.stats.mana - mpCost);
+      this.sendToPlayer(partnerId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId: partnerId, stats: partner.stats, statBreakdown: partner.statBreakdown }
+      });
+      this.refreshPartyForMember(partnerId);
+    }
+  }
+
   handleAOECastCompletion(session: PlayerSession, castResult: { skillName: string; aoePosition: { x: number; y: number; z: number }; targetId: string | null }): void {
     const skill = this.skillSys.findSkillDefinition(castResult.skillName);
     if (!skill) return;
+
+    const devotionFx = session.statusEffects?.find(e => e.buffData?.devotionLink);
+    if (devotionFx) {
+      this.applyDevotionRefund(session, castResult.skillName, devotionFx);
+    }
+
     this.executeAOESkillInternal(session, castResult.skillName, castResult.aoePosition);
   }
 
@@ -1722,6 +1748,28 @@ export class NetworkServer implements NetworkContext {
             timestamp: Date.now(),
             data: { entityId: target.id, health: enemy.health, maxHealth: enemy.maxHealth }
           });
+        }
+
+        if (targetResult.statusEffects && targetResult.statusEffects.length > 0) {
+          let anyApplied = false;
+          let maxPotency = 0;
+          for (const effect of targetResult.statusEffects) {
+            if (!this.shouldApplyDebuff(effect, target.id, characterId)) continue;
+            if (this.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
+            effect.targetId = target.id;
+            enemy.statusEffects.push(effect);
+            this.applyKnockback(enemy, effect, session.position, effect.potency);
+            anyApplied = true;
+            if (effect.potency > maxPotency) maxPotency = effect.potency;
+          }
+          if (anyApplied) {
+            this.enmity.addDebuffEnmity(enemy, characterId, maxPotency, true);
+            this.broadcastInZone(session.zoneId, {
+              type: PacketType.ENTITY_STATUS_EFFECTS,
+              timestamp: Date.now(),
+              data: { entityId: target.id, effects: enemy.statusEffects }
+            });
+          }
         }
       } else {
         const playerTarget = this.state.players.get(target.id);
@@ -2623,25 +2671,7 @@ export class NetworkServer implements NetworkContext {
 
         const devotionFx = session.statusEffects?.find(e => e.buffData?.devotionLink);
         if (devotionFx && result.success) {
-          const skillDef = this.skillSys.findSkillDefinition(castResult.skillName);
-          const mpCost = skillDef?.mpCost || 0;
-          if (mpCost > 0) {
-            const partnerId = devotionFx.buffData!.devotionLink!.partnerId;
-            const partner = this.state.players.get(partnerId);
-            const mpShortfall = Math.max(0, -session.stats.mana);
-            session.stats.mana = Math.max(0, session.stats.mana);
-            if (partner && mpShortfall > 0) {
-              const partnerContribution = Math.min(partner.stats.mana, mpShortfall);
-              partner.stats.mana -= partnerContribution;
-              session.stats.mana = Math.max(0, session.stats.mana - (mpShortfall - partnerContribution));
-              this.sendToPlayer(partnerId, {
-                type: PacketType.STATS_UPDATE,
-                timestamp: Date.now(),
-                data: { characterId: partnerId, stats: partner.stats, statBreakdown: partner.statBreakdown }
-              });
-              this.refreshPartyForMember(partnerId);
-            }
-          }
+          this.applyDevotionRefund(session, castResult.skillName, devotionFx);
         }
 
         if (result.defensiveMarchToggledOff) {
@@ -3546,6 +3576,27 @@ export class NetworkServer implements NetworkContext {
         },
       });
 
+      const burnDuration = 5;
+      enemy.statusEffects = enemy.statusEffects.filter(e => e.type !== StatusEffectType.BURN);
+      enemy.statusEffects.push({
+        id: `burn_${id}_${Date.now()}`,
+        type: StatusEffectType.BURN,
+        sourceId: summon.ownerId,
+        targetId: id,
+        potency: 0,
+        appliedAt: Date.now(),
+        duration: burnDuration * 1000,
+        tickInterval: 1000,
+        lastTickAt: Date.now(),
+        stacks: 1,
+        skillName: 'Wyvern Fire',
+      });
+      this.broadcastInZone(summon.zoneId, {
+        type: PacketType.ENTITY_STATUS_EFFECTS,
+        timestamp: Date.now(),
+        data: { entityId: id, effects: enemy.statusEffects }
+      });
+
       if (died) {
         this.handleEnemyKill(id, summon.ownerId);
       }
@@ -3573,22 +3624,24 @@ export class NetworkServer implements NetworkContext {
 
     summon.lastAttackTime = nowSec;
 
+    const baseDamage = summon.attackDamage;
+
     this.broadcastInZone(summon.zoneId, {
       type: PacketType.ATTACK,
       timestamp: Date.now(),
       data: {
         attackerId: summon.id,
         targetId: null,
-        damage: summon.attackDamage,
+        damage: baseDamage,
         isCritical: false,
-        damageType: 'earth',
+        damageType: 'physical',
         aoeRadius: aoeRange,
       },
     });
 
     for (const { id, enemy } of hitEnemies) {
       const enemyDef = this.getEnemyEffectiveDefense(enemy);
-      const damage = Math.max(1, summon.attackDamage - Math.floor(enemyDef * 0.5));
+      const damage = Math.max(1, baseDamage - Math.floor(enemyDef * 0.5));
       const { died } = this.damageEnemy(enemy, damage, summon.ownerId);
       this.enmity.addDamageEnmity(enemy, summon.id, damage);
 
@@ -3600,9 +3653,33 @@ export class NetworkServer implements NetworkContext {
           targetId: id,
           damage,
           isCritical: false,
-          damageType: 'earth',
+          damageType: 'physical',
         },
       });
+
+      const stunEffect: StatusEffect = {
+        id: `stun_${id}_${Date.now()}`,
+        type: StatusEffectType.STUN,
+        sourceId: summon.ownerId,
+        targetId: id,
+        potency: 0,
+        appliedAt: Date.now(),
+        duration: 1000,
+        tickInterval: 0,
+        lastTickAt: Date.now(),
+        stacks: 1,
+        skillName: 'Turtle Earthquake',
+        debuffCategory: 'stun',
+      };
+      if (this.shouldApplyDebuff(stunEffect, id, summon.ownerId)) {
+        enemy.statusEffects = enemy.statusEffects.filter(e => e.type !== StatusEffectType.STUN);
+        enemy.statusEffects.push(stunEffect);
+        this.broadcastInZone(summon.zoneId, {
+          type: PacketType.ENTITY_STATUS_EFFECTS,
+          timestamp: Date.now(),
+          data: { entityId: id, effects: enemy.statusEffects }
+        });
+      }
 
       if (died) {
         this.handleEnemyKill(id, summon.ownerId);

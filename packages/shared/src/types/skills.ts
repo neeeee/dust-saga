@@ -111,6 +111,8 @@ export interface SkillDefinition {
   removeResistBuffs?: string[];
   misdirection?: boolean;
   lineOfSightRequired?: boolean;
+  scalingStat?: 'STR' | 'DEX' | 'INT' | 'SPI' | 'AGI' | 'STA';
+  proficiencyBonus?: number;
 }
 
 export interface SkillSubCategory {
@@ -187,6 +189,8 @@ export interface ClassSpecificSkill {
   removeResistBuffs?: string[];
   misdirection?: boolean;
   lineOfSightRequired?: boolean;
+  scalingStat?: 'STR' | 'DEX' | 'INT' | 'SPI' | 'AGI' | 'STA';
+  proficiencyBonus?: number;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;

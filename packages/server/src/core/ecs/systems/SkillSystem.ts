@@ -205,15 +205,16 @@ export class SkillSystem {
     if (skill.isSong) return SkillType.SONG;
     if (skill.sacrificeHeal) return SkillType.SACRIFICE_HEAL;
     if (skill.mpDamage) return SkillType.MP_DAMAGE;
+    const isMagical = skill.damageType === 'magical'
+      || (skill.damageSubType && ['fire','ice','lightning','dark','holy','poison'].includes(skill.damageSubType as string));
+    if (skill.basePower && skill.basePower > 0) {
+      return isMagical ? SkillType.DAMAGE_MAGICAL : SkillType.DAMAGE_PHYSICAL;
+    }
     if (skill.isDebuff || skill.debuffEffectTable) return SkillType.DEBUFF;
     if (skill.invisible) return SkillType.INVISIBILITY;
     if (skill.barrier) return SkillType.BARRIER;
     if (skill.healing) return SkillType.HEAL;
     if (skill.isBuff || skill.buffEffectTable) return SkillType.BUFF;
-    const isMagical = skill.damageType === 'magical'
-      || (skill.damageSubType && ['fire','ice','lightning','dark','holy','poison'].includes(skill.damageSubType as string));
-    if (isMagical) return SkillType.DAMAGE_MAGICAL;
-    if ((skill.basePower !== undefined && skill.basePower > 0) || skill.damageType === 'physical') return SkillType.DAMAGE_PHYSICAL;
     if (skill.createItems) return SkillType.CRAFT;
     if (skill.summonObject) return SkillType.SUMMON;
     return undefined;
@@ -529,6 +530,10 @@ export class SkillSystem {
         return { success: true, guardianApplied: targetId };
       }
 
+      if (skill.buffEffectTable?.devotion) {
+        return { success: true };
+      }
+
       this.applyBuff(session, skill);
     }
 
@@ -555,7 +560,14 @@ export class SkillSystem {
       const target = getTargetStats(targetId);
       if (target) {
         const dmgType = this.getDamageType(st, skill);
-        return this.calculateSkillDamage(session, skill, target, dmgType);
+        const result = this.calculateSkillDamage(session, skill, target, dmgType);
+        if (skill.debuffEffectTable) {
+          const debuffEffects = this.buildDebuffEffects(session, skill);
+          if (debuffEffects.length > 0) {
+            result.statusEffects = debuffEffects;
+          }
+        }
+        return result;
       }
     }
 
@@ -619,7 +631,14 @@ export class SkillSystem {
     if (!target) return { success: true, missed: true };
 
     const dmgType = this.getDamageType(st, skill);
-    return this.calculateSkillDamageInternal(session, skill, target, dmgType);
+    const result = this.calculateSkillDamageInternal(session, skill, target, dmgType);
+    if (skill.debuffEffectTable) {
+      const debuffEffects = this.buildDebuffEffects(session, skill);
+      if (debuffEffects.length > 0) {
+        result.statusEffects = debuffEffects;
+      }
+    }
+    return result;
   }
 
   private calculateSkillDamage(
@@ -644,9 +663,25 @@ export class SkillSystem {
 
     const basePower = skill.basePower ?? 1;
     const baseStats = session.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
-    const primaryStat = isMagical
-      ? session.stats.magicAttack || ((session.statPoints.INT || 0) + (baseStats.INT || 0))
-      : (session.statPoints.STR || 0) + (baseStats.STR || 0);
+
+    let primaryStat: number;
+    if (isMagical) {
+      primaryStat = session.stats.magicAttack || ((session.statPoints.INT || 0) + (baseStats.INT || 0));
+    } else if (skill.scalingStat) {
+      const stat = skill.scalingStat;
+      primaryStat = (session.statPoints[stat] || 0) + (baseStats[stat] || 0);
+    } else {
+      primaryStat = (session.statPoints.STR || 0) + (baseStats.STR || 0);
+    }
+
+    if (skill.proficiencyBonus && skill.proficiencyBonus > 0) {
+      const subCategory = this.getSubCategoryForSkill(skill.name || '');
+      if (subCategory) {
+        const prof = session.skillProficiencies?.[subCategory] || 0;
+        primaryStat += Math.floor(prof * skill.proficiencyBonus);
+      }
+    }
+
     const secondaryStat = isMagical
       ? (session.statPoints.SPI || 0) + (baseStats.SPI || 0)
       : (session.statPoints.DEX || 0) + (baseStats.DEX || 0);
@@ -668,10 +703,15 @@ export class SkillSystem {
       attackMultiplier *= 1.2;
     }
 
-    const baseDamage = Math.floor(
-      basePower * (effectivePrimaryStat + secondaryStat * 0.3) * attackMultiplier
-      - defenseStat * 0.5
-    );
+    const baseDamage = skill.damageVsLowDefense
+      ? Math.floor(
+          basePower * (effectivePrimaryStat + secondaryStat * 0.3) * attackMultiplier
+          + defenseStat * 0.5
+        )
+      : Math.floor(
+          basePower * (effectivePrimaryStat + secondaryStat * 0.3) * attackMultiplier
+          - defenseStat * 0.5
+        );
 
     let elementalResistMultiplier = 1;
     if (isMagical && skill.damageSubType) {

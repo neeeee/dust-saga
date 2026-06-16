@@ -32,5 +32,10 @@
     "socket.io-client": "^4.8.3",
     "vue": "^3.5.32"
   },
-  "packageManager": "npm@11.12.1"
+  "packageManager": "npm@11.12.1",
+  "allowScripts": {
+    "bcrypt@6.0.0": true,
+    "esbuild@0.28.1": true,
+    "nx@22.7.5": true
+  }
 }

@@ -548,6 +548,10 @@ export const CLASS_SKILL_DATA: Record<
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.BASH,
             basePower: 1,
+            hasDebuff: true,
+            debuffEffectTable: {
+              debuffCategory: 'stun',
+            }
           },
           "Ground Shock": {
             name: "Ground Shock",
@@ -613,6 +617,7 @@ export const CLASS_SKILL_DATA: Record<
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.BASH,
             basePower: 3,
+            damageVsLowDefense: true,
           },
           "Rock Crash": {
             name: "Rock Crash",
@@ -1840,7 +1845,6 @@ export const CLASS_SKILL_DATA: Record<
               "All MP costs of targeted party member are taken from your MP pool",
             devotion: true,
             buffEffectTable: {
-              damageRedirect: { targetId: "" },
               devotion: true,
             },
           },
