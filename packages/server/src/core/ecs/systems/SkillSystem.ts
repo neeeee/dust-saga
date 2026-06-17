@@ -738,7 +738,7 @@ export class SkillSystem {
     if (skill.proficiencyBonus && skill.proficiencyBonus > 0) {
       const subCategory = this.getSubCategoryForSkill(skill.name || '');
       if (subCategory) {
-        const prof = session.skillProficiencies?.[subCategory] || 0;
+        const prof = session.skillAdeptness?.[subCategory] || 0;
         primaryStat += Math.floor(prof * skill.proficiencyBonus);
       }
     }
@@ -1286,7 +1286,7 @@ export class SkillSystem {
       const aura = bt.weaponAura;
       const caster = casterSession || target;
       const subCategory = SKILL_TO_SUBCATEGORY[skill.name];
-      const proficiency = subCategory ? (caster.skillProficiencies?.[subCategory] || 0) : 0;
+      const proficiency = subCategory ? (caster.skillAdeptness?.[subCategory] || 0) : 0;
       const casterBaseSPI = (caster.baseStats?.SPI || 0) + (caster.statPoints?.SPI || 0);
 
       if (aura.spiTiers) {
@@ -1374,6 +1374,11 @@ export class SkillSystem {
       pushEffect(StatusEffectType.BUFF_GENERIC, 0, { misdirection: true });
     }
 
+    if (bt.extraHit) {
+      target.statusEffects = target.statusEffects.filter(e => !(e.skillName === skill.name && e.buffData?.extraHit));
+      pushEffect(StatusEffectType.BUFF_GENERIC, 0, { extraHit: true });
+    }
+
     if (bt.spellInterruptResist) {
       pushEffect(StatusEffectType.BUFF_SPELL_INTERRUPT_RESIST, bt.spellInterruptResist, { spellInterruptResistPercent: bt.spellInterruptResist });
     }
@@ -1412,7 +1417,7 @@ export class SkillSystem {
 
     if (bt.healingOverTime) {
       const hot = bt.healingOverTime;
-      const prof = hot.proficiencyStat ? (casterSession?.skillProficiencies?.[hot.proficiencyStat] || 0) : 0;
+      const prof = hot.proficiencyStat ? (casterSession?.skillAdeptness?.[hot.proficiencyStat] || 0) : 0;
       const spi = (casterSession?.statPoints?.SPI || 0) + (casterSession?.baseStats?.SPI || 0);
       const hpPerTick = Math.floor(hot.base + spi * hot.spiScale + prof * 0.5);
       pushEffect(StatusEffectType.BUFF_GENERIC, 0, { healOverTime: { hpPerTick, tickInterval: 3000 } });
@@ -1435,7 +1440,7 @@ export class SkillSystem {
 
     if (bt.attackPowerMultiplierProficiency) {
       const prof = bt.attackPowerMultiplierProficiency;
-      const profValue = casterSession?.skillProficiencies?.[prof.proficiencyStat] || 0;
+      const profValue = casterSession?.skillAdeptness?.[prof.proficiencyStat] || 0;
       const multiplier = 1 + profValue * prof.perProficiency;
       pushEffect(StatusEffectType.BUFF_ATTACK, multiplier);
     }

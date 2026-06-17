@@ -91,6 +91,7 @@ export interface NetworkContext {
   processGloomRecoil(session: PlayerSession): void;
   spawnAOEZone(session: PlayerSession, skillName: string, position: { x: number; y: number; z: number }, radius: number): void;
   executeAOESkillInternal(session: PlayerSession, skillName: string, aoePosition: { x: number; y: number; z: number }): void;
+  executeConeSkillInternal(session: PlayerSession, skillName: string, targetId: string | null): void;
   consumeDebuffsOnHit(targetSession: PlayerSession): void;
   shouldApplyDebuff(effect: StatusEffect, targetId: string, casterId?: string): boolean;
   hasActiveDebuff(targetId: string, effectType: StatusEffectType, skillName?: string): boolean;

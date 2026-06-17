@@ -1078,6 +1078,87 @@ export class GameEngine {
     this.aoeZoneMeshes.set(id, { disc, material: mat, expiresAt });
   }
 
+  showConeBlades(
+    origin: { x: number; y: number; z: number },
+    facingAngle: number,
+    coneAngleDeg: number,
+    range: number,
+    bladeCount: number,
+    skillName: string,
+    bladeWidth?: number
+  ): void {
+    if (!this.scene) return;
+
+    const width = bladeWidth || 1.5;
+    const coneAngleRad = (coneAngleDeg * Math.PI) / 180;
+    const colors = this.getAOEZoneColor(skillName);
+
+    const blades: Mesh[] = [];
+    const createTime = Date.now();
+
+    for (let i = 0; i < bladeCount; i++) {
+      const t = bladeCount === 1 ? 0.5 : i / (bladeCount - 1);
+      const bladeAngle = facingAngle - coneAngleRad / 2 + t * coneAngleRad;
+
+      const midX = origin.x + Math.sin(bladeAngle) * range / 2;
+      const midZ = origin.z + Math.cos(bladeAngle) * range / 2;
+
+      const blade = MeshBuilder.CreatePlane(`cone_blade_${createTime}_${i}`, {
+        width,
+        height: range,
+      }, this.scene);
+
+      const mat = new StandardMaterial(`cone_blade_mat_${createTime}_${i}`, this.scene);
+      mat.emissiveColor = colors.emissive;
+      mat.diffuseColor = colors.diffuse;
+      mat.disableLighting = true;
+      mat.alpha = 0;
+      mat.backFaceCulling = false;
+      mat.zOffset = -2;
+      blade.material = mat;
+
+      blade.rotation.x = Math.PI / 2;
+      blade.rotation.y = bladeAngle;
+      blade.position.set(midX, origin.y + 0.1, midZ);
+      blade.isPickable = false;
+      blade.scaling.z = 0.05;
+
+      blades.push(blade);
+    }
+
+    const extendDuration = 120;
+    const holdDuration = 80;
+    const fadeDuration = 200;
+
+    const obs = this.scene.onBeforeRenderObservable.add(() => {
+      const elapsed = Date.now() - createTime;
+
+      if (elapsed < extendDuration) {
+        const p = elapsed / extendDuration;
+        for (const b of blades) {
+          b.scaling.z = 0.05 + p * 0.95;
+          (b.material as StandardMaterial).alpha = 0.6 * p;
+        }
+      } else if (elapsed < extendDuration + holdDuration) {
+        for (const b of blades) {
+          b.scaling.z = 1.0;
+          (b.material as StandardMaterial).alpha = 0.6;
+        }
+      } else if (elapsed < extendDuration + holdDuration + fadeDuration) {
+        const p = (elapsed - extendDuration - holdDuration) / fadeDuration;
+        for (const b of blades) {
+          (b.material as StandardMaterial).alpha = 0.6 * (1 - p);
+        }
+      } else {
+        for (const b of blades) {
+          b.material?.dispose();
+          b.dispose();
+        }
+        this.scene!.onBeforeRenderObservable.remove(obs);
+      }
+    });
+  }
+
   removeAOEZoneMesh(id: string): void {
     const entry = this.aoeZoneMeshes.get(id);
     if (entry) {

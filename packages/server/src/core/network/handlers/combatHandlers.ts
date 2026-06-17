@@ -20,15 +20,18 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
 
   if (data.targetId && ctx.state.players.has(data.targetId) && ctx.isPartyMember(characterId, data.targetId)) return;
 
-  const damageInfo = ctx.combat.processPlayerAttack(
+  const damageInfos = ctx.combat.processPlayerAttack(
     session,
     data.targetId,
     ctx.spawnMgr.getEnemiesInZone(session.zoneId) || new Map(),
     ctx.state.players
   );
 
-  if (damageInfo) {
+  if (damageInfos.length > 0) {
     session.lastAttackTime = Date.now();
+  }
+
+  for (const damageInfo of damageInfos) {
 
     const enemy = ctx.spawnMgr.getEnemy(data.targetId);
     const player = ctx.state.players.get(data.targetId);

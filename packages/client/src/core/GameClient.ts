@@ -463,6 +463,10 @@ export class GameClient {
 
     this.network.onPacket(PacketType.AOE_ENTITY, (packet: any) => {
       const { id, position, data } = packet.data;
+      if (data.coneVfx) {
+        this.engine.showConeBlades(position, data.facingAngle, data.coneAngle, data.range, data.bladeCount, data.skillName, data.bladeWidth);
+        return;
+      }
       this.engine.createAOEZoneMesh(id, position, data.radius, data.skillName, data.expiresAt);
       this.knownEntities.set(id, { type: 'aoe', data });
     });

@@ -1088,6 +1088,9 @@ export const CLASS_SKILL_DATA: Record<
               "Each attack hits twice, caster takes more damage (dagger, knuckles)",
             isBuff: true,
             selfBuffOnly: true,
+            buffEffectTable: {
+              extraHit: true,
+            },
           },
           Blindside: {
             name: "Blindside",
@@ -2294,10 +2297,16 @@ export const CLASS_SKILL_DATA: Record<
             castTime: 3.5,
             cooldown: 10,
             duration: 0,
+            damageType: DamageType.MAGICAL,
             description:
-              "Release 3 blades of energy that damage all enemies in their path. Deals bonus damage based on enemy defense",
+              "Release 3 blades of energy that pierce enemies in a cone. Deals bonus damage based on enemy defense",
             basePower: 2,
             isAOE: true,
+            aoeTargetMode: AOETargetMode.CONE,
+            coneAngle: 90,
+            coneRange: 8,
+            bladeWidth: 1.5,
+            bladeCount: 3,
             damageVsLowDefense: true,
           },
           "Summon Wall": {
@@ -2347,17 +2356,34 @@ export const CLASS_SKILL_DATA: Record<
             aoeRadius: 1,
             summonObject: { objectType: "plant", duration: 180 },
           },
-          "Regia Pureizu": {
-            name: "Regia Pureizu",
+          "Regia Blaze": {
+            name: "Regia Blaze",
             reqPoints: [
               { skillName: "Invocation", points: 78 },
               { skillName: "Elemental", points: 40 },
             ],
             mpCost: 60,
             castTime: 1.5,
-            cooldown: 1.5,
-            duration: 60,
-            description: "Revive a fallen ally",
+            cooldown: 5,
+            duration: 30,
+            description: "Fire damage aura",
+            isBuff: true,
+            buffEffectTable: {
+              weaponAura: {
+                element: "fire",
+                spiTiers: [
+                  { spi: 0, min: 7, max: 7 },
+                  { spi: 17, min: 10, max: 10 },
+                  { spi: 34, min: 16, max: 16 },
+                  { spi: 50, min: 23, max: 23 },
+                  { spi: 67, min: 30, max: 30 },
+                  { spi: 84, min: 50, max: 50 },
+                  { spi: 100, min: 80, max: 80 },
+                  { spi: 117, min: 80, max: 80 },
+                  { spi: 134, min: 100, max: 100 },
+                ],
+              },
+            },
           },
           "Summon Wyvern": {
             name: "Summon Wyvern",

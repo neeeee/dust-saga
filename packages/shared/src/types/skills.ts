@@ -45,6 +45,7 @@ export enum AOETargetMode {
   SELF_CENTERED = 'self_centered',
   TARGET_CENTERED = 'target_centered',
   GROUND_TARGETED = 'ground_targeted',
+  CONE = 'cone',
 }
 
 import { WeaponType } from './items';
@@ -123,6 +124,10 @@ export interface SkillDefinition {
     scalingStat?: 'STR' | 'DEX' | 'INT' | 'SPI' | 'AGI' | 'STA';
   };
   knockback?: number;
+  coneAngle?: number;
+  coneRange?: number;
+  bladeWidth?: number;
+  bladeCount?: number;
 }
 
 export interface SkillSubCategory {
@@ -207,6 +212,10 @@ export interface ClassSpecificSkill {
     scalingStat?: 'STR' | 'DEX' | 'INT' | 'SPI' | 'AGI' | 'STA';
   };
   knockback?: number;
+  coneAngle?: number;
+  coneRange?: number;
+  bladeWidth?: number;
+  bladeCount?: number;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;

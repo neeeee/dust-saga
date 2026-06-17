@@ -6,6 +6,7 @@ import {
   StatusEffectType, StatusEffect,
   getSkillTargetType,
   BANISH_RADIUS,
+  AOETargetMode,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 import { hasLineOfSight } from '../../world/LineOfSight';
@@ -40,6 +41,11 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
   }
 
   const earlySkillDef = ctx.skillSys.findSkillDefinition(skillName);
+
+  if (earlySkillDef?.aoeTargetMode === AOETargetMode.CONE) {
+    handleConeSkillUse(ctx, session, skillName, targetId);
+    return;
+  }
 
   const check = ctx.skillSys.canUseSkill(session, skillName, targetId || null);
   if (!check.canUse) {
@@ -620,4 +626,88 @@ function handleGroundAOESkillUse(
   }
 
   ctx.executeAOESkillInternal(session, skillName, aoePosition);
+}
+
+function handleConeSkillUse(
+  ctx: NetworkContext,
+  session: PlayerSession,
+  skillName: string,
+  targetId: string | null
+): void {
+  const characterId = session.characterId;
+
+  const check = ctx.skillSys.canUseSkill(session, skillName, targetId);
+  if (!check.canUse) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.SKILL_USE,
+      timestamp: Date.now(),
+      data: { skillName, error: check.error }
+    });
+    return;
+  }
+
+  const skillDef = ctx.skillSys.findSkillDefinition(skillName);
+  const mpCost = skillDef?.mpCost || 0;
+  if (mpCost > 0 && !checkDevotionMana(ctx, session, mpCost)) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.SKILL_USE,
+      timestamp: Date.now(),
+      data: { skillName, error: 'no_mana' }
+    });
+    return;
+  }
+
+  if (skillDef?.consumableItem) {
+    const needed = skillDef.consumableItemQuantity || 1;
+    const count = session.inventory.filter(i => i.itemId === skillDef.consumableItem).reduce((s, i) => s + i.quantity, 0);
+    if (count < needed) {
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.SKILL_USE,
+        timestamp: Date.now(),
+        data: { skillName, error: 'no_materials' }
+      });
+      return;
+    }
+    let remaining = needed;
+    for (let i = session.inventory.length - 1; i >= 0 && remaining > 0; i--) {
+      if (session.inventory[i].itemId === skillDef.consumableItem) {
+        const take = Math.min(session.inventory[i].quantity, remaining);
+        session.inventory[i].quantity -= take;
+        remaining -= take;
+        if (session.inventory[i].quantity <= 0) session.inventory.splice(i, 1);
+      }
+    }
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.INVENTORY_UPDATE,
+      timestamp: Date.now(),
+      data: { inventory: session.inventory }
+    });
+  }
+
+  const { started, castTime } = ctx.skillSys.beginCast(session, skillName, targetId);
+  if (!started) return;
+
+  const invIdx = session.statusEffects?.findIndex(e => e.type === StatusEffectType.INVISIBLE);
+  if (invIdx !== undefined && invIdx !== -1) {
+    if (skillDef && (skillDef.basePower || skillDef.damageType || skillDef.debuffEffectTable)) {
+      session.statusEffects.splice(invIdx, 1);
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.STATUS_EFFECT_UPDATE,
+        timestamp: Date.now(),
+        data: { effects: session.statusEffects }
+      });
+      ctx.broadcastEntityEffects(session);
+    }
+  }
+
+  if (castTime > 0) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.COOLDOWN_UPDATE,
+      timestamp: Date.now(),
+      data: { skillName, castTime, type: 'cast_start' }
+    });
+    return;
+  }
+
+  ctx.executeConeSkillInternal(session, skillName, targetId);
 }

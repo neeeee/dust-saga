@@ -106,15 +106,19 @@ export class CombatSystem extends System {
     return RANGED_WEAPON_TYPES.has(def.weaponType);
   }
 
+  private hasExtraHit(attacker: PlayerSession): boolean {
+    return attacker.statusEffects?.some(e => e.buffData?.extraHit) || false;
+  }
+
   processPlayerAttack(
     attacker: PlayerSession,
     targetId: string,
     enemies: Map<string, EnemyInstance>,
     players: Map<string, PlayerSession>
-  ): DamageInfo | null {
+  ): DamageInfo[] {
     const now = Date.now();
     const cooldown = GAME_CONFIG.ATTACK_COOLDOWN;
-    if (now - attacker.lastAttackTime < cooldown) return null;
+    if (now - attacker.lastAttackTime < cooldown) return [];
 
     let targetPosition: { x: number; y: number; z: number };
     let targetDefense: number;
@@ -137,7 +141,7 @@ export class CombatSystem extends System {
         targetPosition = player.position;
         playerRef = player;
       } else {
-        return null;
+        return [];
       }
     }
 
@@ -146,10 +150,9 @@ export class CombatSystem extends System {
     const dist = Math.sqrt(dx * dx + dz * dz);
     const isRanged = this.isRangedWeapon(attacker);
     const attackRange = isRanged ? COMBAT_CONFIG.RANGED_ATTACK_RANGE : COMBAT_CONFIG.ATTACK_RANGE;
-    if (dist > attackRange) return null;
+    if (dist > attackRange) return [];
 
     const effective = getEffectiveStats(attacker.stats, attacker.statPoints, attacker.statusEffects || []);
-    const { damage, isCritical } = this.computePhysicalDamage(effective.attack, targetDefense, attacker.racialPassive);
 
     const attackerBaseStats = attacker.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
     const attackerTotalDex = (attacker.statPoints.DEX || 0) + (attackerBaseStats.DEX || 0);
@@ -161,50 +164,57 @@ export class CombatSystem extends System {
       targetDodge = playerRef.statBreakdown?.totalDodge ?? 0;
     }
     const hitChance = Math.min(0.99, Math.max(0.01, calculateHitChance(attackerAcc, targetDodge)));
-    if (Math.random() > hitChance) {
-      const missInfo: DamageInfo = {
-        attackerId: attacker.characterId,
-        targetId,
-        damage: 0,
-        isCritical: false,
-        damageType: 'physical',
-        missed: true,
-        isRanged,
-      };
-      this.damageCallbacks.forEach(cb => cb(missInfo));
-      return missInfo;
-    }
-
-    if (effective.physicalDamageReduction > 0 && isEnemy && enemyRef) {
-      // not applicable for player attacks
-    }
 
     const baseStats = attacker.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
     const totalSPI = (attacker.statPoints.SPI || 0) + (baseStats.SPI || 0);
     const totalINT = (attacker.statPoints.INT || 0) + (baseStats.INT || 0);
     const targetResists = this.getTargetResists(isEnemy, enemyRef, playerRef, players);
-    const elementalDamage = calculateWeaponElementalDamage(
-      attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
-      totalSPI, totalINT, attacker.stats.level, targetResists,
-      (attacker.equipment?.weapon as any)?.enhancementElement,
-      (attacker.equipment?.weapon as any)?.enhancementLevel,
-      effective.auraDamageMultiplier
-    );
 
-    this.applyDamageToTarget(targetId, damage, elementalDamage, isEnemy, enemyRef, playerRef, attacker.characterId);
+    const numHits = this.hasExtraHit(attacker) ? 2 : 1;
+    const results: DamageInfo[] = [];
 
-    const info: DamageInfo = {
-      attackerId: attacker.characterId,
-      targetId,
-      damage,
-      isCritical,
-      damageType: 'physical',
-      elementalDamage: elementalDamage.length > 0 ? elementalDamage : undefined,
-      isRanged,
-    };
+    for (let h = 0; h < numHits; h++) {
+      if (Math.random() > hitChance) {
+        const missInfo: DamageInfo = {
+          attackerId: attacker.characterId,
+          targetId,
+          damage: 0,
+          isCritical: false,
+          damageType: 'physical',
+          missed: true,
+          isRanged,
+        };
+        this.damageCallbacks.forEach(cb => cb(missInfo));
+        results.push(missInfo);
+        continue;
+      }
 
-    this.damageCallbacks.forEach(cb => cb(info));
-    return info;
+      const { damage, isCritical } = this.computePhysicalDamage(effective.attack, targetDefense, attacker.racialPassive);
+      const elementalDamage = calculateWeaponElementalDamage(
+        attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
+        totalSPI, totalINT, attacker.stats.level, targetResists,
+        (attacker.equipment?.weapon as any)?.enhancementElement,
+        (attacker.equipment?.weapon as any)?.enhancementLevel,
+        effective.auraDamageMultiplier
+      );
+
+      this.applyDamageToTarget(targetId, damage, elementalDamage, isEnemy, enemyRef, playerRef, attacker.characterId);
+
+      const info: DamageInfo = {
+        attackerId: attacker.characterId,
+        targetId,
+        damage,
+        isCritical,
+        damageType: 'physical',
+        elementalDamage: elementalDamage.length > 0 ? elementalDamage : undefined,
+        isRanged,
+      };
+
+      this.damageCallbacks.forEach(cb => cb(info));
+      results.push(info);
+    }
+
+    return results;
   }
 
   processManualAttack(
@@ -265,12 +275,11 @@ export class CombatSystem extends System {
     const attackerAcc = calculateAccuracy(attacker.stats.level, attackerTotalDex, effective.accuracyBonus);
 
     const results: DamageInfo[] = [];
+    const numHits = this.hasExtraHit(attacker) ? 2 : 1;
 
     for (let i = 0; i < hitTargets.length; i++) {
       const target = hitTargets[i];
       const falloff = Math.pow(COMBAT_CONFIG.MANUAL_ATTACK_FALLOFF, i);
-      const { damage: baseDamage, isCritical } = this.computePhysicalDamage(effective.attack, target.defense, attacker.racialPassive);
-      const damage = Math.max(COMBAT_CONFIG.MIN_DAMAGE, Math.floor(baseDamage * falloff));
 
       let targetDodge = 0;
       if (target.isEnemy && target.enemyRef) {
@@ -279,47 +288,53 @@ export class CombatSystem extends System {
         targetDodge = target.playerRef.statBreakdown?.totalDodge ?? 0;
       }
       const hitChance = Math.min(0.99, Math.max(0.01, calculateHitChance(attackerAcc, targetDodge)));
-      if (Math.random() > hitChance) {
-        const missInfo: DamageInfo = {
+      const targetResists = this.getTargetResists(target.isEnemy, target.enemyRef, target.playerRef, players);
+
+      for (let h = 0; h < numHits; h++) {
+        if (Math.random() > hitChance) {
+          const missInfo: DamageInfo = {
+            attackerId: attacker.characterId,
+            targetId: target.id,
+            damage: 0,
+            isCritical: false,
+            damageType: 'physical',
+            missed: true,
+            isRanged,
+          };
+          this.damageCallbacks.forEach(cb => cb(missInfo));
+          results.push(missInfo);
+          continue;
+        }
+
+        const { damage: baseDamage, isCritical } = this.computePhysicalDamage(effective.attack, target.defense, attacker.racialPassive);
+        const damage = Math.max(COMBAT_CONFIG.MIN_DAMAGE, Math.floor(baseDamage * falloff));
+
+        const elementalDamage = calculateWeaponElementalDamage(
+          attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
+          totalSPI, totalINT, attacker.stats.level, targetResists,
+          (attacker.equipment?.weapon as any)?.enhancementElement,
+          (attacker.equipment?.weapon as any)?.enhancementLevel,
+          effective.auraDamageMultiplier
+        );
+        const scaledElemental = elementalDamage.map(el => ({
+          element: el.element,
+          damage: Math.max(1, Math.floor(el.damage * falloff))
+        }));
+
+        this.applyDamageToTarget(target.id, damage, scaledElemental, target.isEnemy, target.enemyRef, target.playerRef, attacker.characterId);
+
+        const info: DamageInfo = {
           attackerId: attacker.characterId,
           targetId: target.id,
-          damage: 0,
-          isCritical: false,
+          damage,
+          isCritical,
           damageType: 'physical',
-          missed: true,
+          elementalDamage: scaledElemental.length > 0 ? scaledElemental : undefined,
           isRanged,
         };
-        this.damageCallbacks.forEach(cb => cb(missInfo));
-        results.push(missInfo);
-        continue;
+        this.damageCallbacks.forEach(cb => cb(info));
+        results.push(info);
       }
-
-      const targetResists = this.getTargetResists(target.isEnemy, target.enemyRef, target.playerRef, players);
-      const elementalDamage = calculateWeaponElementalDamage(
-        attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
-        totalSPI, totalINT, attacker.stats.level, targetResists,
-        (attacker.equipment?.weapon as any)?.enhancementElement,
-        (attacker.equipment?.weapon as any)?.enhancementLevel,
-        effective.auraDamageMultiplier
-      );
-      const scaledElemental = elementalDamage.map(el => ({
-        element: el.element,
-        damage: Math.max(1, Math.floor(el.damage * falloff))
-      }));
-
-      this.applyDamageToTarget(target.id, damage, scaledElemental, target.isEnemy, target.enemyRef, target.playerRef, attacker.characterId);
-
-      const info: DamageInfo = {
-        attackerId: attacker.characterId,
-        targetId: target.id,
-        damage,
-        isCritical,
-        damageType: 'physical',
-        elementalDamage: scaledElemental.length > 0 ? scaledElemental : undefined,
-        isRanged,
-      };
-      this.damageCallbacks.forEach(cb => cb(info));
-      results.push(info);
     }
 
     return results;

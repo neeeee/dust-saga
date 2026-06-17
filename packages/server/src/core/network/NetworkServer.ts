@@ -10,6 +10,7 @@ import {
   REGEN_CONFIG, SKILL_TARGET_RULES, SkillTargetType, SkillType,
   PartyVisibility, LootRule, MAX_LOOT_POOL,
   GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
+  AOETargetMode,
   StatusEffectType, StatusEffect, EnemyInstance,
   BuffData, resolveStatTieredValue,
   OnHitProc,
@@ -1778,6 +1779,215 @@ export class NetworkServer implements NetworkContext {
     }
   }
 
+  executeConeSkillInternal(session: PlayerSession, skillName: string, targetId: string | null): void {
+    const characterId = session.characterId;
+    const skill = this.skillSys.findSkillDefinition(skillName);
+    if (!skill) return;
+
+    this.skillSys.executeSkill(session, skillName, targetId, (id) => this.getTargetStatsForEntity(id));
+    this.playerSys.recalcStats(session);
+
+    const facingAngle = session.rotation?.y || 0;
+    const originX = session.position.x;
+    const originZ = session.position.z;
+    const coneAngleRad = ((skill.coneAngle || 45) * Math.PI) / 180;
+    const coneRange = skill.coneRange || 8;
+    const bladeWidth = skill.bladeWidth || 1.5;
+    const bladeCount = skill.bladeCount || 1;
+    const halfWidth = bladeWidth / 2;
+
+    const bladeDirs: Array<{ x: number; z: number }> = [];
+    for (let i = 0; i < bladeCount; i++) {
+      const t = bladeCount === 1 ? 0.5 : i / (bladeCount - 1);
+      const angle = facingAngle - coneAngleRad / 2 + t * coneAngleRad;
+      bladeDirs.push({ x: Math.sin(angle), z: Math.cos(angle) });
+    }
+
+    this.broadcastInZone(session.zoneId, {
+      type: PacketType.AOE_ENTITY,
+      timestamp: Date.now(),
+      data: {
+        id: `cone_${characterId}_${Date.now()}`,
+        position: { x: originX, y: session.position.y, z: originZ },
+        data: {
+          skillName,
+          coneVfx: true,
+          facingAngle,
+          coneAngle: skill.coneAngle || 45,
+          range: coneRange,
+          bladeCount,
+          bladeWidth,
+        },
+      },
+    });
+
+    const broadRadius = coneRange + halfWidth;
+    const candidates = [
+      ...this.queryEnemiesNear(originX, originZ, broadRadius, session.zoneId),
+      ...this.queryPlayersNear(originX, originZ, broadRadius, session.zoneId),
+    ];
+
+    for (const entry of candidates) {
+      if (entry.id === characterId) continue;
+      if (this.state.players.has(entry.id) && this.isPartyMember(characterId, entry.id)) continue;
+
+      const enemy = this.spawnMgr.getEnemy(entry.id);
+      if (enemy && enemy.state === 'dead') continue;
+      const playerTarget = this.state.players.get(entry.id);
+
+      const dx = entry.x - originX;
+      const dz = entry.z - originZ;
+
+      let totalDamage = 0;
+      let anyCrit = false;
+      let dmgType = 'physical';
+      let allElemental: Array<{ element: string; damage: number }> = [];
+      let totalPhysical = 0;
+      let allPhysicalElemental: Array<{ element: string; damage: number }> = [];
+
+      for (const dir of bladeDirs) {
+        const projLen = dx * dir.x + dz * dir.z;
+        if (projLen < 0 || projLen > coneRange) continue;
+        const perpX = dx - projLen * dir.x;
+        const perpZ = dz - projLen * dir.z;
+        if (Math.sqrt(perpX * perpX + perpZ * perpZ) > halfWidth) continue;
+
+        const result = this.skillSys.calculateAOEDamage(session, skillName, entry.id, (id) => this.getTargetStatsForEntity(id));
+        if (!result?.damage) continue;
+
+        totalDamage += result.damage;
+        if (result.isCritical) anyCrit = true;
+        dmgType = result.damageType || 'physical';
+        if (result.elementalDamage) allElemental.push(...result.elementalDamage);
+        if (result.physicalDamage) totalPhysical += result.physicalDamage;
+        if (result.physicalElementalDamage) allPhysicalElemental.push(...result.physicalElementalDamage);
+      }
+
+      if (totalDamage === 0) continue;
+
+      if (enemy) {
+        const { died: mainDied } = this.damageEnemy(enemy, totalDamage, characterId);
+        for (const el of allElemental) this.damageEnemy(enemy, el.damage, characterId);
+        if (totalPhysical && enemy.health > 0) {
+          this.damageEnemy(enemy, totalPhysical, characterId);
+          for (const el of allPhysicalElemental) this.damageEnemy(enemy, el.damage, characterId);
+        }
+
+        this.broadcastInZone(session.zoneId, {
+          type: PacketType.DAMAGE,
+          timestamp: Date.now(),
+          data: {
+            attackerId: characterId,
+            targetId: entry.id,
+            damage: totalDamage,
+            isCritical: anyCrit,
+            damageType: dmgType,
+            skillName,
+            elementalDamage: allElemental.length ? allElemental : undefined,
+            physicalDamage: totalPhysical || undefined,
+            physicalElementalDamage: allPhysicalElemental.length ? allPhysicalElemental : undefined,
+          }
+        });
+
+        const died = mainDied || enemy.health <= 0;
+        if (died) {
+          enemy.state = 'dead';
+          enemy.deathTime = Date.now();
+          const enemyDef = getEnemyDefinition(enemy.enemyType);
+          if (enemyDef) {
+            this.playerSys.grantExperience(session, enemyDef.experience);
+            this.sendToPlayer(characterId, {
+              type: PacketType.EXPERIENCE_GAIN,
+              timestamp: Date.now(),
+              data: { experience: enemyDef.experience, totalExperience: session.stats.experience, level: session.stats.level }
+            });
+            const lootItems = this.loot.generateLoot(enemyDef.lootTable, enemy.position, characterId);
+            lootItems.forEach(loot => {
+              this.broadcastInZone(session.zoneId, { type: PacketType.LOOT_SPAWN, timestamp: Date.now(), data: loot });
+            });
+          }
+          this.broadcastInZone(session.zoneId, { type: PacketType.DEATH, timestamp: Date.now(), data: { entityId: entry.id, killerId: characterId } });
+          this.broadcastInZone(session.zoneId, { type: PacketType.ENTITY_DESPAWN, timestamp: Date.now(), data: { entityId: entry.id } });
+        } else {
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { entityId: entry.id, health: enemy.health, maxHealth: enemy.maxHealth }
+          });
+          this.processOnHitProcs(session, entry.id, totalDamage, dmgType === 'physical');
+        }
+      } else if (playerTarget) {
+        const total = totalDamage
+          + allElemental.reduce((s, e) => s + e.damage, 0)
+          + totalPhysical
+          + allPhysicalElemental.reduce((s, e) => s + e.damage, 0);
+        const dmgResult = this.applyPlayerDamage(playerTarget, total, characterId, dmgType, anyCrit, session.zoneId);
+        this.broadcastInZone(session.zoneId, {
+          type: PacketType.DAMAGE,
+          timestamp: Date.now(),
+          data: {
+            attackerId: characterId,
+            targetId: entry.id,
+            damage: dmgResult.redirected ? 0 : dmgResult.damageTaken,
+            isCritical: anyCrit,
+            damageType: dmgType,
+            skillName,
+            elementalDamage: dmgResult.redirected ? [] : (allElemental.length ? allElemental : undefined),
+            missed: dmgResult.redirected ? true : undefined,
+            physicalDamage: totalPhysical || undefined,
+            physicalElementalDamage: allPhysicalElemental.length ? allPhysicalElemental : undefined,
+          }
+        });
+        if (!dmgResult.redirected) {
+          this.sendToPlayer(entry.id, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: entry.id, stats: playerTarget.stats, statBreakdown: playerTarget.statBreakdown, skillProficiencies: playerTarget.skillProficiencies, skillAdeptness: playerTarget.skillAdeptness }
+          });
+          this.broadcastInZone(session.zoneId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { entityId: entry.id, health: playerTarget.stats.health, maxHealth: playerTarget.stats.maxHealth }
+          }, characterId);
+          this.refreshPartyForMember(entry.id);
+          if (playerTarget.stats.health <= 0) {
+            this.handlePlayerDeath(playerTarget);
+          }
+        }
+        this.consumeDebuffsOnHit(playerTarget);
+      }
+    }
+
+    this.sendToPlayer(characterId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown, skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness }
+    });
+
+    if (this.skillSys.lastProficiencyGain) {
+      const pg = this.skillSys.lastProficiencyGain;
+      this.sendToPlayer(characterId, {
+        type: PacketType.CHAT_MESSAGE,
+        timestamp: Date.now(),
+        data: { sender: 'Proficiency', message: `${pg.subCategory} +${pg.amount} (${Math.floor(pg.newAdeptness)}/${pg.cap})`, channel: 'system' }
+      });
+      this.skillSys.lastProficiencyGain = undefined;
+    }
+
+    this.sendToPlayer(characterId, {
+      type: PacketType.COOLDOWN_UPDATE,
+      timestamp: Date.now(),
+      data: {
+        skillName,
+        type: 'used',
+        mpCost: skill.mpCost || 0,
+        cooldownRemaining: session.skillCooldowns.find(c => c.skillName === skillName)?.readyAt
+          ? Math.max(0, (session.skillCooldowns.find(c => c.skillName === skillName)!.readyAt - Date.now()))
+          : 0
+      }
+    });
+  }
+
   applyDevotionRefund(session: PlayerSession, skillName: string, devotionFx: StatusEffect): void {
     const skillDef = this.skillSys.findSkillDefinition(skillName);
     const mpCost = skillDef?.mpCost || 0;
@@ -2869,6 +3079,25 @@ export class NetworkServer implements NetworkContext {
               timestamp: Date.now(),
               data: { effects: session.statusEffects }
             });
+          return;
+        }
+        const completedSkillDef = this.skillSys.findSkillDefinition(castResult.skillName);
+        if (completedSkillDef?.aoeTargetMode === AOETargetMode.CONE) {
+          const devotionFx = session.statusEffects?.find(e => e.buffData?.devotionLink);
+          if (devotionFx) {
+            this.applyDevotionRefund(session, castResult.skillName, devotionFx);
+          }
+          this.executeConeSkillInternal(session, castResult.skillName, castResult.targetId);
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.STATS_UPDATE,
+            timestamp: Date.now(),
+            data: { characterId: session.characterId, stats: session.stats }
+          });
+          this.sendToPlayer(session.characterId, {
+            type: PacketType.STATUS_EFFECT_UPDATE,
+            timestamp: Date.now(),
+            data: { effects: session.statusEffects }
+          });
           return;
         }
         const result = this.skillSys.executeSkill(session, castResult.skillName, castResult.targetId, (id) => this.getTargetStatsForEntity(id));

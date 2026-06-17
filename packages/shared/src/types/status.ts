@@ -239,6 +239,7 @@ export interface BuffEffectTable {
   magicalAid?: { mpRestorePercent: number };
   knockback?: { distance: number };
   misdirection?: boolean;
+  extraHit?: boolean;
 }
 
 export interface BuffData {
@@ -296,6 +297,7 @@ export interface BuffData {
   damageNegation?: { base: number; spiScale: number; proficiencyCap: number };
   damageNegationThreshold?: number;
   healPercent?: number;
+  extraHit?: boolean;
 }
 
 export interface StatusEffect {
