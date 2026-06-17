@@ -734,15 +734,29 @@ export class NetworkServer implements NetworkContext {
     }
   }
 
-  private applyKnockback(target: { position: { x: number; y: number; z: number }; statusEffects: StatusEffect[]; currentNpcId?: string | null }, effect: StatusEffect, attackerPos: { x: number; z: number }, distance: number): void {
-    if (effect.debuffCategory !== 'knockback' || !effect.knockbackVelocity) return;
+  private applySkillKnockback(target: { position: { x: number; y: number; z: number }; statusEffects: StatusEffect[]; currentNpcId?: string | null }, attackerPos: { x: number; z: number }, distance: number): void {
+    if (distance <= 0) return;
     if (target.statusEffects.some(e => e.type === StatusEffectType.STUN || e.type === StatusEffectType.FREEZE)) return;
     if (target.currentNpcId) return;
     const dx = target.position.x - attackerPos.x;
     const dz = target.position.z - attackerPos.z;
     const len = Math.sqrt(dx * dx + dz * dz);
     if (len < 0.01) return;
-    effect.knockbackVelocity = { dx: dx / len, dz: dz / len, remaining: distance };
+    target.statusEffects.push({
+      id: `kb_${Date.now()}_${Math.random()}`,
+      type: StatusEffectType.BUFF_GENERIC,
+      sourceId: '',
+      targetId: '',
+      potency: 0,
+      appliedAt: Date.now(),
+      duration: 500,
+      tickInterval: 0,
+      lastTickAt: 0,
+      stacks: 0,
+      skillName: 'knockback',
+      debuffCategory: 'knockback',
+      knockbackVelocity: { dx: dx / len, dz: dz / len, remaining: distance },
+    });
   }
 
   private tryInterruptCast(target: PlayerSession): void {
@@ -1750,7 +1764,6 @@ export class NetworkServer implements NetworkContext {
             const cloned = { ...effect, targetId: target.id };
             enemy.statusEffects.push(cloned);
             this.applyRemoveResistBuffs(enemy, cloned);
-            this.applyKnockback(enemy, cloned, session.position, cloned.potency);
             anyApplied = true;
             if (effect.potency > maxPotency) maxPotency = effect.potency;
           }
@@ -1811,6 +1824,7 @@ export class NetworkServer implements NetworkContext {
   ): void {
     const characterId = session.characterId;
     const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
+    const skill = this.skillSys.findSkillDefinition(skillName);
 
     for (const target of targets) {
       if (this.state.players.has(target.id) && target.id !== characterId && this.isPartyMember(characterId, target.id)) continue;
@@ -1842,6 +1856,9 @@ export class NetworkServer implements NetworkContext {
           }
         } else if ((targetResult.damageType || 'physical') === 'physical' && enemy.health > 0) {
           this.processGloomRecoil(session);
+        }
+        if (skill?.knockback && enemy.health > 0) {
+          this.applySkillKnockback(enemy, session.position, skill.knockback);
         }
         const died = mainDied || enemy.health <= 0;
         this.broadcastInZone(session.zoneId, {
@@ -1911,7 +1928,6 @@ export class NetworkServer implements NetworkContext {
             if (this.hasActiveDebuff(target.id, effect.type, effect.skillName)) continue;
             const applied = { ...effect, targetId: target.id };
             enemy.statusEffects.push(applied);
-            this.applyKnockback(enemy, applied, session.position, applied.potency);
             anyApplied = true;
             if (applied.potency > maxPotency) maxPotency = applied.potency;
           }
@@ -1942,6 +1958,9 @@ export class NetworkServer implements NetworkContext {
               this.processGloomRecoil(session);
             } else if ((targetResult.damageType || 'physical') === 'physical') {
               this.processGloomRecoil(session);
+            }
+            if (skill?.knockback && playerTarget.stats.health > 0) {
+              this.applySkillKnockback(playerTarget, session.position, skill.knockback);
             }
           }
           this.broadcastInZone(session.zoneId, {
@@ -1993,6 +2012,7 @@ export class NetworkServer implements NetworkContext {
   ): void {
     const characterId = session.characterId;
     const hits = result.hits;
+    const skillDef = this.skillSys.findSkillDefinition(skillName);
 
     if (hits && hits.length > 1) {
       let enemyDied = false;
@@ -2093,6 +2113,9 @@ export class NetworkServer implements NetworkContext {
       if ((result.damageType || 'physical') === 'physical' && enemy.health > 0) {
         this.processGloomRecoil(session);
       }
+      if (skillDef?.knockback && enemy.health > 0) {
+        this.applySkillKnockback(enemy, session.position, skillDef.knockback);
+      }
       const died = mainDied || enemy.health <= 0;
       this.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
@@ -2124,6 +2147,9 @@ export class NetworkServer implements NetworkContext {
       const skillPvpDmgResult = this.applyPlayerDamage(playerTarget, totalPvpDmg, characterId, result.damageType || 'physical', result.isCritical || false, session.zoneId);
       if (!skillPvpDmgResult.redirected && (result.damageType || 'physical') === 'physical' && result.damage > 0) {
         this.processGloomRecoil(session);
+      }
+      if (skillDef?.knockback && !skillPvpDmgResult.redirected && playerTarget.stats.health > 0) {
+        this.applySkillKnockback(playerTarget, session.position, skillDef.knockback);
       }
       this.broadcastInZone(session.zoneId, {
         type: PacketType.DAMAGE,
@@ -2767,7 +2793,6 @@ export class NetworkServer implements NetworkContext {
         const applied = { ...effect, targetId };
         enemy.statusEffects.push(applied);
         this.applyRemoveResistBuffs(enemy, applied);
-        this.applyKnockback(enemy, applied, caster.position, applied.potency);
         changed = true;
         if (effect.potency > maxPotency) maxPotency = effect.potency;
       }
@@ -2789,7 +2814,6 @@ export class NetworkServer implements NetworkContext {
         if (player.statusEffects.some(e => e.type === effect.type && e.skillName === skillName)) continue;
         const applied = { ...effect, targetId };
         player.statusEffects.push(applied);
-        this.applyKnockback(player, applied, caster.position, applied.potency);
         changed = true;
       }
       if (changed) {

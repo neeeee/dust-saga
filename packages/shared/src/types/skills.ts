@@ -122,6 +122,7 @@ export interface SkillDefinition {
     damageSubType?: PhysicalDamageSubType;
     scalingStat?: 'STR' | 'DEX' | 'INT' | 'SPI' | 'AGI' | 'STA';
   };
+  knockback?: number;
 }
 
 export interface SkillSubCategory {
@@ -205,6 +206,7 @@ export interface ClassSpecificSkill {
     damageSubType?: PhysicalDamageSubType;
     scalingStat?: 'STR' | 'DEX' | 'INT' | 'SPI' | 'AGI' | 'STA';
   };
+  knockback?: number;
 }
 
 export type ClassSpecificSkills = Record<string, ClassSpecificSkill>;

@@ -1039,7 +1039,6 @@ export class SkillSystem {
       { prop: 'hasSleep', effectType: StatusEffectType.SLEEP, extra: { duration: (dt.hasSleep as any)?.duration * 1000 } },
       { prop: 'hasStun', effectType: StatusEffectType.STUN, extra: { duration: (dt.hasStun as any)?.duration * 1000 } },
       { prop: 'hasSilence', effectType: StatusEffectType.SILENCE, extra: { duration: (dt.hasSilence as any)?.duration * 1000 } },
-      { prop: 'hasKnockback', effectType: StatusEffectType.BUFF_GENERIC, extra: { debuffCategory: 'knockback', knockbackVelocity: { dx: 0, dz: 0, remaining: 0 } } },
       { prop: 'disablePhysicalAttacks', effectType: StatusEffectType.BUFF_GENERIC, extra: { disablePhysicalAttacks: true } },
       { prop: 'attackHalved', effectType: StatusEffectType.BUFF_GENERIC, extra: { attackHalved: true } },
       { prop: 'preventFieldSpells', effectType: StatusEffectType.PREVENT_FIELD_SPELLS },
@@ -1052,14 +1051,11 @@ export class SkillSystem {
       const value = dt[mapping.prop];
       if (value === undefined || value === null || value === false) continue;
       let potency = typeof value === 'number' ? value : 0;
-      if (mapping.prop === 'hasKnockback' && typeof value === 'object') {
-        potency = (value as any).knockbackDistance || 5;
-      }
       const extra = typeof value === 'object' && value !== null ? mapping.extra : undefined;
       const effect = this.createStatusEffect(mapping.effectType, potency, casterSession.characterId, '', {
-        ...extra,
         skillName: skill.name,
         debuffCategory: category,
+        ...extra,
       });
       if (effect) effects.push(effect);
     }
