@@ -27,7 +27,7 @@ dust-saga/
 
 - Node.js 18+
 - PostgreSQL 14+
-- Redis 7+
+- Valkey (any version works)
 
 ## Setup
 
@@ -54,12 +54,15 @@ createdb dust_saga
 ```bash
 # On macOS with Homebrew
 brew services start valkey
-
+```
+```bash
 # On Linux
 sudo systemctl start valkey
+```
 
+```
 # On Windows
-I don't use Windows and neither should you.
+use wsl.
 ```
 
 ## Development
@@ -68,6 +71,58 @@ Run both client and server in development mode:
 
 ```bash
 npm run dev
+```
+The `dev` script requires an electron main.ts. You can build your own or paste this into `packages/client/electron/main.ts`
+```typescript
+import { app, BrowserWindow } from 'electron';
+import { join } from 'path';
+
+let mainWindow: BrowserWindow | null = null;
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 720,
+    minWidth: 960,
+    minHeight: 540,
+    title: 'Dust Saga',
+    webPreferences: {
+      preload: join(__dirname, 'preload.mjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  } else {
+    mainWindow.loadFile(join(__dirname, '../dist/index.html'));
+  }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+}
+
+app.whenReady().then(createWindow);
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('activate', () => {
+  if (mainWindow === null) {
+    createWindow();
+  }
+});
+```
+and this in `packages/client/electron/preload.mjs`
+```javascript
+const { contextBridge } = require('electron');
+
+contextBridge.exposeInMainWorld('electronAPI', {});
 ```
 
 Or run individually:
