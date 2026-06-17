@@ -17,6 +17,8 @@ function handlePlayerMove(ctx: NetworkContext, socket: Socket, data: any): void 
   const session = ctx.state.players.get(characterId);
   if (!session) return;
 
+  if (session.currentNpcId) return;
+
   if (!Validator.validatePosition(data.position)) return;
 
   const prevPos = session.position;

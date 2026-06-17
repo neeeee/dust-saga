@@ -46,6 +46,7 @@ function handleRespawnRequest(ctx: NetworkContext, socket: Socket, _data: any): 
   session.position = { ...respawnPos };
   session.invulnerableUntil = Date.now() + 5000;
   session.targetId = null;
+  session.currentNpcId = null;
   session.activeCast = null;
   session.statusEffects = [];
   ctx.playerSys.recalcStats(session);

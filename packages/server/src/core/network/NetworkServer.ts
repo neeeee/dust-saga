@@ -34,6 +34,7 @@ import { PlayerSystem } from '../ecs/systems/PlayerSystem';
 import { SkillSystem } from '../ecs/systems/SkillSystem';
 import { PartySystem } from '../ecs/systems/PartySystem';
 import { EnmitySystem } from '../ecs/systems/EnmitySystem';
+import { TradeSystem } from '../ecs/systems/TradeSystem';
 import { SpawnManager } from '../world/SpawnManager';
 import { SummonManager } from '../world/SummonManager';
 import { QuestSystem } from '../../systems/QuestSystem';
@@ -55,6 +56,7 @@ export class NetworkServer implements NetworkContext {
   readonly skillSys: SkillSystem;
   readonly partySys: PartySystem;
   readonly enmity: EnmitySystem;
+  readonly tradeSys: TradeSystem;
   readonly spawnMgr: SpawnManager;
   readonly summonMgr: SummonManager;
   readonly questSys: QuestSystem;
@@ -136,6 +138,7 @@ export class NetworkServer implements NetworkContext {
     this.skillSys = new SkillSystem();
     this.partySys = new PartySystem();
     this.enmity = new EnmitySystem();
+    this.tradeSys = new TradeSystem();
     this.ai.enmitySys = this.enmity;
     this.spawnMgr = new SpawnManager();
     this.summonMgr = new SummonManager();
@@ -151,6 +154,11 @@ export class NetworkServer implements NetworkContext {
     this.setupCallbacks();
     this.setupEventHandlers();
     this.setupPlayerCallbacks();
+
+    this.tradeSys.init({
+      sendToPlayer: (id, pkt) => this.sendToPlayer(id, pkt),
+      findPlayer: (id) => this.findPlayerByCharacterId(id),
+    });
   }
 
   findCharacterBySocket(socketId: string): string | undefined {
@@ -600,7 +608,9 @@ export class NetworkServer implements NetworkContext {
             timestamp: Date.now(),
             data: { characterId: target.characterId, stats: target.stats }
           });
-          if (damage <= 0) return { redirected: false, damageTaken: 0 };
+    if (damage <= 0) return { redirected: false, damageTaken: 0 };
+
+    if (target.currentNpcId) return { redirected: false, damageTaken: 0 };
         }
         break;
       }
@@ -724,9 +734,10 @@ export class NetworkServer implements NetworkContext {
     }
   }
 
-  private applyKnockback(target: { position: { x: number; y: number; z: number }; statusEffects: StatusEffect[] }, effect: StatusEffect, attackerPos: { x: number; z: number }, distance: number): void {
+  private applyKnockback(target: { position: { x: number; y: number; z: number }; statusEffects: StatusEffect[]; currentNpcId?: string | null }, effect: StatusEffect, attackerPos: { x: number; z: number }, distance: number): void {
     if (effect.debuffCategory !== 'knockback' || !effect.knockbackVelocity) return;
     if (target.statusEffects.some(e => e.type === StatusEffectType.STUN || e.type === StatusEffectType.FREEZE)) return;
+    if (target.currentNpcId) return;
     const dx = target.position.x - attackerPos.x;
     const dz = target.position.z - attackerPos.z;
     const len = Math.sqrt(dx * dx + dz * dz);
@@ -1471,6 +1482,8 @@ export class NetworkServer implements NetworkContext {
             });
           }
         }
+
+        this.tradeSys.handleDisconnect(characterId);
       }
       this.state.players.delete(characterId);
       this.state.playerToSocket.delete(characterId);
@@ -3906,6 +3919,7 @@ export class NetworkServer implements NetworkContext {
         for (const cid of zonePlayerIds) {
           const s = this.state.players.get(cid);
           if (!s || s.isDead || s.invulnerableUntil > now) continue;
+          if (s.currentNpcId) continue;
           if (s.statusEffects?.some(e => e.type === StatusEffectType.INVISIBLE)) continue;
           if (s.statusEffects?.some(e => e.buffData?.misdirection)) continue;
           zonePlayers.set(cid, { position: s.position, characterId: cid });
@@ -4094,6 +4108,7 @@ export class NetworkServer implements NetworkContext {
       lastRegenTick: 0,
       invulnerableUntil: Date.now() + 999999999,
       isDead: false,
+      currentNpcId: null,
       deathTime: 0,
       nation: null,
       lastSafeZoneId: session.zoneId,

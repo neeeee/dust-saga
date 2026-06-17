@@ -45,6 +45,15 @@ function handlePartyCreateRequest(ctx: NetworkContext, socket: Socket, data: any
     return;
   }
 
+  if (targetSession.currentNpcId) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.NOTIFICATION,
+      timestamp: Date.now(),
+      data: { message: `${targetSession.characterName} is busy.`, type: 'error' }
+    });
+    return;
+  }
+
   const visibility = data.visibility === 'open' ? PartyVisibility.OPEN : PartyVisibility.PRIVATE;
   const lootRule = data.lootRule === 'pool' ? LootRule.POOL : LootRule.RANDOM;
 
@@ -112,6 +121,15 @@ function handlePartyInviteRequest(ctx: NetworkContext, socket: Socket, data: any
       type: PacketType.NOTIFICATION,
       timestamp: Date.now(),
       data: { message: 'Party is full.', type: 'error' }
+    });
+    return;
+  }
+
+  if (targetSession.currentNpcId) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.NOTIFICATION,
+      timestamp: Date.now(),
+      data: { message: `${targetSession.characterName} is busy.`, type: 'error' }
     });
     return;
   }

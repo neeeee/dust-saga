@@ -372,6 +372,10 @@ export class SkillSystem {
       return { canUse: false, error: 'cc' };
     }
 
+    if (session.currentNpcId) {
+      return { canUse: false, error: 'busy' };
+    }
+
     let targetType = getSkillTargetType(skill) || SKILL_TARGET_RULES[skillName];
 
     if (!targetType) {

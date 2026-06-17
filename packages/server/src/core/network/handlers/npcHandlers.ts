@@ -7,6 +7,7 @@ import { NetworkContext, PacketHandler } from '../NetworkContext';
 export function registerHandlers(registry: Map<PacketType, PacketHandler>): void {
   registry.set(PacketType.NPC_INTERACT, handleNPCInteract);
   registry.set(PacketType.NPC_SHOP_BUY, handleShopBuy);
+  registry.set(PacketType.NPC_DIALOG_CLOSE, handleNpcDialogClose);
 }
 
 function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void {
@@ -22,6 +23,8 @@ function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void
   const dx = session.position.x - npc.position.x;
   const dz = session.position.z - npc.position.z;
   if (Math.sqrt(dx * dx + dz * dz) > 5) return;
+
+  session.currentNpcId = data.npcId;
 
   let dialog = npc.dialogs.find(d => d.id === (data.dialogId || 'greeting'));
   if (!dialog) dialog = npc.dialogs[0];
@@ -59,12 +62,24 @@ function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void
   }
 }
 
+function handleNpcDialogClose(ctx: NetworkContext, socket: Socket, _data: any): void {
+  const characterId = ctx.findCharacterBySocket(socket.id);
+  if (!characterId) return;
+
+  const session = ctx.state.players.get(characterId);
+  if (!session) return;
+
+  session.currentNpcId = null;
+}
+
 function handleShopBuy(ctx: NetworkContext, socket: Socket, data: any): void {
   const characterId = ctx.findCharacterBySocket(socket.id);
   if (!characterId) return;
 
   const session = ctx.state.players.get(characterId);
   if (!session) return;
+
+  if (ctx.tradeSys.isInTrade(characterId)) return;
 
   const itemDef = getItem(data.itemId);
   if (!itemDef) return;

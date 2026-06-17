@@ -61,6 +61,7 @@
         <div class="target-actions" v-if="targetType === 'player'">
           <button class="social-btn" title="Add Friend" @click="$emit('whisper-player', targetName)">F</button>
           <button class="social-btn" title="Add to Party" @click="$emit('party-action', targetId)">P</button>
+          <button class="social-btn" title="Trade" @click="$emit('trade-action', targetId)">T</button>
           <button class="social-btn" title="Add to Guild">G</button>
           <button class="social-btn" title="Whisper" @click="$emit('whisper-player', targetName)">W</button>
         </div>
@@ -208,6 +209,7 @@ defineEmits<{
   'use-skill': [barIndex: number, slotIndex: number];
   'whisper-player': [playerName: string];
   'party-action': [targetId: string];
+  'trade-action': [targetId: string];
 }>();
 
 const minimapCanvas = ref<HTMLCanvasElement | null>(null);

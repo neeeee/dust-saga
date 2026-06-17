@@ -60,6 +60,7 @@
         @clear-target="gameClient?.setTarget(null)"
         @use-skill="handleUseSkillSlot"
         @party-action="handlePartyAction"
+        @trade-action="handleTradeRequest"
       />
 
       <ChatPanel
@@ -188,6 +189,23 @@
         @open="showGMPanel = true"
       />
 
+      <TradeWindow
+        :visible="showTradeWindow"
+        :trade="tradeState"
+        @add-item="handleTradeAddItem"
+        @remove-item="handleTradeRemoveItem"
+        @set-gold="handleTradeSetGold"
+        @accept="handleTradeAccept"
+        @cancel="handleTradeCancel"
+      />
+
+      <TradeInviteDialog
+        :visible="showTradeInvite"
+        :from-name="tradeInviteData.fromName"
+        @accept="handleTradeInviteAccept"
+        @reject="handleTradeInviteReject"
+      />
+
       <div class="controls-hint">
         Click to lock | WASD move | Shift sprint | F attack | I inventory | J quests | K skills | 1-0 skill bar | E interact
       </div>
@@ -203,6 +221,7 @@
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { GameClient } from './core/GameClient';
 import { PacketType, PlayerStats, StatPoints, PartyData, PartyLootItem, StatusEffectType } from '@dust-saga/shared';
+import type { TradeState } from '@dust-saga/shared';
 import CharacterSelect from './ui/CharacterSelect.vue';
 import GameHUD from './ui/GameHUD.vue';
 import ChatPanel from './ui/ChatPanel.vue';
@@ -218,6 +237,8 @@ import PartyInviteDialog from './ui/PartyInviteDialog.vue';
 import DeathPopup from './ui/DeathPopup.vue';
 import EnhancementWindow from './ui/EnhancementWindow.vue';
 import GMPanel from './ui/GMPanel.vue';
+import TradeWindow from './ui/TradeWindow.vue';
+import TradeInviteDialog from './ui/TradeInviteDialog.vue';
 import { useSkillStore } from './composables/useSkillStore';
 
 type GameState = 'auth' | 'character-select' | 'loading' | 'playing';
@@ -291,6 +312,11 @@ const showPartyInvite = ref(false);
 const partyInviteData = ref<{ partyId: string; leaderName: string; settings: any; memberCount: number }>({
   partyId: '', leaderName: '', settings: null, memberCount: 0
 });
+
+const tradeState = ref<TradeState | null>(null);
+const showTradeWindow = ref(false);
+const showTradeInvite = ref(false);
+const tradeInviteData = ref<{ fromName: string; fromId: string }>({ fromName: '', fromId: '' });
 
 let gameClient: GameClient | null = null;
 let currentDialogNPCId = '';
@@ -418,6 +444,9 @@ function closeDialog() {
   npcScreenPos.value = null;
   gameClient?.setDialogActive(false);
   stopDialogTracking();
+  if (currentDialogNPCId) {
+    gameClient?.getNetworkClient().closeNpcDialog();
+  }
 }
 
 function handleDialogProgress() {
@@ -516,6 +545,40 @@ function handlePartyPromote(targetId: string) {
 function handlePartyLootRoll(lootId: string) {
   if (!gameClient) return;
   gameClient.sendPartyLootRoll(lootId);
+}
+
+function handleTradeAddItem(slot: number, quantity: number) {
+  gameClient?.getNetworkClient().sendTradeAddItem(slot, quantity);
+}
+
+function handleTradeRequest(targetId: string) {
+  gameClient?.getNetworkClient().sendTradeRequest(targetId);
+}
+
+function handleTradeRemoveItem(offerIndex: number) {
+  gameClient?.getNetworkClient().sendTradeRemoveItem(offerIndex);
+}
+
+function handleTradeSetGold(gold: number) {
+  gameClient?.getNetworkClient().sendTradeSetGold(gold);
+}
+
+function handleTradeAccept() {
+  gameClient?.getNetworkClient().sendTradeAccept();
+}
+
+function handleTradeCancel() {
+  gameClient?.getNetworkClient().sendTradeCancel();
+}
+
+function handleTradeInviteAccept() {
+  showTradeInvite.value = false;
+  gameClient?.getNetworkClient().sendTradeResponse(true);
+}
+
+function handleTradeInviteReject() {
+  showTradeInvite.value = false;
+  gameClient?.getNetworkClient().sendTradeResponse(false);
 }
 
 function handleRespawn() {
@@ -831,6 +894,33 @@ onMounted(async () => {
     showNotification(`${packet.data.winnerName} won ${packet.data.itemName}!`, 'info');
   });
 
+  network.onPacket(PacketType.TRADE_INVITE, (packet: any) => {
+    tradeInviteData.value = { fromName: packet.data.fromName, fromId: packet.data.fromId };
+    showTradeInvite.value = true;
+  });
+
+  network.onPacket(PacketType.TRADE_OPEN, () => {
+    showTradeWindow.value = true;
+  });
+
+  network.onPacket(PacketType.TRADE_UPDATE, (packet: any) => {
+    tradeState.value = packet.data;
+  });
+
+  network.onPacket(PacketType.TRADE_CLOSE, (packet: any) => {
+    showTradeWindow.value = false;
+    tradeState.value = null;
+    if (packet.data.reason === 'cancelled') {
+      showNotification('Trade cancelled.', 'info');
+    } else if (packet.data.reason === 'completed') {
+      showNotification('Trade completed!', 'success');
+    } else if (packet.data.reason === 'too_far') {
+      showNotification('Trade cancelled: too far away.', 'error');
+    } else if (packet.data.reason === 'error') {
+      showNotification('Trade failed.', 'error');
+    }
+  });
+
   window.addEventListener('keydown', handleGlobalKeyDown);
 });
 
@@ -871,6 +961,9 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     showEnhancement.value = false;
     showStatPanel.value = false;
     showSkillWindow.value = false;
+    if (showTradeWindow.value) {
+      handleTradeCancel();
+    }
     if (gameClient) {
       gameClient.setTarget(null);
       gameClient.cancelClickToMove();

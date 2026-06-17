@@ -16,6 +16,8 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
   const session = ctx.state.players.get(characterId);
   if (!session) return;
 
+  if (session.currentNpcId) return;
+
   if (data.targetId && ctx.state.players.has(data.targetId) && ctx.isPartyMember(characterId, data.targetId)) return;
 
   const damageInfo = ctx.combat.processPlayerAttack(
@@ -95,6 +97,8 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
 
   const session = ctx.state.players.get(characterId);
   if (!session || session.isDead) return;
+
+  if (session.currentNpcId) return;
 
   const zoneEnemies = ctx.spawnMgr.getEnemiesInZone(session.zoneId) || new Map();
   const zonePlayerBuf = new Map<string, PlayerSession>();

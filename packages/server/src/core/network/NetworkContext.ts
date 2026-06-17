@@ -14,6 +14,7 @@ import { PlayerSystem } from '../ecs/systems/PlayerSystem';
 import { SkillSystem } from '../ecs/systems/SkillSystem';
 import { PartySystem } from '../ecs/systems/PartySystem';
 import { EnmitySystem } from '../ecs/systems/EnmitySystem';
+import { TradeSystem } from '../ecs/systems/TradeSystem';
 import { SpawnManager } from '../world/SpawnManager';
 import { SummonManager } from '../world/SummonManager';
 import { QuestSystem } from '../../systems/QuestSystem';
@@ -36,6 +37,7 @@ export interface NetworkContext {
   readonly skillSys: SkillSystem;
   readonly partySys: PartySystem;
   readonly enmity: EnmitySystem;
+  readonly tradeSys: TradeSystem;
   readonly spawnMgr: SpawnManager;
   readonly summonMgr: SummonManager;
   readonly questSys: QuestSystem;

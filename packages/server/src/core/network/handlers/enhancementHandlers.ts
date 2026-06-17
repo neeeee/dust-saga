@@ -15,6 +15,8 @@ function handleWeaponEnhance(ctx: NetworkContext, socket: Socket, data: any): vo
   const session = ctx.state.players.get(characterId);
   if (!session) return;
 
+  if (ctx.tradeSys.isInTrade(characterId)) return;
+
   const { weaponSlot, materialSlots } = data;
   if (!weaponSlot?.slotIndex && weaponSlot?.slotIndex !== 0) {
     ctx.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: 'No weapon selected.', type: 'error' } });

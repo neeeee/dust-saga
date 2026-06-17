@@ -20,6 +20,8 @@ function handleItemUse(ctx: NetworkContext, socket: Socket, data: any): void {
   const session = ctx.state.players.get(characterId);
   if (!session) return;
 
+  if (ctx.tradeSys.isInTrade(characterId)) return;
+
   const itemDef = getItem(data.itemId);
   if (!itemDef) return;
 
@@ -55,6 +57,8 @@ function handleEquipItem(ctx: NetworkContext, socket: Socket, data: any): void {
   const session = ctx.state.players.get(characterId);
   if (!session) return;
 
+  if (ctx.tradeSys.isInTrade(characterId)) return;
+
   if (ctx.playerSys.equipItem(session, data.itemId)) {
     ctx.sendToPlayer(characterId, {
       type: PacketType.INVENTORY_UPDATE,
@@ -76,6 +80,8 @@ function handleUnequipItem(ctx: NetworkContext, socket: Socket, data: any): void
   const session = ctx.state.players.get(characterId);
   if (!session) return;
 
+  if (ctx.tradeSys.isInTrade(characterId)) return;
+
   if (ctx.playerSys.unequipItem(session, data.slot)) {
     ctx.sendToPlayer(characterId, {
       type: PacketType.INVENTORY_UPDATE,
@@ -96,6 +102,8 @@ function handleLootPickup(ctx: NetworkContext, socket: Socket, data: any): void 
 
   const session = ctx.state.players.get(characterId);
   if (!session) return;
+
+  if (ctx.tradeSys.isInTrade(characterId)) return;
 
   const lootInstance = ctx.loot.getLootById(data.lootId);
   if (!lootInstance) return;
@@ -130,6 +138,8 @@ function handleItemDrop(ctx: NetworkContext, socket: Socket, data: any): void {
 
   const session = ctx.state.players.get(characterId);
   if (!session) return;
+
+  if (ctx.tradeSys.isInTrade(characterId)) return;
 
   const { itemId, quantity } = data;
   if (!itemId || quantity <= 0) return;

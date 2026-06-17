@@ -262,6 +262,14 @@ export class NetworkClient {
     });
   }
 
+  closeNpcDialog(): void {
+    this.sendPacket({
+      type: PacketType.NPC_DIALOG_CLOSE,
+      timestamp: Date.now(),
+      data: {}
+    });
+  }
+
   buyFromShop(itemId: string, quantity: number = 1): void {
     this.sendPacket({
       type: PacketType.NPC_SHOP_BUY,
@@ -316,5 +324,33 @@ export class NetworkClient {
 
   getSocketId(): string | undefined {
     return this.socket?.id;
+  }
+
+  sendTradeRequest(targetId: string): void {
+    this.sendPacket({ type: PacketType.TRADE_REQUEST, timestamp: Date.now(), data: { targetId } });
+  }
+
+  sendTradeResponse(accepted: boolean): void {
+    this.sendPacket({ type: PacketType.TRADE_RESPONSE, timestamp: Date.now(), data: { accepted } });
+  }
+
+  sendTradeAddItem(slot: number, quantity: number): void {
+    this.sendPacket({ type: PacketType.TRADE_ADD_ITEM, timestamp: Date.now(), data: { slot, quantity } });
+  }
+
+  sendTradeRemoveItem(offerIndex: number): void {
+    this.sendPacket({ type: PacketType.TRADE_REMOVE_ITEM, timestamp: Date.now(), data: { offerIndex } });
+  }
+
+  sendTradeSetGold(gold: number): void {
+    this.sendPacket({ type: PacketType.TRADE_SET_GOLD, timestamp: Date.now(), data: { gold } });
+  }
+
+  sendTradeAccept(): void {
+    this.sendPacket({ type: PacketType.TRADE_ACCEPT, timestamp: Date.now(), data: {} });
+  }
+
+  sendTradeCancel(): void {
+    this.sendPacket({ type: PacketType.TRADE_CANCEL, timestamp: Date.now(), data: {} });
   }
 }
