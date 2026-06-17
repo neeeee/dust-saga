@@ -16,6 +16,25 @@ export enum ItemType {
   QUEST = 'quest'
 }
 
+export enum WeaponType {
+  SWORD = 'sword',
+  DAGGER = 'dagger',
+  BOW = 'bow',
+  CROSSBOW = 'crossbow',
+  BLUNT = 'blunt',
+  TWO_HANDED_BLUNT = '2h_blunt',
+  AXE = 'axe',
+  TWO_HANDED_AXE = '2h_axe',
+  TWO_HANDED_SWORD = '2h_sword',
+  SPEAR = 'spear',
+  TWO_HANDED_SPEAR = '2h_spear',
+  STAFF = 'staff',
+  WAND = 'wand',
+  KNUCKLES = 'knuckles',
+}
+
+export const RANGED_WEAPON_TYPES = new Set([WeaponType.BOW, WeaponType.CROSSBOW]);
+
 export enum ItemRarity {
   COMMON = 'common',
   UNCOMMON = 'uncommon',
@@ -119,6 +138,7 @@ export interface ItemDefinition {
   requiredLevel: number;
   equipmentSlot?: EquipmentSlot;
   soulSlots?: number;
+  weaponType?: WeaponType;
   onHitProcs?: OnHitProc[];
   innateProcs?: OnHitProc[];
 }

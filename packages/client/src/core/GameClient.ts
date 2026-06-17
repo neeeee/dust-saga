@@ -531,11 +531,19 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.DAMAGE, (packet: any) => {
-      const { targetId, damage, isCritical, elementalDamage, missed, physicalDamage, physicalElementalDamage } = packet.data;
+      const { targetId, damage, isCritical, elementalDamage, missed, physicalDamage, physicalElementalDamage, attackerId, isRanged } = packet.data;
 
       if (missed) {
         this.engine.showDamageNumber(targetId, 0, false, undefined, true);
         return;
+      }
+
+      if (isRanged && attackerId) {
+        const attackerGroup = this.engine.getMeshGroup(attackerId);
+        const targetGroup = this.engine.getMeshGroup(targetId);
+        if (attackerGroup?.root && targetGroup?.root) {
+          this.engine.showSummonProjectile(attackerGroup.root.position, targetGroup.root.position);
+        }
       }
 
       let totalDamage = damage || 0;

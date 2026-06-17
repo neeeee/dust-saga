@@ -92,6 +92,22 @@ export function getMagicEnhancementBoost(
   return 0;
 }
 
+export function computeElementalDamageLine(
+  basePower: number,
+  attackerSPI: number,
+  attackerINT: number,
+  attackerLevel: number,
+  element: string,
+  targetResists: Record<string, number | undefined>
+): ElementalDamageLine {
+  let damage = Math.floor(
+    basePower * (attackerSPI * 0.3 + attackerINT * 0.2 + attackerLevel * 0.2)
+  );
+  damage = applyResistance(damage, element, targetResists);
+  damage = Math.max(1, Math.floor(damage * (0.9 + Math.random() * 0.2)));
+  return { element, damage };
+}
+
 function applyResistance(
   damage: number,
   element: string,

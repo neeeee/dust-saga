@@ -1,5 +1,5 @@
 import { EntityManager, System } from '../EntityManager';
-import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats, calculateWeaponElementalDamage, calculateAccuracy, calculateHitChance, StatusEffectType } from '@dust-saga/shared';
+import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats, calculateWeaponElementalDamage, calculateAccuracy, calculateHitChance, StatusEffectType, getItem, RANGED_WEAPON_TYPES } from '@dust-saga/shared';
 
 interface ConeTarget {
   id: string;
@@ -98,6 +98,14 @@ export class CombatSystem extends System {
     }
   }
 
+  private isRangedWeapon(attacker: PlayerSession): boolean {
+    const weapon = attacker.equipment?.weapon as any;
+    if (!weapon) return false;
+    const def = getItem(weapon.itemId);
+    if (!def?.weaponType) return false;
+    return RANGED_WEAPON_TYPES.has(def.weaponType);
+  }
+
   processPlayerAttack(
     attacker: PlayerSession,
     targetId: string,
@@ -136,7 +144,9 @@ export class CombatSystem extends System {
     const dx = attacker.position.x - targetPosition.x;
     const dz = attacker.position.z - targetPosition.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
-    if (dist > COMBAT_CONFIG.ATTACK_RANGE) return null;
+    const isRanged = this.isRangedWeapon(attacker);
+    const attackRange = isRanged ? COMBAT_CONFIG.RANGED_ATTACK_RANGE : COMBAT_CONFIG.ATTACK_RANGE;
+    if (dist > attackRange) return null;
 
     const effective = getEffectiveStats(attacker.stats, attacker.statPoints, attacker.statusEffects || []);
     const { damage, isCritical } = this.computePhysicalDamage(effective.attack, targetDefense, attacker.racialPassive);
@@ -159,6 +169,7 @@ export class CombatSystem extends System {
         isCritical: false,
         damageType: 'physical',
         missed: true,
+        isRanged,
       };
       this.damageCallbacks.forEach(cb => cb(missInfo));
       return missInfo;
@@ -189,6 +200,7 @@ export class CombatSystem extends System {
       isCritical,
       damageType: 'physical',
       elementalDamage: elementalDamage.length > 0 ? elementalDamage : undefined,
+      isRanged,
     };
 
     this.damageCallbacks.forEach(cb => cb(info));
@@ -205,7 +217,8 @@ export class CombatSystem extends System {
     if (now - attacker.lastManualAttackTime < GAME_CONFIG.MANUAL_ATTACK_COOLDOWN) return [];
     attacker.lastManualAttackTime = now;
 
-    const range = COMBAT_CONFIG.MANUAL_ATTACK_RANGE;
+    const isRanged = this.isRangedWeapon(attacker);
+    const range = isRanged ? COMBAT_CONFIG.RANGED_ATTACK_RANGE : COMBAT_CONFIG.MANUAL_ATTACK_RANGE;
     const halfCone = COMBAT_CONFIG.MANUAL_ATTACK_CONE_ANGLE / 2;
     const facingX = Math.sin(facingAngle);
     const facingZ = Math.cos(facingAngle);
@@ -274,6 +287,7 @@ export class CombatSystem extends System {
           isCritical: false,
           damageType: 'physical',
           missed: true,
+          isRanged,
         };
         this.damageCallbacks.forEach(cb => cb(missInfo));
         results.push(missInfo);
@@ -302,6 +316,7 @@ export class CombatSystem extends System {
         isCritical,
         damageType: 'physical',
         elementalDamage: scaledElemental.length > 0 ? scaledElemental : undefined,
+        isRanged,
       };
       this.damageCallbacks.forEach(cb => cb(info));
       results.push(info);

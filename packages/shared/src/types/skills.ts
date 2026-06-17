@@ -47,6 +47,8 @@ export enum AOETargetMode {
   GROUND_TARGETED = 'ground_targeted',
 }
 
+import { WeaponType } from './items';
+
 export interface SkillDefinition {
   name: string;
   reqPoints: SkillReqPoints;
@@ -100,6 +102,7 @@ export interface SkillDefinition {
   curse?: boolean;
   blockOnly?: boolean;
   shieldRequired?: boolean;
+  requiredWeaponType?: WeaponType[];
   invisible?: { stationaryOnly: boolean; mpCostPerSec: number };
   barrier?: 'physical' | 'magical';
   elementalAbsorption?: { elements: string[]; convertTo: 'hp' | 'mp' };
@@ -113,6 +116,7 @@ export interface SkillDefinition {
   lineOfSightRequired?: boolean;
   scalingStat?: 'STR' | 'DEX' | 'INT' | 'SPI' | 'AGI' | 'STA';
   proficiencyBonus?: number;
+  elementalPower?: number;
   dualPhysical?: {
     basePower: number;
     damageSubType?: PhysicalDamageSubType;

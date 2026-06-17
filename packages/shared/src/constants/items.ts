@@ -1,4 +1,4 @@
-import { ItemDefinition, ItemType, ItemRarity, EquipmentSlot } from '../types/items';
+import { ItemDefinition, ItemType, ItemRarity, EquipmentSlot, WeaponType } from '../types/items';
 
 export const ITEM_DATABASE: Record<string, ItemDefinition> = {
   'wooden_sword': {
@@ -11,7 +11,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 5,
     requiredLevel: 1,
-    equipmentSlot: EquipmentSlot.WEAPON
+    equipmentSlot: EquipmentSlot.WEAPON,
+    weaponType: WeaponType.SWORD
   },
   'iron_sword': {
     id: 'iron_sword',
@@ -23,7 +24,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 25,
     requiredLevel: 5,
-    equipmentSlot: EquipmentSlot.WEAPON
+    equipmentSlot: EquipmentSlot.WEAPON,
+    weaponType: WeaponType.SWORD
   },
   'steel_blade': {
     id: 'steel_blade',
@@ -35,7 +37,47 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 80,
     requiredLevel: 10,
-    equipmentSlot: EquipmentSlot.WEAPON
+    equipmentSlot: EquipmentSlot.WEAPON,
+    weaponType: WeaponType.SWORD
+  },
+  'wooden_bow': {
+    id: 'wooden_bow',
+    name: 'Wooden Bow',
+    type: ItemType.WEAPON,
+    rarity: ItemRarity.COMMON,
+    stats: { attack: 5, attackSpeed: 0.1 },
+    description: 'A simple wooden bow for ranged attacks.',
+    maxStack: 1,
+    sellPrice: 5,
+    requiredLevel: 1,
+    equipmentSlot: EquipmentSlot.WEAPON,
+    weaponType: WeaponType.BOW
+  },
+  'hunter_crossbow': {
+    id: 'hunter_crossbow',
+    name: 'Hunter Crossbow',
+    type: ItemType.WEAPON,
+    rarity: ItemRarity.UNCOMMON,
+    stats: { attack: 15, accuracy: 5 },
+    description: 'A sturdy crossbow. +5 Accuracy.',
+    maxStack: 1,
+    sellPrice: 30,
+    requiredLevel: 5,
+    equipmentSlot: EquipmentSlot.WEAPON,
+    weaponType: WeaponType.CROSSBOW
+  },
+  'rusty_dagger': {
+    id: 'rusty_dagger',
+    name: 'Rusty Dagger',
+    type: ItemType.WEAPON,
+    rarity: ItemRarity.COMMON,
+    stats: { attack: 4, attackSpeed: 0.15, criticalChance: 0.05 },
+    description: 'A small rusty dagger.',
+    maxStack: 1,
+    sellPrice: 3,
+    requiredLevel: 1,
+    equipmentSlot: EquipmentSlot.WEAPON,
+    weaponType: WeaponType.DAGGER
   },
   'leather_armor': {
     id: 'leather_armor',
@@ -184,7 +226,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     sellPrice: 250,
     requiredLevel: 15,
     equipmentSlot: EquipmentSlot.WEAPON,
-    soulSlots: 2
+    soulSlots: 2,
+    weaponType: WeaponType.SWORD
   },
   'basic_staff': {
     id: 'basic_staff',
@@ -196,7 +239,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     maxStack: 1,
     sellPrice: 250,
     requiredLevel: 1,
-    equipmentSlot: EquipmentSlot.WEAPON
+    equipmentSlot: EquipmentSlot.WEAPON,
+    weaponType: WeaponType.STAFF
   },
   'thunder_helm': {
     id: 'thunder_helm',
@@ -448,7 +492,8 @@ export const ITEM_DATABASE: Record<string, ItemDefinition> = {
     sellPrice: 1000,
     requiredLevel: 25,
     equipmentSlot: EquipmentSlot.WEAPON,
-    soulSlots: 3
+    soulSlots: 3,
+    weaponType: WeaponType.WAND
   },
   'eternal_torso': {
     id: 'eternal_torso',

@@ -8,6 +8,7 @@ import {
   recalculateCategoryTotals, calculateProficiencyGain, ProficiencyGainResult,
   DebuffEffectTable,
   calculateWeaponElementalDamage,
+  computeElementalDamageLine,
   getMagicEnhancementBoost,
   calculateDodge,
   calculateAccuracy as calcSharedAccuracy,
@@ -16,6 +17,8 @@ import {
   getMinAdeptness, getDesignJobId, SUB_CATEGORY_TO_CATEGORY,
   getEffectiveProficiencies,
   SkillType, OnHitEffect, HealingEffect, getSkillTargetType,
+  AOETargetMode,
+  getItem,
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA } from '@dust-saga/shared';
 import { CLASS_SPECIFIC_SKILLS, getClassSpecificSkillsForJob } from '@dust-saga/shared';
@@ -208,7 +211,7 @@ export class SkillSystem {
     if (skill.sacrificeHeal) return SkillType.SACRIFICE_HEAL;
     if (skill.mpDamage) return SkillType.MP_DAMAGE;
     const isMagical = skill.damageType === 'magical'
-      || (skill.damageSubType && ['fire','ice','lightning','dark','holy','poison'].includes(skill.damageSubType as string));
+      || (skill.damageType !== 'physical' && skill.damageSubType && ['fire','ice','lightning','dark','holy','poison'].includes(skill.damageSubType as string));
     if (skill.basePower && skill.basePower > 0) {
       return isMagical ? SkillType.DAMAGE_MAGICAL : SkillType.DAMAGE_PHYSICAL;
     }
@@ -317,6 +320,17 @@ export class SkillSystem {
       }
     }
 
+    if (skill.requiredWeaponType && skill.requiredWeaponType.length > 0) {
+      const weapon = session.equipment?.weapon as any;
+      if (!weapon) {
+        return { canUse: false, error: 'wrong_weapon' };
+      }
+      const weaponDef = getItem(weapon.itemId);
+      if (!weaponDef?.weaponType || !skill.requiredWeaponType.includes(weaponDef.weaponType)) {
+        return { canUse: false, error: 'wrong_weapon' };
+      }
+    }
+
     if (skill.negateFieldSpells || skill.debuffEffectTable?.preventFieldSpells) {
       const hasPrevent = session.statusEffects?.some(e => e.type === StatusEffectType.PREVENT_FIELD_SPELLS);
       if (hasPrevent) {
@@ -358,7 +372,22 @@ export class SkillSystem {
       return { canUse: false, error: 'cc' };
     }
 
-    const targetType = getSkillTargetType(skill) || SKILL_TARGET_RULES[skillName];
+    let targetType = getSkillTargetType(skill) || SKILL_TARGET_RULES[skillName];
+
+    if (!targetType) {
+      const isGroundTargeted = skill.isAOE && skill.aoeTargetMode === AOETargetMode.GROUND_TARGETED;
+      if (!isGroundTargeted && inferredType) {
+        const typesRequiringTarget = new Set([
+          SkillType.DAMAGE_PHYSICAL, SkillType.DAMAGE_MAGICAL,
+          SkillType.DEBUFF, SkillType.DRAIN_LIFE, SkillType.MP_DAMAGE,
+          SkillType.DISPEL, SkillType.FEAR, SkillType.PROVOKE, SkillType.KNOCKBACK,
+        ]);
+        if (typesRequiringTarget.has(inferredType)) {
+          targetType = SkillTargetType.OTHER_ONLY;
+        }
+      }
+    }
+
     if (targetType) {
       if (targetType === SkillTargetType.OTHER_ONLY) {
         if (!targetId) {
@@ -840,8 +869,15 @@ export class SkillSystem {
         damage = Math.floor(damage * target.damageTakenMultiplier);
       }
 
-      const elementalDamage = damageType !== 'magical'
-        ? calculateWeaponElementalDamage(
+      const allElemental: Array<{ element: string; damage: number }> = [];
+
+      if (damageType !== 'magical') {
+        const skillElement = skill.damageSubType;
+        if (skillElement && ['fire', 'ice', 'lightning', 'dark', 'holy', 'poison'].includes(skillElement as string)) {
+          const elemPower = skill.elementalPower ?? skill.basePower ?? 1;
+          allElemental.push(computeElementalDamageLine(elemPower, totalSPI, totalINT, session.stats.level, skillElement as string, targetResists));
+        }
+        const weaponElem = calculateWeaponElementalDamage(
           session.equipment?.weapon?.itemId,
           session.statusEffects || [],
           totalSPI,
@@ -851,13 +887,14 @@ export class SkillSystem {
           (session.equipment?.weapon as any)?.enhancementElement,
           (session.equipment?.weapon as any)?.enhancementLevel,
           effectiveStats.auraDamageMultiplier
-        )
-        : [];
+        );
+        allElemental.push(...weaponElem);
+      }
 
       hits.push({
         damage,
         isCritical: isCrit,
-        elementalDamage: elementalDamage.length > 0 ? elementalDamage : undefined,
+        elementalDamage: allElemental.length > 0 ? allElemental : undefined,
       });
 
       totalDamage += damage;

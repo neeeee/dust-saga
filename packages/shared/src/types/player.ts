@@ -125,4 +125,5 @@ export interface DamageInfo {
   missed?: boolean;
   physicalDamage?: number;
   physicalElementalDamage?: Array<{ element: string; damage: number }>;
+  isRanged?: boolean;
 }

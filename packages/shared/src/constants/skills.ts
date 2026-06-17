@@ -10,6 +10,7 @@ import {
   DamageType,
   SkillType,
 } from "../types/skills";
+import { WeaponType } from "../types/items";
 
 export const GROUND_TARGETED_AOE_SKILLS = new Set([
   "Firestorm",
@@ -771,7 +772,9 @@ export const CLASS_SKILL_DATA: Record<
             damageType: DamageType.PHYSICAL,
             damageSubType: MagicalDamageSubType.FIRE,
             basePower: 1,
+            elementalPower: 1,
             hasDebuff: true,
+            requiredWeaponType: [WeaponType.BOW, WeaponType.CROSSBOW],
           },
           "Cobra Arrow": {
             name: "Cobra Arrow",
@@ -785,6 +788,7 @@ export const CLASS_SKILL_DATA: Record<
             damageType: DamageType.PHYSICAL,
             basePower: 1,
             hasDebuff: true,
+            requiredWeaponType: [WeaponType.BOW, WeaponType.CROSSBOW],
           },
           "Arrow Rain": {
             name: "Arrow Rain",
@@ -797,10 +801,11 @@ export const CLASS_SKILL_DATA: Record<
             damageType: DamageType.PHYSICAL,
             basePower: 1,
             isAOE: true,
-            aoeTargetMode: AOETargetMode.GROUND_TARGETED,
+            aoeTargetMode: AOETargetMode.TARGET_CENTERED,
             aoeRadius: 5,
             pulseCount: 3,
-            pulseInterval: 800,
+            pulseInterval: 1000,
+            requiredWeaponType: [WeaponType.BOW],
           },
           "Multi Shot": {
             name: "Multi Shot",
@@ -815,6 +820,7 @@ export const CLASS_SKILL_DATA: Record<
             description: "Fire five arrows at once (crossbow)",
             damageType: DamageType.PHYSICAL,
             basePower: 1,
+            requiredWeaponType: [WeaponType.CROSSBOW],
           },
           "Charge Shot": {
             name: "Charge Shot",
@@ -832,6 +838,7 @@ export const CLASS_SKILL_DATA: Record<
             hasDebuff: true,
             debuffDuration: 1,
             debuffEffectTable: { hasKnockback: { knockbackDistance: 3 } },
+            requiredWeaponType: [WeaponType.BOW, WeaponType.CROSSBOW],
           },
           "Silence Arrow": {
             name: "Silence Arrow",
@@ -844,6 +851,7 @@ export const CLASS_SKILL_DATA: Record<
             damageType: DamageType.PHYSICAL,
             basePower: 2,
             hasDebuff: true,
+            requiredWeaponType: [WeaponType.BOW],
           },
           "Arrow Storm": {
             name: "Arrow Storm",
@@ -853,12 +861,13 @@ export const CLASS_SKILL_DATA: Record<
             cooldown: 5,
             duration: 0,
             description: "AOE attack over target (bow), replaces Arrow Rain",
-            basePower: 1,
+            basePower: 2,
             isAOE: true,
             aoeTargetMode: AOETargetMode.TARGET_CENTERED,
             aoeRadius: 5,
             pulseCount: 3,
-            pulseInterval: 800,
+            pulseInterval: 1000,
+            requiredWeaponType: [WeaponType.BOW],
           },
           "Pinning Arrow": {
             name: "Pinning Arrow",
@@ -871,6 +880,7 @@ export const CLASS_SKILL_DATA: Record<
               "Pin target in place if hit from the back (bow, crossbow)",
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.RANGED,
+            requiredWeaponType: [WeaponType.BOW, WeaponType.CROSSBOW],
           },
           "Piercing Shot": {
             name: "Piercing Shot",
@@ -883,6 +893,7 @@ export const CLASS_SKILL_DATA: Record<
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.RANGED,
             basePower: 1,
+            requiredWeaponType: [WeaponType.BOW, WeaponType.CROSSBOW],
           },
           Cataract: {
             name: "Cataract",
@@ -896,6 +907,7 @@ export const CLASS_SKILL_DATA: Record<
             damageType: DamageType.PHYSICAL,
             damageSubType: PhysicalDamageSubType.RANGED,
             basePower: 3,
+            requiredWeaponType: [WeaponType.BOW, WeaponType.CROSSBOW],
           },
         },
       },
@@ -1066,8 +1078,10 @@ export const CLASS_SKILL_DATA: Record<
             duration: 0,
             description: "Throw a dagger at target (dagger)",
             damageType: DamageType.PHYSICAL,
-            damageSubType: PhysicalDamageSubType.SLASH,
+            damageSubType: PhysicalDamageSubType.RANGED,
             basePower: 1,
+            range: 12,
+            requiredWeaponType: [WeaponType.DAGGER],
           },
           Rush: {
             name: "Rush",
