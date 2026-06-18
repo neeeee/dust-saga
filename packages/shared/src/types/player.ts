@@ -1,6 +1,6 @@
 import { StatPoints, StatType, createDefaultStatPoints } from './races';
 import { JobId, SkillProficiencies, createDefaultSkillProficiencies, BaseClass } from './jobs';
-import { BuffData, StatBonusBreakdown } from './status';
+import { BuffData, StatBonusBreakdown, EffectiveStats } from './status';
 import { SkillCooldownEntry, ActiveCast } from './skills';
 import { StatusEffect } from './status';
 import { InventoryItem } from './items';
@@ -56,6 +56,7 @@ export interface PlayerSession {
   activeCast: ActiveCast | null;
   statusEffects: StatusEffect[];
   statBreakdown: StatBonusBreakdown | null;
+  effectiveStats: EffectiveStats | null;
   inventory: InventoryItem[];
   gold: number;
   equipment: {
@@ -88,6 +89,7 @@ export interface PlayerSession {
     startedAt: number;
   }>;
   statsDirty?: boolean;
+  resistCache?: Map<string, number>;
 }
 
 export interface EnmityEntry {

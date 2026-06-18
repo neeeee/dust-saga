@@ -313,6 +313,7 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
     const playerTarget = ctx.state.players.get(firstTargetId);
     if (playerTarget) {
       playerTarget.statusEffects = playerTarget.statusEffects.filter(e => !e.buffData);
+      playerTarget.effectiveStats = null;
     }
   }
 
@@ -320,6 +321,7 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
     const playerTarget = ctx.state.players.get(firstTargetId);
     if (playerTarget) {
       playerTarget.statusEffects = playerTarget.statusEffects.filter(e => !e.debuffCategory);
+      playerTarget.effectiveStats = null;
     }
   }
 
@@ -691,6 +693,7 @@ function handleConeSkillUse(
   if (invIdx !== undefined && invIdx !== -1) {
     if (skillDef && (skillDef.basePower || skillDef.damageType || skillDef.debuffEffectTable)) {
       session.statusEffects.splice(invIdx, 1);
+      session.effectiveStats = null;
       ctx.sendToPlayer(characterId, {
         type: PacketType.STATUS_EFFECT_UPDATE,
         timestamp: Date.now(),

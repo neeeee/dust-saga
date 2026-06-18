@@ -418,7 +418,7 @@ const STAT_TO_COMBAT: Record<string, (stat: number, stats: EffectiveStats) => vo
   agi: (v, s) => { s.speed += Math.floor(v * 0.5); },
 };
 
-interface EffectiveStats {
+export interface EffectiveStats {
   attack: number;
   defense: number;
   magicAttack: number;

@@ -652,6 +652,15 @@ export class GameClient {
       }
     });
 
+    this.network.onPacket(PacketType.BATCH_COMBAT, (packet: any) => {
+      const events = packet.data?.events;
+      if (Array.isArray(events)) {
+        for (const evt of events) {
+          this.network.dispatchPacket({ type: evt.type, timestamp: packet.timestamp, data: evt.data });
+        }
+      }
+    });
+
     this.network.onPacket(PacketType.HEAL, (packet: any) => {
       const { targetId, amount } = packet.data;
       if (targetId === this.playerId && this.stats) {

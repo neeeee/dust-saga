@@ -16,6 +16,14 @@ export class AISystem extends System {
     super(entityManager);
   }
 
+  static hashId(id: string): number {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash);
+  }
+
   onEnemyAttack(callback: (enemyId: string, targetId: string, damage: number) => void): void {
     this.attackCallbacks.push(callback);
   }
@@ -135,9 +143,14 @@ export class AISystem extends System {
     enemies: Map<string, EnemyInstance>,
     players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>,
     summons: Map<string, { position: { x: number; y: number; z: number }; summonId: string }>,
-    deltaTime: number
+    deltaTime: number,
+    staggerBucket?: number,
+    staggerMod?: number
   ): void {
-    enemies.forEach((enemy) => {
+    const hasStagger = staggerBucket !== undefined && staggerMod !== undefined && staggerMod > 0;
+    enemies.forEach((enemy, id) => {
+      if (hasStagger && AISystem.hashId(id) % staggerMod! !== staggerBucket!) return;
+
       if (enemy.state === 'dead') {
         this.checkRespawn(enemy);
         return;

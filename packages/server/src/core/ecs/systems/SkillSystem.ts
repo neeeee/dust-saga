@@ -426,7 +426,7 @@ export class SkillSystem {
 
     const castSpd = session.stats.castSpeed || 100;
 
-    const effective = getEffectiveStats(
+    const effective = session.effectiveStats ?? getEffectiveStats(
       session.stats,
       session.statPoints,
       session.statusEffects || []
@@ -720,7 +720,7 @@ export class SkillSystem {
     const isMagical = damageType === 'magical';
     const numHits = skill.baseHits || 1;
     const hitChance = this.calculateAccuracy(session, target);
-    const effectiveStats = getEffectiveStats(session.stats, session.statPoints, session.statusEffects || []);
+    const effectiveStats = session.effectiveStats ?? getEffectiveStats(session.stats, session.statPoints, session.statusEffects || []);
 
     const basePower = skill.basePower ?? 1;
     const baseStats = session.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };

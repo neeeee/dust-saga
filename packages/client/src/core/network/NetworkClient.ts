@@ -94,6 +94,10 @@ export class NetworkClient {
     }
   }
 
+  dispatchPacket(packet: Packet): void {
+    this.handlePacket(packet);
+  }
+
   setToken(token: string): void {
     this.token = token;
   }

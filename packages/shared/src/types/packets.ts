@@ -101,6 +101,8 @@ export enum PacketType {
   TRADE_ACCEPT = 168,
   TRADE_CANCEL = 169,
   TRADE_CLOSE = 170,
+
+  BATCH_COMBAT = 171,
 }
 
 export interface Packet {

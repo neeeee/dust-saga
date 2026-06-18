@@ -180,6 +180,7 @@ export class PlayerSystem extends System {
       activeCast: null,
       statusEffects: [],
       statBreakdown: null,
+      effectiveStats: null,
       inventory: [],
       gold: 100,
       equipment: {
@@ -346,6 +347,7 @@ export class PlayerSystem extends System {
       effectiveStatPoints,
       session.statusEffects || []
     );
+    session.effectiveStats = effective;
     session.stats.attack = effective.attack;
     session.stats.defense = effective.defense;
     session.stats.magicAttack = effective.magicAttack;

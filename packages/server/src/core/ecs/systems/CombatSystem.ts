@@ -136,7 +136,7 @@ export class CombatSystem extends System {
     } else {
       const player = players.get(targetId);
       if (player) {
-        const playerEffective = getEffectiveStats(player.stats, player.statPoints, player.statusEffects || []);
+        const playerEffective = player.effectiveStats ?? getEffectiveStats(player.stats, player.statPoints, player.statusEffects || []);
         targetDefense = playerEffective.defense;
         targetPosition = player.position;
         playerRef = player;
@@ -152,7 +152,7 @@ export class CombatSystem extends System {
     const attackRange = isRanged ? COMBAT_CONFIG.RANGED_ATTACK_RANGE : COMBAT_CONFIG.ATTACK_RANGE;
     if (dist > attackRange) return [];
 
-    const effective = getEffectiveStats(attacker.stats, attacker.statPoints, attacker.statusEffects || []);
+    const effective = attacker.effectiveStats ?? getEffectiveStats(attacker.stats, attacker.statPoints, attacker.statusEffects || []);
 
     const attackerBaseStats = attacker.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
     const attackerTotalDex = (attacker.statPoints.DEX || 0) + (attackerBaseStats.DEX || 0);
@@ -255,7 +255,7 @@ export class CombatSystem extends System {
       if (dist > range) continue;
       const dot = (dx * facingX + dz * facingZ) / dist;
       if (dot < Math.cos(halfCone)) continue;
-      const pe = getEffectiveStats(player.stats, player.statPoints, player.statusEffects || []);
+      const pe = player.effectiveStats ?? getEffectiveStats(player.stats, player.statPoints, player.statusEffects || []);
       candidates.push({ id, position: player.position, defense: pe.defense, isEnemy: false, enemyRef: null, playerRef: player });
     }
 
@@ -267,7 +267,7 @@ export class CombatSystem extends System {
 
     const hitTargets = candidates.slice(0, COMBAT_CONFIG.MANUAL_ATTACK_MAX_TARGETS);
 
-    const effective = getEffectiveStats(attacker.stats, attacker.statPoints, attacker.statusEffects || []);
+    const effective = attacker.effectiveStats ?? getEffectiveStats(attacker.stats, attacker.statPoints, attacker.statusEffects || []);
     const baseStats = attacker.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
     const totalSPI = (attacker.statPoints.SPI || 0) + (baseStats.SPI || 0);
     const totalINT = (attacker.statPoints.INT || 0) + (baseStats.INT || 0);
@@ -373,7 +373,7 @@ export class CombatSystem extends System {
     }
 
     const attackPower = def?.attack || 5;
-    const targetEffective = getEffectiveStats(
+    const targetEffective = target.effectiveStats ?? getEffectiveStats(
       target.stats,
       target.statPoints,
       target.statusEffects || []

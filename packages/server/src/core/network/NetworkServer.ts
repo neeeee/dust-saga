@@ -528,6 +528,7 @@ export class NetworkServer implements NetworkContext {
       const invIdx = target.statusEffects.findIndex(e => e.type === StatusEffectType.INVISIBLE);
       if (invIdx !== -1) {
         target.statusEffects.splice(invIdx, 1);
+        target.effectiveStats = null;
         this.sendToPlayer(target.characterId, {
           type: PacketType.STATUS_EFFECT_UPDATE,
           timestamp: Date.now(),
@@ -585,6 +586,7 @@ export class NetworkServer implements NetworkContext {
     for (let i = 0; i < target.statusEffects.length; i++) {
       if (target.statusEffects[i].type === barrierType) {
         target.statusEffects.splice(i, 1);
+        target.effectiveStats = null;
         this.sendToPlayer(target.characterId, {
           type: PacketType.STATUS_EFFECT_UPDATE,
           timestamp: Date.now(),
@@ -969,20 +971,26 @@ export class NetworkServer implements NetworkContext {
   getDebuffResist(targetId: string, category: string): number {
     const player = this.state.players.get(targetId);
     if (player) {
+      if (!player.resistCache) player.resistCache = new Map();
+      const cached = player.resistCache.get(category);
+      if (cached !== undefined) return cached;
+
       const baseStats = player.baseStats || { STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0 };
       const totalSTA = (player.statPoints.STA || 0) + baseStats.STA;
       const totalSPI = (player.statPoints.SPI || 0) + baseStats.SPI;
       const gc = player.statBreakdown?.gearCombat;
+      let result = 0;
       if (STA_DEBUFF_CATEGORIES.has(category)) {
         const gearKey = `${category}Resist` as keyof typeof gc;
         const gearBonus = (gc as any)?.[gearKey] || 0;
-        return computeAilmentResist(totalSTA, gearBonus);
+        result = computeAilmentResist(totalSTA, gearBonus);
       } else if (SPI_DEBUFF_CATEGORIES.has(category)) {
         const gearKey = `${category}Resist` as keyof typeof gc;
         const gearBonus = (gc as any)?.[gearKey] || 0;
-        return computeDisorderResist(totalSPI, gearBonus);
+        result = computeDisorderResist(totalSPI, gearBonus);
       }
-      return 0;
+      player.resistCache.set(category, result);
+      return result;
     }
     const enemy = this.spawnMgr.getEnemy(targetId);
     if (enemy) {
@@ -1597,7 +1605,10 @@ export class NetworkServer implements NetworkContext {
   }
 
   removeBlockingProtectedBuffs(blockerId: string): void {
+    const blocker = this.state.players.get(blockerId);
+    const blockerZone = blocker?.zoneId;
     for (const [targetId, target] of this.state.players) {
+      if (blockerZone && target.zoneId !== blockerZone) continue;
       const prot = target.statusEffects.find(
         e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
       );
@@ -1616,6 +1627,7 @@ export class NetworkServer implements NetworkContext {
 
   removeSongProximityBuffs(caster: PlayerSession): void {
     for (const [targetId, target] of this.state.players) {
+      if (target.zoneId !== caster.zoneId) continue;
       if (!target.statusEffects?.length) continue;
 
       const toRemove = target.statusEffects.filter(e =>
@@ -1628,6 +1640,7 @@ export class NetworkServer implements NetworkContext {
         e.appliedAt = Date.now();
         e.duration = 5000;
       }
+      target.effectiveStats = null;
 
       if (targetId !== caster.characterId) {
         this.sendToPlayer(targetId, {
@@ -2038,6 +2051,7 @@ export class NetworkServer implements NetworkContext {
     const characterId = session.characterId;
     const targets = this.findAllEntitiesInRadius(session, aoePosition, aoeRadius);
     const skill = this.skillSys.findSkillDefinition(skillName);
+    const batchEvents: Array<{ type: PacketType; data: any }> = [];
 
     for (const target of targets) {
       if (this.state.players.has(target.id) && target.id !== characterId && this.isPartyMember(characterId, target.id)) continue;
@@ -2074,9 +2088,8 @@ export class NetworkServer implements NetworkContext {
           this.applySkillKnockback(enemy, session.position, skill.knockback);
         }
         const died = mainDied || enemy.health <= 0;
-        this.broadcastInZone(session.zoneId, {
+        batchEvents.push({
           type: PacketType.DAMAGE,
-          timestamp: Date.now(),
           data: {
             attackerId: characterId,
             targetId: target.id,
@@ -2108,27 +2121,23 @@ export class NetworkServer implements NetworkContext {
             });
             const lootItems = this.loot.generateLoot(enemyDef.lootTable, enemy.position, characterId);
             lootItems.forEach(loot => {
-              this.broadcastInZone(session.zoneId, {
+              batchEvents.push({
                 type: PacketType.LOOT_SPAWN,
-                timestamp: Date.now(),
                 data: loot
               });
             });
           }
-          this.broadcastInZone(session.zoneId, {
+          batchEvents.push({
             type: PacketType.DEATH,
-            timestamp: Date.now(),
             data: { entityId: target.id, killerId: characterId }
           });
-          this.broadcastInZone(session.zoneId, {
+          batchEvents.push({
             type: PacketType.ENTITY_DESPAWN,
-            timestamp: Date.now(),
             data: { entityId: target.id }
           });
         } else {
-          this.broadcastInZone(session.zoneId, {
+          batchEvents.push({
             type: PacketType.STATS_UPDATE,
-            timestamp: Date.now(),
             data: { entityId: target.id, health: enemy.health, maxHealth: enemy.maxHealth }
           });
         }
@@ -2146,9 +2155,8 @@ export class NetworkServer implements NetworkContext {
           }
           if (anyApplied) {
             this.enmity.addDebuffEnmity(enemy, characterId, maxPotency, true);
-            this.broadcastInZone(session.zoneId, {
+            batchEvents.push({
               type: PacketType.ENTITY_STATUS_EFFECTS,
-              timestamp: Date.now(),
               data: { entityId: target.id, effects: enemy.statusEffects }
             });
           }
@@ -2176,9 +2184,8 @@ export class NetworkServer implements NetworkContext {
               this.applySkillKnockback(playerTarget, session.position, skill.knockback);
             }
           }
-          this.broadcastInZone(session.zoneId, {
+          batchEvents.push({
             type: PacketType.DAMAGE,
-            timestamp: Date.now(),
             data: {
               attackerId: characterId,
               targetId: target.id,
@@ -2201,11 +2208,10 @@ export class NetworkServer implements NetworkContext {
             if (!targetResult.physicalDamage) {
               this.processOnHitProcs(session, target.id, targetResult.damage, (targetResult.damageType || 'physical') === 'physical');
             }
-            this.broadcastInZone(session.zoneId, {
+            batchEvents.push({
               type: PacketType.STATS_UPDATE,
-              timestamp: Date.now(),
               data: { entityId: target.id, health: playerTarget.stats.health, maxHealth: playerTarget.stats.maxHealth }
-            }, characterId);
+            });
             this.refreshPartyForMember(target.id);
             if (playerTarget.stats.health <= 0) {
               this.handlePlayerDeath(playerTarget);
@@ -2214,6 +2220,14 @@ export class NetworkServer implements NetworkContext {
           this.consumeDebuffsOnHit(playerTarget);
         }
       }
+    }
+
+    if (batchEvents.length > 0) {
+      this.broadcastInZone(session.zoneId, {
+        type: PacketType.BATCH_COMBAT,
+        timestamp: Date.now(),
+        data: { events: batchEvents }
+      });
     }
   }
 
@@ -2421,7 +2435,7 @@ export class NetworkServer implements NetworkContext {
       expiresAt,
       entitiesInside: new Map<string, number>(),
     };
-    for (const [id, enemy] of this.spawnMgr.getAllEnemies()) {
+    for (const [id, enemy] of this.spawnMgr.getEnemiesInZone(session.zoneId) ?? []) {
       if (enemy.state === 'dead') continue;
       const dx = enemy.position.x - position.x;
       const dz = enemy.position.z - position.z;
@@ -2431,6 +2445,7 @@ export class NetworkServer implements NetworkContext {
     }
     for (const [id, player] of this.state.players) {
       if (id === session.characterId) continue;
+      if (player.zoneId !== session.zoneId) continue;
       if (player.stats.health <= 0 || !player.position) continue;
       const dx = player.position.x - position.x;
       const dz = player.position.z - position.z;
@@ -2731,6 +2746,7 @@ export class NetworkServer implements NetworkContext {
         e.duration = buffDuration;
         e.lastInRangeAt = now;
       }
+      target.effectiveStats = null;
       this.sendToPlayer(targetId, {
         type: PacketType.STATUS_EFFECT_UPDATE,
         timestamp: Date.now(),
@@ -2930,8 +2946,9 @@ export class NetworkServer implements NetworkContext {
      }
    }
 
-  private checkEntityAOEEntries(entityId: string, position: { x: number; y: number; z: number }): void {
+  private checkEntityAOEEntries(entityId: string, position: { x: number; y: number; z: number }, entityZoneId: string): void {
     for (const [zoneId, zone] of this.activeAOEZones) {
+      if (zone.zoneId !== entityZoneId) continue;
       const dx = position.x - zone.position.x;
       const dz = position.z - zone.position.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
@@ -3065,6 +3082,8 @@ export class NetworkServer implements NetworkContext {
   private tickPlayerUpdates(now: number): void {
     this.state.players.forEach(session => {
       if (session.isDead) return;
+
+      if (session.resistCache) session.resistCache.clear();
 
       this.skillSys.updateCooldowns(session);
 
@@ -4192,7 +4211,14 @@ export class NetworkServer implements NetworkContext {
         zoneSummons.set(summon.id, { position: summon.position, summonId: summon.id });
       }
 
-      this.ai.updateEnemies(this.spawnMgr.getEnemiesInZone(zoneId), zonePlayers, zoneSummons, 1 / this.tickRate);
+      this.ai.updateEnemies(
+        this.spawnMgr.getEnemiesInZone(zoneId),
+        zonePlayers,
+        zoneSummons,
+        this.AI_TICK_STAGGER / this.tickRate,
+        this.aiTickBucket,
+        this.AI_TICK_STAGGER
+      );
     }
   }
 
@@ -4203,7 +4229,7 @@ export class NetworkServer implements NetworkContext {
         if (!zoneEnemies) continue;
         for (const [enemyId, enemy] of zoneEnemies) {
           if (enemy.state === 'dead') continue;
-          this.checkEntityAOEEntries(enemyId, enemy.position);
+          this.checkEntityAOEEntries(enemyId, enemy.position, zoneId);
         }
     }
   }
@@ -4266,7 +4292,7 @@ export class NetworkServer implements NetworkContext {
   }
 
   private broadcastEntityStates(): void {
-    const RADIUS_SQ = NetworkServer.INTEREST_RADIUS_SQ;
+    const INTEREST_RADIUS = NetworkServer.INTEREST_RADIUS;
 
     for (const zoneId of this.spawnMgr.getZoneIds()) {
       const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
@@ -4274,28 +4300,14 @@ export class NetworkServer implements NetworkContext {
       const zonePlayerIds = this.zonePlayerIndex.get(zoneId);
       if (!zonePlayerIds || zonePlayerIds.size === 0) continue;
 
-      const aliveEnemies: Array<{ id: string; position: { x: number; y: number; z: number }; rotation: number; state: string; health: number; maxHealth: number; targetId: string | null }> = [];
-      for (const [enemyId, enemy] of zoneEnemies) {
-        if (enemy.state === 'dead') continue;
-        aliveEnemies.push({ id: enemyId, position: enemy.position, rotation: enemy.rotation, state: enemy.state, health: enemy.health, maxHealth: enemy.maxHealth, targetId: enemy.targetId });
-      }
-
       for (const characterId of zonePlayerIds) {
         const player = this.state.players.get(characterId);
         if (!player || !player.position) continue;
 
-        const visible: typeof aliveEnemies = [];
         const px = player.position.x;
         const pz = player.position.z;
 
-        for (let i = 0; i < aliveEnemies.length; i++) {
-          const e = aliveEnemies[i];
-          const dx = e.position.x - px;
-          const dz = e.position.z - pz;
-          if (dx * dx + dz * dz <= RADIUS_SQ) {
-            visible.push(e);
-          }
-        }
+        const visible = this.queryEnemiesNear(px, pz, INTEREST_RADIUS, zoneId);
 
         if (visible.length > 0) {
           this.sendToPlayer(characterId, {
@@ -4304,12 +4316,12 @@ export class NetworkServer implements NetworkContext {
             data: {
               entities: visible.map(e => ({
                 id: e.id,
-                position: e.position,
-                rotation: { x: 0, y: e.rotation, z: 0, w: 1 },
-                state: e.state,
-                health: e.health,
-                maxHealth: e.maxHealth,
-                targetId: e.targetId
+                position: e.data.position,
+                rotation: { x: 0, y: e.data.rotation, z: 0, w: 1 },
+                state: e.data.state,
+                health: e.data.health,
+                maxHealth: e.data.maxHealth,
+                targetId: e.data.targetId
               }))
             }
           });
@@ -4377,6 +4389,7 @@ export class NetworkServer implements NetworkContext {
       activeCast: null,
       statusEffects: [],
       statBreakdown: null,
+      effectiveStats: null,
       inventory: [],
       gold: 0,
       equipment: normalizeEquipment(null),
