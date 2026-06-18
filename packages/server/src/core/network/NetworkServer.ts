@@ -786,7 +786,10 @@ export class NetworkServer implements NetworkContext {
       return { died: false, actualDamage };
     }
     if (attackerId) {
-      this.enmity.addDamageEnmity(enemy, attackerId, damage);
+      const def = getEnemyDefinition(enemy.enemyType);
+      if (!def || def.aggroRange > 0) {
+        this.enmity.addDamageEnmity(enemy, attackerId, damage);
+      }
     }
     return { died: enemy.health <= 0, actualDamage };
   }
@@ -3620,7 +3623,10 @@ export class NetworkServer implements NetworkContext {
                  anyApplied = true;
                  if (effect.potency > maxPotency) maxPotency = effect.potency;
                }
-               this.enmity.addDebuffEnmity(debuffEnemy, session.characterId, maxPotency, anyApplied);
+                const debuffEnemyDef = getEnemyDefinition(debuffEnemy.enemyType);
+                if (!debuffEnemyDef || debuffEnemyDef.aggroRange > 0) {
+                  this.enmity.addDebuffEnmity(debuffEnemy, session.characterId, maxPotency, anyApplied);
+                }
               this.broadcastInZone(session.zoneId, {
                 type: PacketType.ENTITY_STATUS_EFFECTS,
                 timestamp: Date.now(),
@@ -3825,6 +3831,8 @@ export class NetworkServer implements NetworkContext {
       };
 
       const tick = this.skillSys.tickStatusEffects(fakeSession, now);
+
+      enemy.statusEffects = fakeSession.statusEffects;
 
       const zoneId = this.findZoneOfEnemy(enemyId);
       if (!zoneId) return;

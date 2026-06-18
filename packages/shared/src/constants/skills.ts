@@ -841,10 +841,13 @@ export const CLASS_SKILL_DATA: Record<
             castTime: 0,
             cooldown: 10,
             duration: 0,
-            description: "Silence target (bow)",
+            description: "Shoot arrow with a chance to silence target (bow)",
             damageType: DamageType.PHYSICAL,
             basePower: 2,
-            hasDebuff: true,
+            debuffEffectTable: {
+              hasSilence: { duration: 5 },
+            },
+            debuffDuration: 5,
             requiredWeaponType: [WeaponType.BOW],
           },
           "Arrow Storm": {

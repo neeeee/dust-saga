@@ -220,9 +220,9 @@ export class AISystem extends System {
   ): void {
     if (!def) return;
 
-    if (this.tryEngageFromEnmity(enemy, players, summons)) return;
+    if (def.aggroRange > 0 && this.tryEngageFromEnmity(enemy, players, summons)) return;
 
-    if (this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
+    if (def.aggroRange > 0 && this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
 
     const target = this.pickAggroTarget(enemy, players, summons, def.aggroRange, def.aggroStrategy || 'first');
     if (target) {
@@ -244,9 +244,9 @@ export class AISystem extends System {
       return;
     }
 
-    if (this.tryEngageFromEnmity(enemy, players, summons)) return;
+    if (def.aggroRange > 0 && this.tryEngageFromEnmity(enemy, players, summons)) return;
 
-    if (this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
+    if (def.aggroRange > 0 && this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
 
     const target = enemy.patrolPoints[enemy.currentPatrolIndex];
     const dist = distance2D(enemy.position, target);
@@ -355,9 +355,9 @@ export class AISystem extends System {
   private updateReturn(enemy: EnemyInstance, enemies: Map<string, EnemyInstance>, players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>, summons: Map<string, { position: { x: number; y: number; z: number }; summonId: string }>, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
     if (!def) return;
 
-    if (this.tryEngageFromEnmity(enemy, players, summons)) return;
+    if (def.aggroRange > 0 && this.tryEngageFromEnmity(enemy, players, summons)) return;
 
-    if (this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
+    if (def.aggroRange > 0 && this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
 
     if (this.enmitySys) {
       this.enmitySys.decay(enemy, deltaTime, false);
