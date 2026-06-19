@@ -17,6 +17,7 @@ import { EnmitySystem } from '../ecs/systems/EnmitySystem';
 import { TradeSystem } from '../ecs/systems/TradeSystem';
 import { SpawnManager } from '../world/SpawnManager';
 import { SummonManager } from '../world/SummonManager';
+import { DummyMeta } from '../world/DummyManager';
 import { QuestSystem } from '../../systems/QuestSystem';
 
 export interface ServerGameState {
@@ -113,13 +114,5 @@ export interface NetworkContext {
   toggleDummyPvp(dummyId: string, session: PlayerSession): void;
   toggleDummyWalk(dummyId: string, session: PlayerSession): void;
   toggleDummyParty(dummyId: string, session: PlayerSession): void;
-  readonly dummyMeta: Map<string, {
-    ownerId: string;
-    isPvp: boolean;
-    isWalking: boolean;
-    walkPoints: Array<{ x: number; y: number; z: number }>;
-    walkIndex: number;
-    walkDir: number;
-    inParty: boolean;
-  }>;
+  readonly dummyMeta: Map<string, DummyMeta>;
 }

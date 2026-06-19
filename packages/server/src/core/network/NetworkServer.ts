@@ -23,7 +23,7 @@ import {
   ZoneType,
   normalizeEquipment,
   getEnemyDefinition, getZoneDefinition, NPC_DATABASE, getNPCsInZone, getItem, getQuest, QUEST_DATABASE, ITEM_DATABASE,
-  SpatialHash, SpatialEntry,
+  SpatialEntry,
   SUMMON_STATS, BANISH_RADIUS,
   getGloomRecoilRate,
 } from '@dust-saga/shared';
@@ -38,8 +38,16 @@ import { EnmitySystem } from '../ecs/systems/EnmitySystem';
 import { TradeSystem } from '../ecs/systems/TradeSystem';
 import { SpawnManager } from '../world/SpawnManager';
 import { SummonManager } from '../world/SummonManager';
+import { DummyManager, DummyMeta } from '../world/DummyManager';
+import { SpatialIndexManager } from '../world/SpatialIndexManager';
+import { AOEZoneManager } from '../world/AOEZoneManager';
+import { SongProximityManager } from '../world/SongProximityManager';
+import { BlockingProximityManager } from '../world/BlockingProximityManager';
+import { KnockbackManager } from '../world/KnockbackManager';
+import { SummonCombatDeps } from '../world/SummonManager';
+import { MovementThrottle } from '../world/MovementThrottle';
+import { ZoneRegistry } from '../world/ZoneInstance';
 import { QuestSystem } from '../../systems/QuestSystem';
-import { v4 as uuidv4 } from 'uuid';
 import { NetworkContext, ServerGameState, PacketHandler } from './NetworkContext';
 import { registerAllHandlers } from './handlers';
 import { collectProcs, buildProcStatusEffect, getProcResistCategory, isDrainLifeProc, getDarkRecoilPercent } from '../combat/ProcSystem';
@@ -65,55 +73,28 @@ export class NetworkServer implements NetworkContext {
   private tickRate: number = 30;
   private handlers: Map<PacketType, PacketHandler>;
 
-  private activeAOEZones: Map<string, {
-    id: string;
-    casterId: string;
-    zoneId: string;
-    skillName: string;
-    position: { x: number; y: number; z: number };
-    radius: number;
-    pulseInterval: number;
-    remainingPulses: number;
-    lastPulseAt: number;
-    expiresAt: number;
-    entitiesInside: Map<string, number>;
-  }> = new Map();
+  readonly dummyMgr: DummyManager;
+  readonly spatialMgr: SpatialIndexManager;
+  readonly aoeZoneMgr: AOEZoneManager;
+  readonly songMgr: SongProximityManager;
+  readonly blockingMgr: BlockingProximityManager;
+  readonly knockbackMgr: KnockbackManager;
+  private summonCombatDeps: SummonCombatDeps;
+  readonly movementThrottle: MovementThrottle = new MovementThrottle();
 
-  readonly dummyMeta: Map<string, {
-    ownerId: string;
-    isPvp: boolean;
-    isWalking: boolean;
-    walkPoints: Array<{ x: number; y: number; z: number }>;
-    walkIndex: number;
-    walkDir: number;
-    inParty: boolean;
-  }> = new Map();
-  private dummyCounter: number = 0;
+  readonly zoneRegistry: ZoneRegistry = new ZoneRegistry();
 
-  private zonePlayerIndex: Map<string, Set<string>> = new Map();
-
-  private lastMoveBroadcast: Map<string, number> = new Map();
-
-  private playerSpatialHash = new SpatialHash<PlayerSession>(8);
-  private enemySpatialHash = new SpatialHash<EnemyInstance>(8);
   static readonly INTEREST_RADIUS = 50;
   static readonly INTEREST_RADIUS_SQ = 50 * 50;
   private aiTickBucket: number = 0;
   private readonly AI_TICK_STAGGER = 4;
 
   private addToZonePlayerIndex(zoneId: string, characterId: string): void {
-    let set = this.zonePlayerIndex.get(zoneId);
-    if (!set) {
-      set = new Set();
-      this.zonePlayerIndex.set(zoneId, set);
-    }
-    set.add(characterId);
+    this.zoneRegistry.getOrCreate(zoneId).addPlayer(characterId);
   }
 
   private removeFromZonePlayerIndex(characterId: string): void {
-    for (const [, set] of this.zonePlayerIndex) {
-      set.delete(characterId);
-    }
+    this.zoneRegistry.removePlayerFromAll(characterId);
   }
 
   private movePlayerZoneIndex(characterId: string, newZoneId: string): void {
@@ -160,6 +141,75 @@ export class NetworkServer implements NetworkContext {
       sendToPlayer: (id, pkt) => this.sendToPlayer(id, pkt),
       findPlayer: (id) => this.findPlayerByCharacterId(id),
     });
+
+    this.dummyMgr = new DummyManager({
+      getPlayers: () => this.state.players,
+      registerPlayerInZone: (id, zone) => this.registerPlayerInZone(id, zone),
+      unregisterPlayerFromZone: (id) => this.unregisterPlayerFromZone(id),
+      clearMovementThrottle: (id) => this.clearMovementThrottle(id),
+      broadcastInZone: (zone, pkt) => this.broadcastInZone(zone, pkt),
+      sendToPlayer: (id, pkt) => this.sendToPlayer(id, pkt),
+      sendPartyUpdate: (partyId) => this.sendPartyUpdate(partyId),
+      recalcStats: (s) => this.playerSys.recalcStats(s),
+      getPartySys: () => this.partySys,
+      getPlayerSys: () => this.playerSys,
+      getTickRate: () => this.tickRate,
+    });
+
+    this.spatialMgr = new SpatialIndexManager({
+      getPlayers: () => this.state.players,
+      getSpawnManager: () => this.spawnMgr,
+    });
+
+    this.aoeZoneMgr = new AOEZoneManager({
+      getPlayers: () => this.state.players,
+      getSpawnManager: () => this.spawnMgr,
+      getSkillSystem: () => this.skillSys,
+      broadcastInZone: (zone, pkt) => this.broadcastInZone(zone, pkt),
+      applyAOEDamageToTargets: (caster, skillName, pos, radius) => this.applyAOEDamageToTargets(caster, skillName, pos, radius),
+      onEntityEnterAOE: (caster, skillName, targetId, pos, radius) => this.onEntityEnterAOE(caster, skillName, targetId, pos, radius),
+    });
+
+    this.songMgr = new SongProximityManager({
+      getPlayers: () => this.state.players,
+      getSkillSystem: () => this.skillSys,
+      getPlayerSys: () => this.playerSys,
+      isPartyMember: (a, b) => this.isPartyMember(a, b),
+      queryPlayersNear: (x, z, r, zid) => this.queryPlayersNear(x, z, r, zid),
+      broadcastInZone: (zone, pkt) => this.broadcastInZone(zone, pkt),
+      sendToPlayer: (id, pkt) => this.sendToPlayer(id, pkt),
+      broadcastEntityEffects: (s) => this.broadcastEntityEffects(s),
+      onRedSongPulse: (caster, skill, radius) => this.applyRedSongDamage(caster, skill, radius),
+    });
+
+    this.blockingMgr = new BlockingProximityManager({
+      getPlayers: () => this.state.players,
+      getPlayerSys: () => this.playerSys,
+      queryPlayersNear: (x, z, r, zid) => this.queryPlayersNear(x, z, r, zid),
+      sendToPlayer: (id, pkt) => this.sendToPlayer(id, pkt),
+      broadcastEntityEffects: (s) => this.broadcastEntityEffects(s),
+    });
+
+    this.knockbackMgr = new KnockbackManager({
+      getSpawnManager: () => this.spawnMgr,
+      forEachPlayerInZone: (zid, cb) => this.forEachPlayerInZone(zid, cb),
+      getTickRate: () => this.tickRate,
+    });
+
+    this.summonCombatDeps = {
+      getSpawnManager: () => this.spawnMgr,
+      getEnmity: () => this.enmity,
+      getTickRate: () => this.tickRate,
+      broadcastInZone: (zone, pkt) => this.broadcastInZone(zone, pkt),
+      damageEnemy: (enemy, dmg, att) => this.damageEnemy(enemy, dmg, att),
+      getEnemyEffectiveDefense: (enemy) => this.getEnemyEffectiveDefense(enemy),
+      handleEnemyKill: (id, killer) => this.handleEnemyKill(id, killer),
+      shouldApplyDebuff: (eff, tid, cid) => this.shouldApplyDebuff(eff, tid, cid),
+    };
+  }
+
+  get dummyMeta(): Map<string, DummyMeta> {
+    return this.dummyMgr.dummyMeta;
   }
 
   findCharacterBySocket(socketId: string): string | undefined {
@@ -221,16 +271,13 @@ export class NetworkServer implements NetworkContext {
   }
 
   private getZoneIdForCharacter(characterId: string): string | undefined {
-    for (const [zoneId, set] of this.zonePlayerIndex) {
-      if (set.has(characterId)) return zoneId;
-    }
-    return undefined;
+    return this.zoneRegistry.zoneOf(characterId);
   }
 
   forEachPlayerInZone(zoneId: string, cb: (id: string, player: PlayerSession) => void): void {
-    const ids = this.zonePlayerIndex.get(zoneId);
-    if (!ids) return;
-    for (const id of ids) {
+    const zone = this.zoneRegistry.get(zoneId);
+    if (!zone) return;
+    for (const id of zone.players) {
       const p = this.state.players.get(id);
       if (p) cb(id, p);
     }
@@ -265,46 +312,31 @@ export class NetworkServer implements NetworkContext {
   }
 
   updatePlayerSpatialPosition(characterId: string, position: { x: number; z: number }): void {
-    const session = this.state.players.get(characterId);
-    if (session) {
-      this.playerSpatialHash.move(characterId, position.x, position.z);
-    }
+    this.spatialMgr.updatePlayerSpatialPosition(characterId, position);
   }
 
   insertPlayerSpatial(characterId: string): void {
-    const session = this.state.players.get(characterId);
-    if (session?.position) {
-      this.playerSpatialHash.insert(characterId, session.position.x, session.position.z, session);
-    }
+    this.spatialMgr.insertPlayerSpatial(characterId);
   }
 
   removePlayerSpatial(characterId: string): void {
-    this.playerSpatialHash.remove(characterId);
+    this.spatialMgr.removePlayerSpatial(characterId);
   }
 
   insertEnemySpatial(enemy: EnemyInstance): void {
-    if (enemy.state !== 'dead') {
-      this.enemySpatialHash.insert(enemy.id, enemy.position.x, enemy.position.z, enemy);
-    }
+    this.spatialMgr.insertEnemySpatial(enemy);
   }
 
   removeEnemySpatial(enemyId: string): void {
-    this.enemySpatialHash.remove(enemyId);
+    this.spatialMgr.removeEnemySpatial(enemyId);
   }
 
   queryEnemiesNear(x: number, z: number, radius: number, zoneId: string): SpatialEntry<EnemyInstance>[] {
-    return this.enemySpatialHash.queryRadius(x, z, radius).filter(e => {
-      if (e.data.state === 'dead') return false;
-      const eZone = this.spawnMgr.findZoneOfEnemy(e.id);
-      return eZone === zoneId;
-    });
+    return this.spatialMgr.queryEnemiesNear(x, z, radius, zoneId);
   }
 
   queryPlayersNear(x: number, z: number, radius: number, zoneId: string): SpatialEntry<PlayerSession>[] {
-    return this.playerSpatialHash.queryRadius(x, z, radius).filter(e => {
-      if (e.data.isDead) return false;
-      return e.data.zoneId === zoneId;
-    });
+    return this.spatialMgr.queryPlayersNear(x, z, radius, zoneId);
   }
 
   isPartyMember(characterId: string, targetId: string): boolean {
@@ -1455,11 +1487,7 @@ export class NetworkServer implements NetworkContext {
           gold: session.gold,
         }).catch(err => console.error('Failed to save character on disconnect:', err));
 
-        for (const [zoneId, zone] of this.activeAOEZones) {
-          if (zone.casterId === characterId) {
-            this.removeAOEZone(zoneId, zone.zoneId);
-          }
-        }
+        this.aoeZoneMgr.cleanupOwner(characterId);
 
         const despawnedSummons = this.summonMgr.despawnAllForOwner(characterId);
         for (const summonId of despawnedSummons) {
@@ -1472,20 +1500,7 @@ export class NetworkServer implements NetworkContext {
 
         this.removeSongProximityBuffs(session);
 
-        for (const [dummyId, meta] of this.dummyMeta) {
-          if (meta.ownerId === characterId) {
-            if (meta.inParty) this.partySys.leaveParty(dummyId);
-            this.state.players.delete(dummyId);
-            this.unregisterPlayerFromZone(dummyId);
-            this.dummyMeta.delete(dummyId);
-            this.clearMovementThrottle(dummyId);
-            this.broadcastInZone(session.zoneId, {
-              type: PacketType.ENTITY_DESPAWN,
-              timestamp: Date.now(),
-              data: { entityId: dummyId }
-            });
-          }
-        }
+        this.dummyMgr.cleanupOwner(characterId, session.zoneId);
 
         this.broadcastInZone(session.zoneId, {
           type: PacketType.ENTITY_DESPAWN,
@@ -1605,24 +1620,7 @@ export class NetworkServer implements NetworkContext {
   }
 
   removeBlockingProtectedBuffs(blockerId: string): void {
-    const blocker = this.state.players.get(blockerId);
-    const blockerZone = blocker?.zoneId;
-    for (const [targetId, target] of this.state.players) {
-      if (blockerZone && target.zoneId !== blockerZone) continue;
-      const prot = target.statusEffects.find(
-        e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
-      );
-      if (prot) {
-        target.statusEffects = target.statusEffects.filter(e => e !== prot);
-        this.playerSys.recalcStats(target);
-        this.sendToPlayer(targetId, {
-          type: PacketType.STATUS_EFFECT_UPDATE,
-          timestamp: Date.now(),
-          data: { effects: target.statusEffects }
-        });
-        this.broadcastEntityEffects(target);
-      }
-    }
+    this.blockingMgr.removeProtectedBuffs(blockerId);
   }
 
   removeSongProximityBuffs(caster: PlayerSession): void {
@@ -2409,237 +2407,19 @@ export class NetworkServer implements NetworkContext {
   }
 
   spawnAOEZone(session: PlayerSession, skillName: string, position: { x: number; y: number; z: number }, radius: number): void {
-    const skill = this.skillSys.findSkillDefinition(skillName);
-    const totalPulses = skill?.pulseCount || 1;
-    const pulseInterval = skill?.pulseInterval || 1000;
-    const now = Date.now();
-
-    let expiresAt: number;
-    if (skill && skill.duration > 0) {
-      expiresAt = skill.duration * 1000 + now;
-    } else {
-      expiresAt = now + pulseInterval * (totalPulses - 1) + 1500;
-    }
-
-    const zoneId = uuidv4();
-    const zone = {
-      id: zoneId,
-      casterId: session.characterId,
-      zoneId: session.zoneId,
-      skillName,
-      position,
-      radius,
-      pulseInterval,
-      remainingPulses: totalPulses,
-      lastPulseAt: now,
-      expiresAt,
-      entitiesInside: new Map<string, number>(),
-    };
-    for (const [id, enemy] of this.spawnMgr.getEnemiesInZone(session.zoneId) ?? []) {
-      if (enemy.state === 'dead') continue;
-      const dx = enemy.position.x - position.x;
-      const dz = enemy.position.z - position.z;
-      if (Math.sqrt(dx * dx + dz * dz) <= radius) {
-        zone.entitiesInside.set(id, now);
-      }
-    }
-    for (const [id, player] of this.state.players) {
-      if (id === session.characterId) continue;
-      if (player.zoneId !== session.zoneId) continue;
-      if (player.stats.health <= 0 || !player.position) continue;
-      const dx = player.position.x - position.x;
-      const dz = player.position.z - position.z;
-      if (Math.sqrt(dx * dx + dz * dz) <= radius) {
-        zone.entitiesInside.set(id, now);
-      }
-    }
-    this.activeAOEZones.set(zoneId, zone);
-
-    this.broadcastInZone(session.zoneId, {
-      type: PacketType.AOE_ENTITY,
-      timestamp: Date.now(),
-      data: {
-        id: zoneId,
-        type: 'aoe',
-        position,
-        rotation: { x: 0, y: 0, z: 0, w: 1 },
-        data: { skillName, radius, expiresAt: zone.expiresAt },
-      }
-    });
-  }
-
-  private removeAOEZone(zoneId: string, zoneId_value: string): void {
-    const zone = this.activeAOEZones.get(zoneId);
-    if (!zone) return;
-    this.activeAOEZones.delete(zoneId);
-
-    this.broadcastInZone(zone.zoneId, {
-      type: PacketType.AOE_DESPAWN,
-      timestamp: Date.now(),
-      data: { entityId: zoneId }
-    });
+    this.aoeZoneMgr.spawnAOEZone(session, skillName, position, radius);
   }
 
   private tickAOEZones(now: number): void {
-    const entries = [...this.activeAOEZones.entries()];
-    for (const [zoneId, zone] of entries) {
-      if (now >= zone.expiresAt || zone.remainingPulses <= 0) {
-        this.removeAOEZone(zoneId, zone.zoneId);
-        continue;
-      }
-
-      const caster = this.state.players.get(zone.casterId);
-      if (!caster || caster.isDead) {
-        this.removeAOEZone(zoneId, zone.zoneId);
-        continue;
-      }
-
-      if (zone.remainingPulses <= 0) continue;
-
-      const lastPulse = zone.lastPulseAt || 0;
-      if (now - lastPulse < zone.pulseInterval) continue;
-
-      this.applyAOEDamageToTargets(caster, zone.skillName, zone.position, zone.radius);
-      zone.lastPulseAt = now;
-      zone.remainingPulses--;
-    }
+    this.aoeZoneMgr.tickAOEZones(now);
   }
 
-  private static SONG_PULSE_INTERVAL = 4000;
-  private static SONG_BUFF_DURATION = 5000;
-
   applySongPulseImmediate(caster: PlayerSession): void {
-    const songTypes = [
-      StatusEffectType.SONG_GREEN,
-      StatusEffectType.SONG_BLUE,
-      StatusEffectType.SONG_YELLOW,
-      StatusEffectType.SONG_RED,
-    ];
-    const BUFF_DUR = NetworkServer.SONG_BUFF_DURATION;
-
-    const songEffect = caster.statusEffects?.find(e => songTypes.includes(e.type) && !e.songProximityBuff);
-    if (!songEffect) return;
-
-    const skill = this.skillSys.findSkillDefinition(songEffect.skillName || '');
-    if (!skill) return;
-
-    songEffect.lastPulseAt = Date.now();
-
-    const songRadius = skill.aoeRadius || 3;
-
-    if (songEffect.type === StatusEffectType.SONG_RED && skill.basePower) {
-      this.applyRedSongDamage(caster, skill, songRadius);
-      return;
-    }
-
-    if (!skill.buffEffectTable) return;
-    const pulseTargets: PlayerSession[] = [caster];
-
-    for (const [targetId, target] of this.state.players) {
-      if (targetId === caster.characterId) continue;
-      if (target.isDead) continue;
-      if (target.zoneId !== caster.zoneId) continue;
-      if (!target.position || !caster.position) continue;
-      if (!this.isPartyMember(caster.characterId, targetId)) continue;
-
-      const dx = caster.position.x - target.position.x;
-      const dz = caster.position.z - target.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist <= songRadius) {
-        pulseTargets.push(target);
-      }
-    }
-
-    const now = Date.now();
-    for (const target of pulseTargets) {
-      const isCaster = target.characterId === caster.characterId;
-      this.applySongPulse(target, caster, skill, now, BUFF_DUR, isCaster);
-    }
+    this.songMgr.applySongPulseImmediate(caster);
   }
 
   private tickSongProximity(now: number): void {
-    const songTypes = [
-      StatusEffectType.SONG_GREEN,
-      StatusEffectType.SONG_BLUE,
-      StatusEffectType.SONG_YELLOW,
-      StatusEffectType.SONG_RED,
-    ];
-    const PULSE = NetworkServer.SONG_PULSE_INTERVAL;
-    const BUFF_DUR = NetworkServer.SONG_BUFF_DURATION;
-
-    for (const [charId, caster] of this.state.players) {
-      if (caster.isDead) continue;
-      if (!caster.statusEffects?.length) continue;
-
-      const songEffect = caster.statusEffects.find(e => songTypes.includes(e.type) && !e.songProximityBuff);
-      if (!songEffect) continue;
-
-      const lastPulse = songEffect.lastPulseAt || songEffect.appliedAt || 0;
-      if (now - lastPulse < PULSE) continue;
-
-      songEffect.lastPulseAt = now;
-
-      const skill = this.skillSys.findSkillDefinition(songEffect.skillName || '');
-
-      const mpDrain = Math.ceil((skill?.mpCost || 30) * 0.3);
-      caster.stats.mana = Math.max(0, caster.stats.mana - mpDrain);
-      if (caster.stats.mana <= 0) {
-        caster.statusEffects = caster.statusEffects.filter(e => {
-          if (songTypes.includes(e.type) && !e.songProximityBuff) return false;
-          return true;
-        });
-        this.removeSongProximityBuffs(caster);
-        this.playerSys.recalcStats(caster);
-        this.sendToPlayer(charId, {
-          type: PacketType.STATUS_EFFECT_UPDATE,
-          timestamp: Date.now(),
-          data: { effects: caster.statusEffects }
-        });
-        this.sendToPlayer(charId, {
-          type: PacketType.STATS_UPDATE,
-          timestamp: Date.now(),
-          data: { characterId: charId, stats: caster.stats, statBreakdown: caster.statBreakdown, skillProficiencies: caster.skillProficiencies, skillAdeptness: caster.skillAdeptness }
-        });
-        this.sendToPlayer(charId, {
-          type: PacketType.CHAT_MESSAGE,
-          timestamp: Date.now(),
-          data: { sender: 'System', message: 'Song ended - insufficient MP.', channel: 'system' }
-        });
-        this.broadcastEntityEffects(caster);
-        continue;
-      }
-
-      this.sendToPlayer(charId, {
-        type: PacketType.STATS_UPDATE,
-        timestamp: Date.now(),
-        data: { characterId: charId, stats: caster.stats }
-      });
-
-      if (!skill) continue;
-
-      if (!skill.buffEffectTable && songEffect.type !== StatusEffectType.SONG_RED) continue;
-      const songRadius = skill.aoeRadius || 3;
-
-      const pulseTargets: PlayerSession[] = [caster];
-
-      if (caster.position) {
-        const nearby = this.queryPlayersNear(caster.position.x, caster.position.z, songRadius, caster.zoneId);
-        for (const entry of nearby) {
-          if (entry.id === charId) continue;
-          if (!this.isPartyMember(charId, entry.id)) continue;
-          pulseTargets.push(entry.data);
-        }
-      }
-
-      for (const target of pulseTargets) {
-        const isCaster = target.characterId === charId;
-        this.applySongPulse(target, caster, skill, now, BUFF_DUR, isCaster);
-      }
-
-      if (songEffect.type === StatusEffectType.SONG_RED && skill.basePower) {
-        this.applyRedSongDamage(caster, skill, songRadius);
-      }
-    }
+    this.songMgr.tick(now);
   }
 
   private applyRedSongDamage(
@@ -2723,249 +2503,20 @@ export class NetworkServer implements NetworkContext {
     }
   }
 
-  private applySongPulse(
-    target: PlayerSession,
+  private tickBlockingProximity(now: number): void {
+    this.blockingMgr.tick(now);
+  }
+
+  /** Combat callback invoked by AOEZoneManager when an entity newly enters a zone. */
+  private onEntityEnterAOE(
     caster: PlayerSession,
-    skill: NonNullable<ReturnType<typeof this.skillSys.findSkillDefinition>>,
-    now: number,
-    buffDuration: number,
-    isCaster: boolean
+    skillName: string,
+    targetId: string,
+    position: { x: number; y: number; z: number },
+    radius: number
   ): void {
-    const bt = skill.buffEffectTable;
-    if (!bt) return;
-
-    const sourceId = caster.characterId;
-    const targetId = target.characterId;
-
-    const existing = target.statusEffects.filter(e =>
-      e.songProximityBuff && e.sourceId === sourceId && e.skillName === skill.name
-    );
-    if (existing.length > 0) {
-      for (const e of existing) {
-        e.appliedAt = now;
-        e.duration = buffDuration;
-        e.lastInRangeAt = now;
-      }
-      target.effectiveStats = null;
-      this.sendToPlayer(targetId, {
-        type: PacketType.STATUS_EFFECT_UPDATE,
-        timestamp: Date.now(),
-        data: { effects: target.statusEffects }
-      });
-      return;
-    }
-
-    const effects: StatusEffect[] = [];
-    const pushSongBuff = (type: StatusEffectType, potency: number, buffData?: BuffData) => {
-      effects.push({
-        id: `song_${now}_${Math.random().toString(36).slice(2, 6)}_${type}`,
-        type,
-        sourceId,
-        targetId,
-        potency,
-        appliedAt: now,
-        duration: buffDuration,
-        tickInterval: 0,
-        lastTickAt: now,
-        stacks: 1,
-        skillName: skill.name,
-        songProximityBuff: true,
-        lastInRangeAt: now,
-        buffData,
-      });
-    };
-
-    if (bt.songCooldownReduction) {
-      pushSongBuff(StatusEffectType.BUFF_CAST_SPEED, bt.songCooldownReduction);
-    }
-    if (bt.magicalDamageBonus) {
-      pushSongBuff(StatusEffectType.BUFF_GENERIC, 0, { magicalDamageBonusPercent: bt.magicalDamageBonus });
-    }
-    if (bt.auraDamageIncrease) {
-      pushSongBuff(StatusEffectType.BUFF_GENERIC, 0, { auraDamageIncreasePercent: bt.auraDamageIncrease });
-    }
-
-    if (bt.statTieredValues) {
-      const cfg = bt.statTieredValues;
-      const statKey = cfg.stat as keyof typeof caster.baseStats;
-      const totalStat = (caster.baseStats?.[statKey] || 0) + ((caster.statPoints as unknown as Record<string, number>)?.[statKey] || 0);
-      const prof = cfg.proficiencyStat
-        ? (caster.skillAdeptness?.[cfg.proficiencyStat] || 0)
-        : 0;
-      const skillName = skill.name.toLowerCase();
-      if (skillName === 'green song' || skillName === 'speedy gale') {
-        const dodgeResult = resolveStatTieredValue(cfg, totalStat, prof, 'dodgeChance');
-        if (dodgeResult != null) {
-          pushSongBuff(StatusEffectType.BUFF_DODGE, dodgeResult);
-        }
-        if (skillName === 'green song') {
-          const accuracyResult = resolveStatTieredValue(cfg, totalStat, prof, 'accuracy');
-          if (accuracyResult != null) {
-            pushSongBuff(StatusEffectType.BUFF_ACCURACY, accuracyResult);
-          }
-        }
-      }
-    }
-
-    if (bt.songDamageNegation) {
-      const dn = bt.songDamageNegation;
-      const totalSpi = (caster.baseStats?.SPI || 0) + (caster.statPoints?.SPI || 0);
-      const hymnProf = caster.skillProficiencies?.['Hymn'] || 0;
-      const profBonus = Math.min(hymnProf, dn.proficiencyCap);
-      const threshold = Math.floor(dn.base + totalSpi * dn.spiScale + profBonus);
-      pushSongBuff(StatusEffectType.BUFF_DAMAGE_NEGATION, 0, { damageNegationThreshold: threshold });
-    }
-
-    if (effects.length === 0) return;
-
-    target.statusEffects.push(...effects);
-    this.playerSys.recalcStats(target);
-    this.sendToPlayer(targetId, {
-      type: PacketType.STATUS_EFFECT_UPDATE,
-      timestamp: Date.now(),
-      data: { effects: target.statusEffects }
-    });
-    this.sendToPlayer(targetId, {
-      type: PacketType.STATS_UPDATE,
-      timestamp: Date.now(),
-      data: { characterId: targetId, stats: target.stats, statBreakdown: target.statBreakdown, skillProficiencies: target.skillProficiencies, skillAdeptness: target.skillAdeptness }
-    });
-    this.broadcastEntityEffects(target);
-    const songType = bt.songType;
-    if (songType) {
-      this.broadcastInZone(target.zoneId, {
-        type: PacketType.SONG_PULSE,
-        timestamp: Date.now(),
-        data: { entityId: targetId, songType }
-      });
-    }
-   }
-
-   private tickBlockingProximity(now: number): void {
-     for (const [blockerId, blocker] of this.state.players) {
-       if (blocker.isDead) continue;
-       const blockStance = blocker.statusEffects?.find(
-         e => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance
-       );
-       if (!blockStance || !blocker.position) continue;
-
-       const blockRange = blockStance.buffData?.blockingRange || 6;
-       const protRange = Math.max(2, blockRange * 0.4);
-
-       let blockerFacing = 0;
-       const rot = blocker.rotation as any;
-       if (typeof rot === 'object' && rot.w !== undefined) {
-         const sinY = 2 * (rot.w * rot.y - rot.z * rot.x);
-         const cosY = 1 - 2 * (rot.y * rot.y + rot.z * rot.z);
-         blockerFacing = Math.atan2(sinY, cosY);
-       }
-
-       const nearby = this.queryPlayersNear(blocker.position.x, blocker.position.z, protRange, blocker.zoneId);
-       const processedTargets = new Set<string>();
-
-       for (const entry of nearby) {
-         const targetId = entry.id;
-         if (targetId === blockerId) continue;
-         processedTargets.add(targetId);
-
-         const dx = entry.x - blocker.position.x;
-         const dz = entry.z - blocker.position.z;
-         const dist = Math.sqrt(dx * dx + dz * dz);
-
-         const existingProt = entry.data.statusEffects?.find(
-           e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
-         );
-
-         let behindBlocker = false;
-         if (dist <= protRange && dist > 0.01) {
-           const angleToTarget = Math.atan2(dx, dz);
-           let angleDiff = angleToTarget - blockerFacing;
-           while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-           while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-           const behindAngle = Math.abs(angleDiff) - Math.PI;
-           behindBlocker = Math.abs(behindAngle) < Math.PI / 4;
-         }
-
-         if (behindBlocker) {
-           if (!existingProt) {
-             entry.data.statusEffects.push({
-               id: `block_prot_${blockerId}_${Date.now()}`,
-               type: StatusEffectType.BUFF_BLOCKING_PROTECTED,
-               sourceId: blockerId,
-               targetId,
-               potency: 0,
-               appliedAt: now,
-               duration: 999999999,
-               tickInterval: 0,
-               lastTickAt: now,
-               stacks: 1,
-               skillName: 'Blocking',
-               buffData: { blockingProtectedBy: blockerId },
-             });
-             this.playerSys.recalcStats(entry.data);
-             this.sendToPlayer(targetId, {
-               type: PacketType.STATUS_EFFECT_UPDATE,
-               timestamp: Date.now(),
-               data: { effects: entry.data.statusEffects }
-             });
-             this.broadcastEntityEffects(entry.data);
-           }
-         } else {
-           if (existingProt) {
-             entry.data.statusEffects = entry.data.statusEffects.filter(e => e !== existingProt);
-             this.playerSys.recalcStats(entry.data);
-             this.sendToPlayer(targetId, {
-               type: PacketType.STATUS_EFFECT_UPDATE,
-               timestamp: Date.now(),
-               data: { effects: entry.data.statusEffects }
-             });
-             this.broadcastEntityEffects(entry.data);
-           }
-         }
-       }
-
-       for (const [targetId, target] of this.state.players) {
-         if (targetId === blockerId) continue;
-         if (target.isDead) continue;
-         if (target.zoneId !== blocker.zoneId) continue;
-         if (processedTargets.has(targetId)) continue;
-         const existingProt = target.statusEffects.find(
-           e => e.type === StatusEffectType.BUFF_BLOCKING_PROTECTED && e.buffData?.blockingProtectedBy === blockerId
-         );
-         if (existingProt) {
-           target.statusEffects = target.statusEffects.filter(e => e !== existingProt);
-           this.playerSys.recalcStats(target);
-           this.sendToPlayer(targetId, {
-             type: PacketType.STATUS_EFFECT_UPDATE,
-             timestamp: Date.now(),
-             data: { effects: target.statusEffects }
-           });
-           this.broadcastEntityEffects(target);
-         }
-       }
-     }
-   }
-
-  private checkEntityAOEEntries(entityId: string, position: { x: number; y: number; z: number }, entityZoneId: string): void {
-    for (const [zoneId, zone] of this.activeAOEZones) {
-      if (zone.zoneId !== entityZoneId) continue;
-      const dx = position.x - zone.position.x;
-      const dz = position.z - zone.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      const wasInside = zone.entitiesInside.has(entityId);
-      const isInside = dist <= zone.radius;
-
-      if (isInside && !wasInside) {
-        zone.entitiesInside.set(entityId, Date.now());
-        const caster = this.state.players.get(zone.casterId);
-        if (caster) {
-          this.damageEntityInAOE(caster, zone.skillName, entityId, zone.position, zone.radius);
-          this.applyAOEDebuffsOnEnter(caster, zone.skillName, entityId);
-        }
-      } else if (!isInside && wasInside) {
-        zone.entitiesInside.delete(entityId);
-      }
-    }
+    this.damageEntityInAOE(caster, skillName, targetId, position, radius);
+    this.applyAOEDebuffsOnEnter(caster, skillName, targetId);
   }
 
   private damageEntityInAOE(
@@ -3895,274 +3446,7 @@ export class NetworkServer implements NetworkContext {
   }
 
   private tickSummons(now: number): void {
-    const expired = this.summonMgr.tickExpired();
-    for (const info of expired) {
-      this.broadcastInZone(info.zoneId, {
-        type: PacketType.ENTITY_DESPAWN,
-        timestamp: Date.now(),
-        data: { entityId: info.id },
-      });
-    }
-
-    const nowSec = now / 1000;
-    for (const zoneId of this.spawnMgr.getZoneIds()) {
-      const summons = this.summonMgr.getSummonsInZone(zoneId);
-      if (summons.length === 0) continue;
-
-      const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
-
-      for (const summon of summons) {
-        if (summon.health <= 0) {
-          this.summonMgr.despawnSummon(summon.id);
-          this.broadcastInZone(zoneId, {
-            type: PacketType.ENTITY_DESPAWN,
-            timestamp: Date.now(),
-            data: { entityId: summon.id },
-          });
-          continue;
-        }
-
-        if (summon.summonType === 'plant') {
-          this.tickPlantAttack(summon, zoneEnemies, nowSec);
-        } else if (summon.summonType === 'wyvern') {
-          this.tickWyvern(summon, zoneEnemies, nowSec);
-        } else if (summon.summonType === 'turtle') {
-          this.tickTurtleEarthquake(summon, zoneEnemies, nowSec);
-        }
-      }
-    }
-  }
-
-  private tickPlantAttack(summon: import('@dust-saga/shared').SummonInstance, zoneEnemies: Map<string, import('@dust-saga/shared').EnemyInstance>, nowSec: number): void {
-    if (nowSec - summon.lastAttackTime < summon.attackCooldown) return;
-
-    let closestId: string | null = null;
-    let closestDistSq = summon.attackRange * summon.attackRange;
-
-    for (const [enemyId, enemy] of zoneEnemies) {
-      if (enemy.state === 'dead') continue;
-      const dx = enemy.position.x - summon.position.x;
-      const dz = enemy.position.z - summon.position.z;
-      const distSq = dx * dx + dz * dz;
-      if (distSq < closestDistSq) {
-        closestDistSq = distSq;
-        closestId = enemyId;
-      }
-    }
-
-    if (!closestId) return;
-
-    summon.lastAttackTime = nowSec;
-    const enemy = zoneEnemies.get(closestId)!;
-    const enemyDef = this.getEnemyEffectiveDefense(enemy);
-    const damage = Math.max(1, summon.attackDamage - Math.floor(enemyDef * 0.5));
-
-    const { died } = this.damageEnemy(enemy, damage, summon.ownerId);
-    this.enmity.addDamageEnmity(enemy, summon.id, damage);
-
-    this.broadcastInZone(summon.zoneId, {
-      type: PacketType.ATTACK,
-      timestamp: Date.now(),
-      data: {
-        attackerId: summon.id,
-        targetId: closestId,
-        damage,
-        isCritical: false,
-        damageType: summon.element || 'physical',
-      },
-    });
-
-    if (died) {
-      this.handleEnemyKill(closestId, summon.ownerId);
-    }
-  }
-
-  private tickWyvern(summon: import('@dust-saga/shared').SummonInstance, zoneEnemies: Map<string, import('@dust-saga/shared').EnemyInstance>, nowSec: number): void {
-    const WANDER_RADIUS = 10;
-    const dt = 1 / this.tickRate;
-    const speed = SUMMON_STATS[summon.summonType as keyof typeof SUMMON_STATS].speed;
-
-    if (summon.wanderTarget) {
-      const wdx = summon.wanderTarget.x - summon.position.x;
-      const wdz = summon.wanderTarget.z - summon.position.z;
-      const wDist = Math.sqrt(wdx * wdx + wdz * wdz);
-      if (wDist > 1) {
-        summon.position.x += (wdx / wDist) * speed * dt;
-        summon.position.z += (wdz / wDist) * speed * dt;
-        summon.rotation = Math.atan2(wdx, wdz);
-      } else {
-        summon.wanderTarget = null;
-        summon.wanderCooldown = nowSec + 0.5 + Math.random() * 1.5;
-      }
-    } else if (nowSec >= summon.wanderCooldown) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 3 + Math.random() * (WANDER_RADIUS - 3);
-      summon.wanderTarget = {
-        x: summon.spawnPosition.x + Math.cos(angle) * dist,
-        z: summon.spawnPosition.z + Math.sin(angle) * dist,
-      };
-    }
-
-    if (nowSec - summon.lastAttackTime < summon.attackCooldown) return;
-
-    const aoeRange = summon.attackRange;
-    const aoeRangeSq = aoeRange * aoeRange;
-    const hitEnemies: Array<{ id: string; enemy: import('@dust-saga/shared').EnemyInstance; distSq: number }> = [];
-
-    for (const [enemyId, enemy] of zoneEnemies) {
-      if (enemy.state === 'dead') continue;
-      const dx = enemy.position.x - summon.position.x;
-      const dz = enemy.position.z - summon.position.z;
-      const distSq = dx * dx + dz * dz;
-      if (distSq <= aoeRangeSq) {
-        hitEnemies.push({ id: enemyId, enemy, distSq });
-      }
-    }
-
-    if (hitEnemies.length === 0) return;
-
-    summon.lastAttackTime = nowSec;
-
-    this.broadcastInZone(summon.zoneId, {
-      type: PacketType.ATTACK,
-      timestamp: Date.now(),
-      data: {
-        attackerId: summon.id,
-        targetId: null,
-        damage: summon.attackDamage,
-        isCritical: false,
-        damageType: 'fire',
-        aoeRadius: aoeRange,
-      },
-    });
-
-    for (const { id, enemy } of hitEnemies) {
-      const enemyDef = this.getEnemyEffectiveDefense(enemy);
-      const damage = Math.max(1, summon.attackDamage - Math.floor(enemyDef * 0.5));
-      const { died } = this.damageEnemy(enemy, damage, summon.ownerId);
-      this.enmity.addDamageEnmity(enemy, summon.id, damage);
-
-      this.broadcastInZone(summon.zoneId, {
-        type: PacketType.DAMAGE,
-        timestamp: Date.now(),
-        data: {
-          attackerId: summon.id,
-          targetId: id,
-          damage,
-          isCritical: false,
-          damageType: 'fire',
-        },
-      });
-
-      const burnDuration = 5;
-      enemy.statusEffects = enemy.statusEffects.filter(e => e.type !== StatusEffectType.BURN);
-      enemy.statusEffects.push({
-        id: `burn_${id}_${Date.now()}`,
-        type: StatusEffectType.BURN,
-        sourceId: summon.ownerId,
-        targetId: id,
-        potency: 0,
-        appliedAt: Date.now(),
-        duration: burnDuration * 1000,
-        tickInterval: 1000,
-        lastTickAt: Date.now(),
-        stacks: 1,
-        skillName: 'Wyvern Fire',
-      });
-      this.broadcastInZone(summon.zoneId, {
-        type: PacketType.ENTITY_STATUS_EFFECTS,
-        timestamp: Date.now(),
-        data: { entityId: id, effects: enemy.statusEffects }
-      });
-
-      if (died) {
-        this.handleEnemyKill(id, summon.ownerId);
-      }
-    }
-  }
-
-  private tickTurtleEarthquake(summon: import('@dust-saga/shared').SummonInstance, zoneEnemies: Map<string, import('@dust-saga/shared').EnemyInstance>, nowSec: number): void {
-    if (nowSec - summon.lastAttackTime < summon.attackCooldown) return;
-
-    const aoeRange = summon.attackRange;
-    const aoeRangeSq = aoeRange * aoeRange;
-    const hitEnemies: Array<{ id: string; enemy: import('@dust-saga/shared').EnemyInstance }> = [];
-
-    for (const [enemyId, enemy] of zoneEnemies) {
-      if (enemy.state === 'dead') continue;
-      const dx = enemy.position.x - summon.position.x;
-      const dz = enemy.position.z - summon.position.z;
-      const distSq = dx * dx + dz * dz;
-      if (distSq <= aoeRangeSq) {
-        hitEnemies.push({ id: enemyId, enemy });
-      }
-    }
-
-    if (hitEnemies.length === 0) return;
-
-    summon.lastAttackTime = nowSec;
-
-    const baseDamage = summon.attackDamage;
-
-    this.broadcastInZone(summon.zoneId, {
-      type: PacketType.ATTACK,
-      timestamp: Date.now(),
-      data: {
-        attackerId: summon.id,
-        targetId: null,
-        damage: baseDamage,
-        isCritical: false,
-        damageType: 'physical',
-        aoeRadius: aoeRange,
-      },
-    });
-
-    for (const { id, enemy } of hitEnemies) {
-      const enemyDef = this.getEnemyEffectiveDefense(enemy);
-      const damage = Math.max(1, baseDamage - Math.floor(enemyDef * 0.5));
-      const { died } = this.damageEnemy(enemy, damage, summon.ownerId);
-      this.enmity.addDamageEnmity(enemy, summon.id, damage);
-
-      this.broadcastInZone(summon.zoneId, {
-        type: PacketType.DAMAGE,
-        timestamp: Date.now(),
-        data: {
-          attackerId: summon.id,
-          targetId: id,
-          damage,
-          isCritical: false,
-          damageType: 'physical',
-        },
-      });
-
-      const stunEffect: StatusEffect = {
-        id: `stun_${id}_${Date.now()}`,
-        type: StatusEffectType.STUN,
-        sourceId: summon.ownerId,
-        targetId: id,
-        potency: 0,
-        appliedAt: Date.now(),
-        duration: 1000,
-        tickInterval: 0,
-        lastTickAt: Date.now(),
-        stacks: 1,
-        skillName: 'Turtle Earthquake',
-        debuffCategory: 'stun',
-      };
-      if (this.shouldApplyDebuff(stunEffect, id, summon.ownerId)) {
-        enemy.statusEffects = enemy.statusEffects.filter(e => e.type !== StatusEffectType.STUN);
-        enemy.statusEffects.push(stunEffect);
-        this.broadcastInZone(summon.zoneId, {
-          type: PacketType.ENTITY_STATUS_EFFECTS,
-          timestamp: Date.now(),
-          data: { entityId: id, effects: enemy.statusEffects }
-        });
-      }
-
-      if (died) {
-        this.handleEnemyKill(id, summon.ownerId);
-      }
-    }
+    this.summonMgr.tick(now, this.summonCombatDeps);
   }
 
   private findClosestEnemyToPosition(zoneId: string, pos: { x: number; y: number; z: number }, range: number): string | null {
@@ -4188,7 +3472,7 @@ export class NetworkServer implements NetworkContext {
     const reusableZonePlayers = new Map<string, Map<string, { position: { x: number; y: number; z: number }; characterId: string }>>();
 
     for (const zoneId of this.spawnMgr.getZoneIds()) {
-      const zonePlayerIds = this.zonePlayerIndex.get(zoneId);
+      const zonePlayerIds = this.zoneRegistry.get(zoneId)?.players;
       let zonePlayers = reusableZonePlayers.get(zoneId);
       if (!zonePlayers) {
         zonePlayers = new Map();
@@ -4223,72 +3507,15 @@ export class NetworkServer implements NetworkContext {
   }
 
   private tickEntityAOEEntries(): void {
-    if (this.activeAOEZones.size === 0) return;
-    for (const zoneId of this.spawnMgr.getZoneIds()) {
-        const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
-        if (!zoneEnemies) continue;
-        for (const [enemyId, enemy] of zoneEnemies) {
-          if (enemy.state === 'dead') continue;
-          this.checkEntityAOEEntries(enemyId, enemy.position, zoneId);
-        }
-    }
+    this.aoeZoneMgr.tickEntityAOEEntries();
   }
 
   private tickKnockback(): void {
-    const speed = 15;
-    const dt = 1 / this.tickRate;
-    for (const zoneId of this.spawnMgr.getZoneIds()) {
-      const enemies = this.spawnMgr.getEnemiesInZone(zoneId);
-      if (enemies) {
-        for (const [, enemy] of enemies) {
-          if (enemy.state === 'dead') continue;
-          const def = getEnemyDefinition(enemy.enemyType);
-          if (def?.knockbackImmune) continue;
-          const kb = enemy.statusEffects?.find(e => e.debuffCategory === 'knockback' && e.knockbackVelocity && e.knockbackVelocity.remaining > 0);
-          if (!kb) continue;
-          const v = kb.knockbackVelocity!;
-          const step = Math.min(v.remaining, speed * dt);
-          enemy.position.x += v.dx * step;
-          enemy.position.z += v.dz * step;
-          v.remaining -= step;
-          if (v.remaining <= 0) {
-            const idx = enemy.statusEffects.indexOf(kb);
-            if (idx !== -1) enemy.statusEffects.splice(idx, 1);
-          }
-        }
-      }
-
-      const zonePlayerIds = this.zonePlayerIndex.get(zoneId);
-      if (zonePlayerIds) {
-        for (const cid of zonePlayerIds) {
-          const player = this.state.players.get(cid);
-          if (!player || player.isDead) continue;
-          const kb = player.statusEffects?.find(e => e.debuffCategory === 'knockback' && e.knockbackVelocity && e.knockbackVelocity.remaining > 0);
-          if (!kb) continue;
-          const v = kb.knockbackVelocity!;
-          const step = Math.min(v.remaining, speed * dt);
-          player.position.x += v.dx * step;
-          player.position.z += v.dz * step;
-          v.remaining -= step;
-          if (v.remaining <= 0) {
-            const idx = player.statusEffects.indexOf(kb);
-            if (idx !== -1) player.statusEffects.splice(idx, 1);
-          }
-        }
-      }
-    }
+    this.knockbackMgr.tick();
   }
 
   private updateEnemySpatialHash(): void {
-    for (const zoneId of this.spawnMgr.getZoneIds()) {
-      const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
-      if (!zoneEnemies) continue;
-      for (const [enemyId, enemy] of zoneEnemies) {
-        if (enemy.state !== 'dead' && enemy.position) {
-          this.enemySpatialHash.move(enemyId, enemy.position.x, enemy.position.z);
-        }
-      }
-    }
+    this.spatialMgr.updateEnemySpatialHash();
   }
 
   private broadcastEntityStates(): void {
@@ -4297,7 +3524,7 @@ export class NetworkServer implements NetworkContext {
     for (const zoneId of this.spawnMgr.getZoneIds()) {
       const zoneEnemies = this.spawnMgr.getEnemiesInZone(zoneId);
       if (!zoneEnemies) continue;
-      const zonePlayerIds = this.zonePlayerIndex.get(zoneId);
+      const zonePlayerIds = this.zoneRegistry.get(zoneId)?.players;
       if (!zonePlayerIds || zonePlayerIds.size === 0) continue;
 
       for (const characterId of zonePlayerIds) {
@@ -4351,428 +3578,39 @@ export class NetworkServer implements NetworkContext {
   }
 
   spawnDummy(session: PlayerSession): void {
-    this.dummyCounter++;
-    const dummyId = `dummy_${Date.now()}_${this.dummyCounter}`;
-    const dummyJob: JobId = JobId.WARRIOR;
-    const dummyPosition = { x: session.position.x + 3, y: session.position.y, z: session.position.z };
-
-    const dummySession: PlayerSession = {
-      playerId: 'gm_dummy',
-      socketId: '',
-      username: 'gm_dummy',
-      characterId: dummyId,
-      characterName: `Dummy_${this.dummyCounter}`,
-      race: 'human',
-      jobId: dummyJob,
-      baseClass: BaseClass.WARRIOR,
-      stats: { health: 100, maxHealth: 100, mana: 50, maxMana: 50, attack: 10, defense: 5, speed: 1, speedMultiplier: 1, magicAttack: 5, critChance: 0.05, castSpeed: 1, level: 1, experience: 0, experienceToNext: 100 },
-      statPoints: { STR: 5, AGI: 5, INT: 5, SPI: 5, DEX: 5, STA: 5 },
-      baseStats: { STR: 5, AGI: 5, INT: 5, SPI: 5, DEX: 5, STA: 5 },
-      unspentStatPoints: 0,
-      unspentSkillPoints: 0,
-      skillProficiencies: createDefaultSkillProficiencies(),
-      skillAdeptness: createDefaultSkillAdeptness(getDesignJobId(dummyJob)),
-      position: { ...dummyPosition },
-      rotation: { x: 0, y: 0, z: 0, w: 1 },
-      zoneId: session.zoneId,
-      targetId: null,
-      lastAttackTime: 0,
-      lastManualAttackTime: 0,
-      lastRegenTick: 0,
-      invulnerableUntil: Date.now() + 999999999,
-      isDead: false,
-      currentNpcId: null,
-      deathTime: 0,
-      nation: null,
-      lastSafeZoneId: session.zoneId,
-      skillCooldowns: [],
-      activeCast: null,
-      statusEffects: [],
-      statBreakdown: null,
-      effectiveStats: null,
-      inventory: [],
-      gold: 0,
-      equipment: normalizeEquipment(null),
-      quests: [],
-    };
-
-    this.state.players.set(dummyId, dummySession);
-    this.registerPlayerInZone(dummyId, session.zoneId);
-    this.dummyMeta.set(dummyId, {
-      ownerId: session.characterId,
-      isPvp: false,
-      isWalking: false,
-      walkPoints: [
-        { x: dummyPosition.x - 5, y: dummyPosition.y, z: dummyPosition.z },
-        { x: dummyPosition.x + 5, y: dummyPosition.y, z: dummyPosition.z },
-      ],
-      walkIndex: 0,
-      walkDir: 1,
-      inParty: false,
-    });
-
-    this.broadcastInZone(session.zoneId, {
-      type: PacketType.ENTITY_SPAWN,
-      timestamp: Date.now(),
-      data: {
-        id: dummyId,
-        type: 'player',
-        position: dummyPosition,
-        rotation: dummySession.rotation,
-        data: {
-          name: dummySession.characterName,
-          class: dummySession.jobId,
-          race: dummySession.race,
-          jobId: dummySession.jobId,
-          level: dummySession.stats.level,
-          health: dummySession.stats.health,
-          maxHealth: dummySession.stats.maxHealth,
-          modelFile: JOB_DEFINITIONS[dummySession.jobId]?.modelFile || 'Adventurer.glb'
-        }
-      }
-    });
-
-    this.sendToPlayer(session.characterId, {
-      type: PacketType.CHAT_MESSAGE,
-      timestamp: Date.now(),
-      data: { sender: 'GM', message: `SPAWNED ${dummyId}`, channel: 'system' }
-    });
+    this.dummyMgr.spawnDummy(session);
   }
 
   despawnDummy(dummyId: string, session: PlayerSession): void {
-    const meta = this.dummyMeta.get(dummyId);
-    if (!meta || meta.ownerId !== session.characterId) {
-      this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
-      return;
-    }
-
-    if (meta.inParty) {
-      this.partySys.leaveParty(dummyId);
-    }
-
-    this.state.players.delete(dummyId);
-    this.unregisterPlayerFromZone(dummyId);
-    this.dummyMeta.delete(dummyId);
-    this.clearMovementThrottle(dummyId);
-
-    this.broadcastInZone(session.zoneId, {
-      type: PacketType.ENTITY_DESPAWN,
-      timestamp: Date.now(),
-      data: { entityId: dummyId }
-    });
-
-    this.sendToPlayer(session.characterId, {
-      type: PacketType.CHAT_MESSAGE,
-      timestamp: Date.now(),
-      data: { sender: 'GM', message: `DESPAWNED ${dummyId}`, channel: 'system' }
-    });
+    this.dummyMgr.despawnDummy(dummyId, session);
   }
 
   setDummyProperty(dummyId: string, prop: string, value: string, session: PlayerSession): void {
-    const meta = this.dummyMeta.get(dummyId);
-    if (!meta || meta.ownerId !== session.characterId) {
-      this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
-      return;
-    }
-
-    const dummy = this.state.players.get(dummyId);
-    if (!dummy) return;
-
-    const num = parseFloat(value);
-    if (isNaN(num)) {
-      this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Invalid value: ${value}`, channel: 'system' } });
-      return;
-    }
-
-    const propMap: Record<string, (v: number) => void> = {
-      str: (v) => { dummy.statPoints.STR = v; dummy.baseStats.STR = v; },
-      dex: (v) => { dummy.statPoints.DEX = v; dummy.baseStats.DEX = v; },
-      agi: (v) => { dummy.statPoints.AGI = v; dummy.baseStats.AGI = v; },
-      int: (v) => { dummy.statPoints.INT = v; dummy.baseStats.INT = v; },
-      spi: (v) => { dummy.statPoints.SPI = v; dummy.baseStats.SPI = v; },
-      sta: (v) => { dummy.statPoints.STA = v; dummy.baseStats.STA = v; },
-      level: (v) => { dummy.stats.level = Math.max(1, Math.min(v, MAX_LEVEL)); },
-      hp: (v) => { dummy.stats.health = v; dummy.stats.maxHealth = Math.max(dummy.stats.maxHealth, v); },
-      maxhp: (v) => { dummy.stats.maxHealth = v; dummy.stats.health = Math.min(dummy.stats.health, v); },
-      mp: (v) => { dummy.stats.mana = v; dummy.stats.maxMana = Math.max(dummy.stats.maxMana, v); },
-      maxmp: (v) => { dummy.stats.maxMana = v; dummy.stats.mana = Math.min(dummy.stats.mana, v); },
-      attack: (v) => { dummy.stats.attack = v; },
-      defense: (v) => { dummy.stats.defense = v; },
-      speed: (v) => { dummy.stats.speed = v; },
-      crit: (v) => { dummy.stats.critChance = v; },
-    };
-
-    const setter = propMap[prop.toLowerCase()];
-    if (!setter) {
-      this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Unknown prop "${prop}". Valid: ${Object.keys(propMap).join(', ')}`, channel: 'system' } });
-      return;
-    }
-
-    setter(num);
-    this.playerSys.recalcStats(dummy);
-
-    this.broadcastInZone(dummy.zoneId, {
-      type: PacketType.STATS_UPDATE,
-      timestamp: Date.now(),
-      data: { entityId: dummyId, health: dummy.stats.health, maxHealth: dummy.stats.maxHealth, level: dummy.stats.level }
-    });
-
-    this.sendToPlayer(session.characterId, {
-      type: PacketType.CHAT_MESSAGE,
-      timestamp: Date.now(),
-      data: { sender: 'GM', message: `SET ${dummyId} ${prop}=${num}`, channel: 'system' }
-    });
+    this.dummyMgr.setDummyProperty(dummyId, prop, value, session);
   }
 
   setDummyClass(dummyId: string, jobIdStr: string, session: PlayerSession): void {
-    const meta = this.dummyMeta.get(dummyId);
-    if (!meta || meta.ownerId !== session.characterId) {
-      this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
-      return;
-    }
-
-    const dummy = this.state.players.get(dummyId);
-    if (!dummy) return;
-
-    const validJobs = Object.values(JobId) as string[];
-    const targetJob = validJobs.find(j => j.toLowerCase() === jobIdStr.toLowerCase());
-    if (!targetJob) {
-      this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Invalid job "${jobIdStr}".`, channel: 'system' } });
-      return;
-    }
-
-    dummy.jobId = targetJob as JobId;
-    dummy.baseClass = getBaseClassForJob(targetJob as JobId);
-    this.playerSys.recalcStats(dummy);
-
-    this.broadcastInZone(dummy.zoneId, {
-      type: PacketType.ENTITY_DESPAWN,
-      timestamp: Date.now(),
-      data: { entityId: dummyId }
-    });
-
-    this.broadcastInZone(dummy.zoneId, {
-      type: PacketType.ENTITY_SPAWN,
-      timestamp: Date.now(),
-      data: {
-        id: dummyId,
-        type: 'player',
-        position: dummy.position,
-        rotation: dummy.rotation,
-        data: {
-          name: dummy.characterName,
-          class: dummy.jobId,
-          race: dummy.race,
-          jobId: dummy.jobId,
-          level: dummy.stats.level,
-          health: dummy.stats.health,
-          maxHealth: dummy.stats.maxHealth,
-          modelFile: JOB_DEFINITIONS[dummy.jobId]?.modelFile || 'Adventurer.glb'
-        }
-      }
-    });
-
-    this.sendToPlayer(session.characterId, {
-      type: PacketType.CHAT_MESSAGE,
-      timestamp: Date.now(),
-      data: { sender: 'GM', message: `CLASS ${dummyId} ${targetJob}`, channel: 'system' }
-    });
+    this.dummyMgr.setDummyClass(dummyId, jobIdStr, session);
   }
 
   setDummyGear(dummyId: string, preset: string, session: PlayerSession): void {
-    const meta = this.dummyMeta.get(dummyId);
-    if (!meta || meta.ownerId !== session.characterId) {
-      this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
-      return;
-    }
-
-    const dummy = this.state.players.get(dummyId);
-    if (!dummy) return;
-
-    const presets: Record<string, Record<string, string | null>> = {
-      naked: { weapon: null, armor: null, helmet: null, boots: null, gloves: null, legs: null, shield: null },
-      common: { weapon: 'wooden_sword', armor: 'leather_armor', helmet: 'cloth_helmet', boots: 'leather_boots', gloves: null, legs: null, shield: null },
-      rare: { weapon: 'steel_blade', armor: 'plate_armor', helmet: 'iron_helmet', boots: 'swift_boots', gloves: 'chain_gloves', legs: 'chain_leggings', shield: null },
-      legendary: { weapon: 'legendary_blade', armor: 'dragon_plate', helmet: 'dragon_helm', boots: 'dragon_greaves', gloves: 'dragon_gauntlets', legs: 'dragon_leggings', shield: 'tower_shield' },
-    };
-
-    const gearPreset = presets[preset.toLowerCase()];
-    if (!gearPreset) {
-      this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Unknown preset "${preset}". Valid: ${Object.keys(presets).join(', ')}`, channel: 'system' } });
-      return;
-    }
-
-    for (const [slot, itemId] of Object.entries(gearPreset)) {
-      if (itemId && ITEM_DATABASE[itemId]) {
-        (dummy.equipment as any)[slot] = { itemId, enhancementLevel: 0, enhancementElement: null, quantity: 1, slot: 0 };
-      } else {
-        (dummy.equipment as any)[slot] = null;
-      }
-    }
-
-    this.playerSys.recalcStats(dummy);
-
-    this.broadcastInZone(dummy.zoneId, {
-      type: PacketType.STATS_UPDATE,
-      timestamp: Date.now(),
-      data: { entityId: dummyId, health: dummy.stats.health, maxHealth: dummy.stats.maxHealth, level: dummy.stats.level }
-    });
-
-    this.sendToPlayer(session.characterId, {
-      type: PacketType.CHAT_MESSAGE,
-      timestamp: Date.now(),
-      data: { sender: 'GM', message: `GEAR ${dummyId} ${preset}`, channel: 'system' }
-    });
+    this.dummyMgr.setDummyGear(dummyId, preset, session);
   }
 
   toggleDummyPvp(dummyId: string, session: PlayerSession): void {
-    const meta = this.dummyMeta.get(dummyId);
-    if (!meta || meta.ownerId !== session.characterId) {
-      this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
-      return;
-    }
-
-    const dummy = this.state.players.get(dummyId);
-    if (!dummy) return;
-
-    meta.isPvp = !meta.isPvp;
-    dummy.invulnerableUntil = meta.isPvp ? 0 : Date.now() + 999999999;
-    dummy.stats.health = dummy.stats.maxHealth;
-    dummy.isDead = false;
-
-    this.broadcastInZone(dummy.zoneId, {
-      type: PacketType.STATS_UPDATE,
-      timestamp: Date.now(),
-      data: { entityId: dummyId, health: dummy.stats.health, maxHealth: dummy.stats.maxHealth }
-    });
-
-    this.sendToPlayer(session.characterId, {
-      type: PacketType.CHAT_MESSAGE,
-      timestamp: Date.now(),
-      data: { sender: 'GM', message: `PVP ${dummyId} ${meta.isPvp ? 'on' : 'off'}`, channel: 'system' }
-    });
+    this.dummyMgr.toggleDummyPvp(dummyId, session);
   }
 
   toggleDummyWalk(dummyId: string, session: PlayerSession): void {
-    const meta = this.dummyMeta.get(dummyId);
-    if (!meta || meta.ownerId !== session.characterId) {
-      this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
-      return;
-    }
-
-    const dummy = this.state.players.get(dummyId);
-    if (!dummy) return;
-
-    meta.isWalking = !meta.isWalking;
-    if (meta.isWalking) {
-      meta.walkPoints = [
-        { x: dummy.position.x - 5, y: dummy.position.y, z: dummy.position.z },
-        { x: dummy.position.x + 5, y: dummy.position.y, z: dummy.position.z },
-      ];
-      meta.walkIndex = 0;
-      meta.walkDir = 1;
-    }
-
-    this.sendToPlayer(session.characterId, {
-      type: PacketType.CHAT_MESSAGE,
-      timestamp: Date.now(),
-      data: { sender: 'GM', message: `WALK ${dummyId} ${meta.isWalking ? 'on' : 'off'}`, channel: 'system' }
-    });
+    this.dummyMgr.toggleDummyWalk(dummyId, session);
   }
 
   toggleDummyParty(dummyId: string, session: PlayerSession): void {
-    const meta = this.dummyMeta.get(dummyId);
-    if (!meta || meta.ownerId !== session.characterId) {
-      this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: `Dummy "${dummyId}" not found.`, channel: 'system' } });
-      return;
-    }
-
-    const dummy = this.state.players.get(dummyId);
-    if (!dummy) return;
-
-    if (meta.inParty) {
-      const result = this.partySys.leaveParty(dummyId);
-      if (result) {
-        meta.inParty = false;
-        this.sendPartyUpdate(result.party.partyId);
-        this.sendToPlayer(session.characterId, {
-          type: PacketType.CHAT_MESSAGE,
-          timestamp: Date.now(),
-          data: { sender: 'GM', message: `PARTY ${dummyId} removed`, channel: 'system' }
-        });
-      }
-    } else {
-      let party = this.partySys.getPartyForMember(session.characterId);
-      if (!party) {
-        party = this.partySys.createParty(session.characterId, session, { visibility: PartyVisibility.OPEN, lootRule: LootRule.RANDOM });
-        if (!party) {
-          this.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: 'Failed to create party.', channel: 'system' } });
-          return;
-        }
-        this.sendPartyUpdate(party.partyId);
-      }
-
-      const joined = this.partySys.joinParty(party.partyId, dummyId, dummy);
-      if (joined) {
-        meta.inParty = true;
-        this.sendPartyUpdate(party.partyId);
-        this.sendToPlayer(session.characterId, {
-          type: PacketType.CHAT_MESSAGE,
-          timestamp: Date.now(),
-          data: { sender: 'GM', message: `PARTY ${dummyId} added`, channel: 'system' }
-        });
-      } else {
-        this.sendToPlayer(session.characterId, {
-          type: PacketType.CHAT_MESSAGE,
-          timestamp: Date.now(),
-          data: { sender: 'GM', message: 'Failed to add dummy to party (full or already in one).', channel: 'system' }
-        });
-      }
-    }
+    this.dummyMgr.toggleDummyParty(dummyId, session);
   }
 
   private tickDummies(): void {
-    const now = Date.now();
-    for (const [dummyId, meta] of this.dummyMeta) {
-      if (!meta.isWalking) continue;
-      const dummy = this.state.players.get(dummyId);
-      if (!dummy || dummy.isDead) continue;
-
-      const target = meta.walkPoints[meta.walkIndex];
-      if (!target) continue;
-
-      const dx = target.x - dummy.position.x;
-      const dz = target.z - dummy.position.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-
-      const speed = 3;
-      if (dist < 0.5) {
-        meta.walkIndex += meta.walkDir;
-        if (meta.walkIndex >= meta.walkPoints.length) {
-          meta.walkIndex = meta.walkPoints.length - 2;
-          meta.walkDir = -1;
-        } else if (meta.walkIndex < 0) {
-          meta.walkIndex = 1;
-          meta.walkDir = 1;
-        }
-      } else {
-        const dirX = dx / dist;
-        const dirZ = dz / dist;
-        dummy.position.x += dirX * speed * (1 / this.tickRate);
-        dummy.position.z += dirZ * speed * (1 / this.tickRate);
-        dummy.rotation.y = Math.atan2(dirX, dirZ);
-      }
-
-      this.broadcastInZone(dummy.zoneId, {
-        type: PacketType.PLAYER_POSITION_UPDATE,
-        timestamp: now,
-        data: {
-          characterId: dummyId,
-          position: dummy.position,
-          rotation: dummy.rotation
-        }
-      });
-    }
+    this.dummyMgr.tick();
   }
 
   async saveAllCharacters(): Promise<void> {
@@ -4808,11 +3646,7 @@ export class NetworkServer implements NetworkContext {
   }
 
   populateEnemySpatialHash(): void {
-    this.spawnMgr.iterateAllEnemies(enemy => {
-      if (enemy.state !== 'dead') {
-        this.enemySpatialHash.insert(enemy.id, enemy.position.x, enemy.position.z, enemy);
-      }
-    });
+    this.spatialMgr.populateEnemySpatialHash();
   }
 
   getGameState(): ServerGameState {
@@ -4824,14 +3658,14 @@ export class NetworkServer implements NetworkContext {
   }
 
   getLastMoveBroadcast(characterId: string): number {
-    return this.lastMoveBroadcast.get(characterId) || 0;
+    return this.movementThrottle.get(characterId);
   }
 
   setLastMoveBroadcast(characterId: string, time: number): void {
-    this.lastMoveBroadcast.set(characterId, time);
+    this.movementThrottle.set(characterId, time);
   }
 
   clearMovementThrottle(characterId: string): void {
-    this.lastMoveBroadcast.delete(characterId);
+    this.movementThrottle.clear(characterId);
   }
 }

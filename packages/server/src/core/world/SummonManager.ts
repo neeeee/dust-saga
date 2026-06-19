@@ -2,7 +2,21 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   SummonInstance, SummonType, SummonObject, COMBAT_SUMMON_TYPES, MAX_PLANTS,
   SUMMON_STATS, BANISH_RADIUS,
+  EnemyInstance, StatusEffect, StatusEffectType, Packet, PacketType,
 } from '@dust-saga/shared';
+import { SpawnManager } from './SpawnManager';
+import { EnmitySystem } from '../ecs/systems/EnmitySystem';
+
+export interface SummonCombatDeps {
+  getSpawnManager(): SpawnManager;
+  getEnmity(): EnmitySystem;
+  getTickRate(): number;
+  broadcastInZone(zoneId: string, packet: Packet): void;
+  damageEnemy(enemy: EnemyInstance, damage: number, attackerId?: string): { died: boolean; actualDamage: number };
+  getEnemyEffectiveDefense(enemy: EnemyInstance): number;
+  handleEnemyKill(enemyId: string, killerId: string): void;
+  shouldApplyDebuff(effect: StatusEffect, targetId: string, casterId?: string): boolean;
+}
 
 export class SummonManager {
   private summons: Map<string, SummonInstance> = new Map();
@@ -171,5 +185,277 @@ export class SummonManager {
       this.despawnSummon(id);
     }
     return expired;
+  }
+
+  tick(now: number, deps: SummonCombatDeps): void {
+    const expired = this.tickExpired();
+    for (const info of expired) {
+      deps.broadcastInZone(info.zoneId, {
+        type: PacketType.ENTITY_DESPAWN,
+        timestamp: Date.now(),
+        data: { entityId: info.id },
+      });
+    }
+
+    const nowSec = now / 1000;
+    const spawnMgr = deps.getSpawnManager();
+    for (const zoneId of spawnMgr.getZoneIds()) {
+      const summons = this.getSummonsInZone(zoneId);
+      if (summons.length === 0) continue;
+
+      const zoneEnemies = spawnMgr.getEnemiesInZone(zoneId);
+
+      for (const summon of summons) {
+        if (summon.health <= 0) {
+          this.despawnSummon(summon.id);
+          deps.broadcastInZone(zoneId, {
+            type: PacketType.ENTITY_DESPAWN,
+            timestamp: Date.now(),
+            data: { entityId: summon.id },
+          });
+          continue;
+        }
+
+        if (summon.summonType === 'plant') {
+          this.tickPlantAttack(summon, zoneEnemies, nowSec, deps);
+        } else if (summon.summonType === 'wyvern') {
+          this.tickWyvern(summon, zoneEnemies, nowSec, deps);
+        } else if (summon.summonType === 'turtle') {
+          this.tickTurtleEarthquake(summon, zoneEnemies, nowSec, deps);
+        }
+      }
+    }
+  }
+
+  private tickPlantAttack(summon: SummonInstance, zoneEnemies: Map<string, EnemyInstance>, nowSec: number, deps: SummonCombatDeps): void {
+    if (nowSec - summon.lastAttackTime < summon.attackCooldown) return;
+
+    let closestId: string | null = null;
+    let closestDistSq = summon.attackRange * summon.attackRange;
+
+    for (const [enemyId, enemy] of zoneEnemies) {
+      if (enemy.state === 'dead') continue;
+      const dx = enemy.position.x - summon.position.x;
+      const dz = enemy.position.z - summon.position.z;
+      const distSq = dx * dx + dz * dz;
+      if (distSq < closestDistSq) {
+        closestDistSq = distSq;
+        closestId = enemyId;
+      }
+    }
+
+    if (!closestId) return;
+
+    summon.lastAttackTime = nowSec;
+    const enemy = zoneEnemies.get(closestId)!;
+    const enemyDef = deps.getEnemyEffectiveDefense(enemy);
+    const damage = Math.max(1, summon.attackDamage - Math.floor(enemyDef * 0.5));
+
+    const { died } = deps.damageEnemy(enemy, damage, summon.ownerId);
+    deps.getEnmity().addDamageEnmity(enemy, summon.id, damage);
+
+    deps.broadcastInZone(summon.zoneId, {
+      type: PacketType.ATTACK,
+      timestamp: Date.now(),
+      data: {
+        attackerId: summon.id,
+        targetId: closestId,
+        damage,
+        isCritical: false,
+        damageType: summon.element || 'physical',
+      },
+    });
+
+    if (died) {
+      deps.handleEnemyKill(closestId, summon.ownerId);
+    }
+  }
+
+  private tickWyvern(summon: SummonInstance, zoneEnemies: Map<string, EnemyInstance>, nowSec: number, deps: SummonCombatDeps): void {
+    const WANDER_RADIUS = 10;
+    const dt = 1 / deps.getTickRate();
+    const speed = SUMMON_STATS[summon.summonType as keyof typeof SUMMON_STATS].speed;
+
+    if (summon.wanderTarget) {
+      const wdx = summon.wanderTarget.x - summon.position.x;
+      const wdz = summon.wanderTarget.z - summon.position.z;
+      const wDist = Math.sqrt(wdx * wdx + wdz * wdz);
+      if (wDist > 1) {
+        summon.position.x += (wdx / wDist) * speed * dt;
+        summon.position.z += (wdz / wDist) * speed * dt;
+        summon.rotation = Math.atan2(wdx, wdz);
+      } else {
+        summon.wanderTarget = null;
+        summon.wanderCooldown = nowSec + 0.5 + Math.random() * 1.5;
+      }
+    } else if (nowSec >= summon.wanderCooldown) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 3 + Math.random() * (WANDER_RADIUS - 3);
+      summon.wanderTarget = {
+        x: summon.spawnPosition.x + Math.cos(angle) * dist,
+        z: summon.spawnPosition.z + Math.sin(angle) * dist,
+      };
+    }
+
+    if (nowSec - summon.lastAttackTime < summon.attackCooldown) return;
+
+    const aoeRange = summon.attackRange;
+    const aoeRangeSq = aoeRange * aoeRange;
+    const hitEnemies: Array<{ id: string; enemy: EnemyInstance; distSq: number }> = [];
+
+    for (const [enemyId, enemy] of zoneEnemies) {
+      if (enemy.state === 'dead') continue;
+      const dx = enemy.position.x - summon.position.x;
+      const dz = enemy.position.z - summon.position.z;
+      const distSq = dx * dx + dz * dz;
+      if (distSq <= aoeRangeSq) {
+        hitEnemies.push({ id: enemyId, enemy, distSq });
+      }
+    }
+
+    if (hitEnemies.length === 0) return;
+
+    summon.lastAttackTime = nowSec;
+
+    deps.broadcastInZone(summon.zoneId, {
+      type: PacketType.ATTACK,
+      timestamp: Date.now(),
+      data: {
+        attackerId: summon.id,
+        targetId: null,
+        damage: summon.attackDamage,
+        isCritical: false,
+        damageType: 'fire',
+        aoeRadius: aoeRange,
+      },
+    });
+
+    for (const { id, enemy } of hitEnemies) {
+      const enemyDef = deps.getEnemyEffectiveDefense(enemy);
+      const damage = Math.max(1, summon.attackDamage - Math.floor(enemyDef * 0.5));
+      const { died } = deps.damageEnemy(enemy, damage, summon.ownerId);
+      deps.getEnmity().addDamageEnmity(enemy, summon.id, damage);
+
+      deps.broadcastInZone(summon.zoneId, {
+        type: PacketType.DAMAGE,
+        timestamp: Date.now(),
+        data: {
+          attackerId: summon.id,
+          targetId: id,
+          damage,
+          isCritical: false,
+          damageType: 'fire',
+        },
+      });
+
+      const burnDuration = 5;
+      enemy.statusEffects = enemy.statusEffects.filter(e => e.type !== StatusEffectType.BURN);
+      enemy.statusEffects.push({
+        id: `burn_${id}_${Date.now()}`,
+        type: StatusEffectType.BURN,
+        sourceId: summon.ownerId,
+        targetId: id,
+        potency: 0,
+        appliedAt: Date.now(),
+        duration: burnDuration * 1000,
+        tickInterval: 1000,
+        lastTickAt: Date.now(),
+        stacks: 1,
+        skillName: 'Wyvern Fire',
+      });
+      deps.broadcastInZone(summon.zoneId, {
+        type: PacketType.ENTITY_STATUS_EFFECTS,
+        timestamp: Date.now(),
+        data: { entityId: id, effects: enemy.statusEffects }
+      });
+
+      if (died) {
+        deps.handleEnemyKill(id, summon.ownerId);
+      }
+    }
+  }
+
+  private tickTurtleEarthquake(summon: SummonInstance, zoneEnemies: Map<string, EnemyInstance>, nowSec: number, deps: SummonCombatDeps): void {
+    if (nowSec - summon.lastAttackTime < summon.attackCooldown) return;
+
+    const aoeRange = summon.attackRange;
+    const aoeRangeSq = aoeRange * aoeRange;
+    const hitEnemies: Array<{ id: string; enemy: EnemyInstance }> = [];
+
+    for (const [enemyId, enemy] of zoneEnemies) {
+      if (enemy.state === 'dead') continue;
+      const dx = enemy.position.x - summon.position.x;
+      const dz = enemy.position.z - summon.position.z;
+      const distSq = dx * dx + dz * dz;
+      if (distSq <= aoeRangeSq) {
+        hitEnemies.push({ id: enemyId, enemy });
+      }
+    }
+
+    if (hitEnemies.length === 0) return;
+
+    summon.lastAttackTime = nowSec;
+
+    const baseDamage = summon.attackDamage;
+
+    deps.broadcastInZone(summon.zoneId, {
+      type: PacketType.ATTACK,
+      timestamp: Date.now(),
+      data: {
+        attackerId: summon.id,
+        targetId: null,
+        damage: baseDamage,
+        isCritical: false,
+        damageType: 'physical',
+        aoeRadius: aoeRange,
+      },
+    });
+
+    for (const { id, enemy } of hitEnemies) {
+      const enemyDef = deps.getEnemyEffectiveDefense(enemy);
+      const damage = Math.max(1, baseDamage - Math.floor(enemyDef * 0.5));
+      const { died } = deps.damageEnemy(enemy, damage, summon.ownerId);
+      deps.getEnmity().addDamageEnmity(enemy, summon.id, damage);
+
+      deps.broadcastInZone(summon.zoneId, {
+        type: PacketType.DAMAGE,
+        timestamp: Date.now(),
+        data: {
+          attackerId: summon.id,
+          targetId: id,
+          damage,
+          isCritical: false,
+          damageType: 'physical',
+        },
+      });
+
+      const stunEffect: StatusEffect = {
+        id: `stun_${id}_${Date.now()}`,
+        type: StatusEffectType.STUN,
+        sourceId: summon.ownerId,
+        targetId: id,
+        potency: 0,
+        appliedAt: Date.now(),
+        duration: 1000,
+        tickInterval: 0,
+        lastTickAt: Date.now(),
+        stacks: 1,
+        skillName: 'Turtle Earthquake',
+        debuffCategory: 'stun',
+      };
+      if (deps.shouldApplyDebuff(stunEffect, id, summon.ownerId)) {
+        enemy.statusEffects = enemy.statusEffects.filter(e => e.type !== StatusEffectType.STUN);
+        enemy.statusEffects.push(stunEffect);
+        deps.broadcastInZone(summon.zoneId, {
+          type: PacketType.ENTITY_STATUS_EFFECTS,
+          timestamp: Date.now(),
+          data: { entityId: id, effects: enemy.statusEffects }
+        });
+      }
+
+      if (died) {
+        deps.handleEnemyKill(id, summon.ownerId);
+      }
+    }
   }
 }
