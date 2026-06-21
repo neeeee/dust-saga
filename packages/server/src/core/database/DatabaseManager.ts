@@ -199,4 +199,11 @@ export class DatabaseManager {
   isRedisConnected(): boolean {
     return this.redisConnected;
   }
+
+  /** Create an additional, independent Redis client (e.g. for the Socket.IO adapter's pub/sub). */
+  createRedisClient(): RedisClientType {
+    return createClient({
+      url: process.env.REDIS_URL || 'redis://localhost:6379'
+    });
+  }
 }

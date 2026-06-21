@@ -1,4 +1,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import type { RedisClientType } from 'redis';
 import {
   Packet, PacketType, PlayerSession, Validator,
   JOB_DEFINITIONS, RACE_DATA, createDefaultStatPoints, createDefaultSkillProficiencies, createDefaultSkillAdeptness,
@@ -48,6 +50,8 @@ import { SummonCombatDeps } from '../world/SummonManager';
 import { MovementThrottle } from '../world/MovementThrottle';
 import { ZoneRegistry } from '../world/ZoneInstance';
 import { QuestSystem } from '../../systems/QuestSystem';
+import { PresenceService } from '../presence/PresenceService';
+import { randomUUID } from 'crypto';
 import { NetworkContext, ServerGameState, PacketHandler } from './NetworkContext';
 import { registerAllHandlers } from './handlers';
 import { collectProcs, buildProcStatusEffect, getProcResistCategory, isDrainLifeProc, getDarkRecoilPercent } from '../combat/ProcSystem';
@@ -84,6 +88,8 @@ export class NetworkServer implements NetworkContext {
 
   readonly zoneRegistry: ZoneRegistry = new ZoneRegistry();
 
+  readonly presence: PresenceService;
+
   static readonly INTEREST_RADIUS = 50;
   static readonly INTEREST_RADIUS_SQ = 50 * 50;
   private aiTickBucket: number = 0;
@@ -102,7 +108,7 @@ export class NetworkServer implements NetworkContext {
     this.addToZonePlayerIndex(newZoneId, characterId);
   }
 
-  constructor(httpServer: any) {
+  constructor(httpServer: any, presenceOpts: { redis: RedisClientType | null; isRedisConnected: () => boolean } = { redis: null, isRedisConnected: () => false }) {
     this.io = new SocketIOServer(httpServer, {
       cors: {
         origin: process.env.CLIENT_URL || 'http://localhost:3000',
@@ -111,6 +117,10 @@ export class NetworkServer implements NetworkContext {
       pingTimeout: 60000,
       pingInterval: 25000
     });
+
+    const shardId = process.env.SHARD_ID || `shard-${randomUUID()}`;
+    this.presence = new PresenceService(shardId, presenceOpts.redis, presenceOpts.isRedisConnected);
+    console.log(`Shard ID: ${shardId}`);
 
     this.auth = AuthManager.getInstance();
     this.combat = new CombatSystem({ getEntity: () => undefined, getEntitiesWithComponent: () => [], getAllEntities: () => [], addComponent: () => {}, removeComponent: () => {}, createEntity: () => ({ id: '', components: new Map() }), removeEntity: () => {} } as any);
@@ -206,6 +216,17 @@ export class NetworkServer implements NetworkContext {
       handleEnemyKill: (id, killer) => this.handleEnemyKill(id, killer),
       shouldApplyDebuff: (eff, tid, cid) => this.shouldApplyDebuff(eff, tid, cid),
     };
+  }
+
+  /**
+   * Attach the Socket.IO Redis adapter so `io.to('zone:X')` room broadcasts
+   * propagate across processes. No-op for gameplay in single-process mode; this
+   * only enables cross-shard broadcast for the upcoming sharded deployment.
+   * Clients must already be connected. Caller owns their lifecycle.
+   */
+  useRedisAdapter(pubClient: RedisClientType, subClient: RedisClientType): void {
+    this.io.adapter(createAdapter(pubClient, subClient));
+    console.log('Socket.IO Redis adapter attached (cross-instance broadcast enabled)');
   }
 
   get dummyMeta(): Map<string, DummyMeta> {
@@ -1530,6 +1551,7 @@ export class NetworkServer implements NetworkContext {
       this.state.playerToSocket.delete(characterId);
       this.unregisterPlayerFromZone(characterId);
       this.clearMovementThrottle(characterId);
+      void this.presence.markOffline(characterId);
     }
     this.state.socketToPlayer.delete(socket.id);
   }

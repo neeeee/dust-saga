@@ -19,6 +19,7 @@ import { SpawnManager } from '../world/SpawnManager';
 import { SummonManager } from '../world/SummonManager';
 import { DummyMeta } from '../world/DummyManager';
 import { QuestSystem } from '../../systems/QuestSystem';
+import { PresenceService } from '../presence/PresenceService';
 
 export interface ServerGameState {
   players: Map<string, PlayerSession>;
@@ -42,6 +43,7 @@ export interface NetworkContext {
   readonly spawnMgr: SpawnManager;
   readonly summonMgr: SummonManager;
   readonly questSys: QuestSystem;
+  readonly presence: PresenceService;
 
   findCharacterBySocket(socketId: string): string | undefined;
   findPlayerByCharacterId(characterId: string): PlayerSession | undefined;
