@@ -51,6 +51,7 @@ import { MovementThrottle } from '../world/MovementThrottle';
 import { ZoneRegistry } from '../world/ZoneInstance';
 import { QuestSystem } from '../../systems/QuestSystem';
 import { PresenceService } from '../presence/PresenceService';
+import { PacketRelay } from '../presence/PacketRelay';
 import { randomUUID } from 'crypto';
 import { NetworkContext, ServerGameState, PacketHandler } from './NetworkContext';
 import { registerAllHandlers } from './handlers';
@@ -89,6 +90,7 @@ export class NetworkServer implements NetworkContext {
   readonly zoneRegistry: ZoneRegistry = new ZoneRegistry();
 
   readonly presence: PresenceService;
+  private readonly packetRelay: PacketRelay;
 
   static readonly INTEREST_RADIUS = 50;
   static readonly INTEREST_RADIUS_SQ = 50 * 50;
@@ -120,6 +122,16 @@ export class NetworkServer implements NetworkContext {
 
     const shardId = process.env.SHARD_ID || `shard-${randomUUID()}`;
     this.presence = new PresenceService(shardId, presenceOpts.redis, presenceOpts.isRedisConnected);
+    this.packetRelay = new PacketRelay(
+      shardId,
+      presenceOpts.redis,
+      presenceOpts.isRedisConnected,
+      this.presence,
+      (id, pkt) => {
+        const sid = this.state.playerToSocket.get(id);
+        if (sid) this.sendToSocket(sid, pkt);
+      },
+    );
     console.log(`Shard ID: ${shardId}`);
 
     this.auth = AuthManager.getInstance();
@@ -128,13 +140,17 @@ export class NetworkServer implements NetworkContext {
     this.loot = new LootSystem({ getEntity: () => undefined, getEntitiesWithComponent: () => [], getAllEntities: () => [], addComponent: () => {}, removeComponent: () => {}, createEntity: () => ({ id: '', components: new Map() }), removeEntity: () => {} } as any);
     this.playerSys = new PlayerSystem({ getEntity: () => undefined, getEntitiesWithComponent: () => [], getAllEntities: () => [], addComponent: () => {}, removeComponent: () => {}, createEntity: () => ({ id: '', components: new Map() }), removeEntity: () => {} } as any);
     this.skillSys = new SkillSystem();
-    this.partySys = new PartySystem();
     this.enmity = new EnmitySystem();
     this.tradeSys = new TradeSystem();
     this.ai.enmitySys = this.enmity;
     this.spawnMgr = new SpawnManager();
     this.summonMgr = new SummonManager();
     this.questSys = new QuestSystem();
+    this.partySys = new PartySystem({
+      redis: presenceOpts.redis,
+      isConnected: presenceOpts.isRedisConnected,
+      shardId,
+    });
     this.state = {
       players: new Map(),
       socketToPlayer: new Map(),
@@ -229,6 +245,31 @@ export class NetworkServer implements NetworkContext {
     console.log('Socket.IO Redis adapter attached (cross-instance broadcast enabled)');
   }
 
+  /**
+   * Start the cross-shard packet relay so `sendToPlayer` can deliver packets to
+   * players hosted on other shards. The caller owns the lifecycle of the
+   * dedicated subscribe client (subscribe mode is exclusive in node-redis).
+   */
+  async usePacketRelay(subClient: RedisClientType): Promise<void> {
+    await this.packetRelay.start(subClient);
+  }
+
+  async stopPacketRelay(): Promise<void> {
+    await this.packetRelay.stop();
+  }
+
+  /**
+   * Start cross-shard party state sync. The caller owns the lifecycle of the
+   * dedicated subscribe client.
+   */
+  async usePartySync(subClient: RedisClientType): Promise<void> {
+    await this.partySys.startSync(subClient);
+  }
+
+  async stopPartySync(): Promise<void> {
+    await this.partySys.stopSync();
+  }
+
   get dummyMeta(): Map<string, DummyMeta> {
     return this.dummyMgr.dummyMeta;
   }
@@ -308,7 +349,10 @@ export class NetworkServer implements NetworkContext {
     const socketId = this.state.playerToSocket.get(characterId);
     if (socketId) {
       this.sendToSocket(socketId, packet);
+      return;
     }
+    // Not local — route via cross-shard relay (fire-and-forget, no-op without Redis)
+    this.packetRelay.relay(characterId, packet);
   }
 
   broadcastInZone(zoneId: string, packet: Packet, excludeCharacterId?: string): void {

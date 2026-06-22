@@ -47,6 +47,10 @@ async function startServer() {
     // single-process / no-Redis mode the default in-memory adapter is used.
     let adapterPub: import('redis').RedisClientType | null = null;
     let adapterSub: import('redis').RedisClientType | null = null;
+    // B5: dedicated subscribe client for the packet relay (sendToPlayer routing).
+    let relaySub: import('redis').RedisClientType | null = null;
+    // B4: dedicated subscribe client for cross-shard party state sync.
+    let partySub: import('redis').RedisClientType | null = null;
     if (db.isRedisConnected()) {
       try {
         adapterPub = db.createRedisClient();
@@ -54,10 +58,24 @@ async function startServer() {
         await adapterPub.connect();
         await adapterSub.connect();
         networkServer.useRedisAdapter(adapterPub, adapterSub);
+
+        relaySub = db.createRedisClient();
+        await relaySub.connect();
+        await networkServer.usePacketRelay(relaySub);
+
+        partySub = db.createRedisClient();
+        await partySub.connect();
+        await networkServer.usePartySync(partySub);
       } catch (err) {
-        console.warn('Redis adapter disabled (continuing single-process):', err);
+        console.warn('Redis adapter/relay/party-sync disabled (continuing single-process):', err);
+        if (adapterPub) await adapterPub.quit().catch(() => {});
+        if (adapterSub) await adapterSub.quit().catch(() => {});
+        if (relaySub) await relaySub.quit().catch(() => {});
+        if (partySub) await partySub.quit().catch(() => {});
         adapterPub = null;
         adapterSub = null;
+        relaySub = null;
+        partySub = null;
       }
     } else {
       console.log('Redis not connected — running with in-memory Socket.IO adapter (single-process)');
@@ -102,6 +120,8 @@ async function startServer() {
     process.on('SIGINT', async () => {
       console.log('\nShutting down server...');
       await networkServer.saveAllCharacters();
+      await networkServer.stopPacketRelay().catch(() => {});
+      await networkServer.stopPartySync().catch(() => {});
       if (adapterPub) await adapterPub.quit().catch(() => {});
       if (adapterSub) await adapterSub.quit().catch(() => {});
       await db.disconnect();
