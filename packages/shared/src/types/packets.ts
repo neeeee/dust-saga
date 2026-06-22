@@ -103,6 +103,7 @@ export enum PacketType {
   TRADE_CLOSE = 170,
 
   BATCH_COMBAT = 171,
+  ZONE_HANDOFF = 172,
 }
 
 export interface Packet {

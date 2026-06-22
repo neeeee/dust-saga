@@ -85,6 +85,14 @@ async function startServer() {
     networkServer.populateEnemySpatialHash();
     console.log('World spawned');
 
+    // B6: claim this shard's zones in Redis so cross-shard handoff can route
+    // zone transitions to the owning shard. In single-process mode (no
+    // ZONE_OWNERSHIP env) all zones are claimed; the handoff branch in
+    // handleEnterZone is never taken because getOwner() returns the local shard.
+    const { ZONE_DATABASE } = require('@dust-saga/shared');
+    const allZoneIds = Object.keys(ZONE_DATABASE);
+    await networkServer.zoneOwnership.claimZones(allZoneIds).catch(() => {});
+
     const tickRate = networkServer.getTickRate();
     const tickInterval = 1000 / tickRate;
     let lastTick = process.hrtime.bigint();
@@ -120,6 +128,7 @@ async function startServer() {
     process.on('SIGINT', async () => {
       console.log('\nShutting down server...');
       await networkServer.saveAllCharacters();
+      await networkServer.zoneOwnership.releaseZones().catch(() => {});
       await networkServer.stopPacketRelay().catch(() => {});
       await networkServer.stopPartySync().catch(() => {});
       if (adapterPub) await adapterPub.quit().catch(() => {});

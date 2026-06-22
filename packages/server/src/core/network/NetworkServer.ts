@@ -52,6 +52,8 @@ import { ZoneRegistry } from '../world/ZoneInstance';
 import { QuestSystem } from '../../systems/QuestSystem';
 import { PresenceService } from '../presence/PresenceService';
 import { PacketRelay } from '../presence/PacketRelay';
+import { ZoneOwnership } from '../presence/ZoneOwnership';
+import { ZoneHandoff } from '../presence/ZoneHandoff';
 import { randomUUID } from 'crypto';
 import { NetworkContext, ServerGameState, PacketHandler } from './NetworkContext';
 import { registerAllHandlers } from './handlers';
@@ -91,6 +93,8 @@ export class NetworkServer implements NetworkContext {
 
   readonly presence: PresenceService;
   private readonly packetRelay: PacketRelay;
+  readonly zoneOwnership: ZoneOwnership;
+  readonly zoneHandoff: ZoneHandoff;
 
   static readonly INTEREST_RADIUS = 50;
   static readonly INTEREST_RADIUS_SQ = 50 * 50;
@@ -132,6 +136,8 @@ export class NetworkServer implements NetworkContext {
         if (sid) this.sendToSocket(sid, pkt);
       },
     );
+    this.zoneOwnership = new ZoneOwnership(shardId, presenceOpts.redis, presenceOpts.isRedisConnected);
+    this.zoneHandoff = new ZoneHandoff(presenceOpts.redis, presenceOpts.isRedisConnected);
     console.log(`Shard ID: ${shardId}`);
 
     this.auth = AuthManager.getInstance();
@@ -329,7 +335,9 @@ export class NetworkServer implements NetworkContext {
       }
       this.io.of('/').sockets.get(socketId)?.join(`zone:${newZoneId}`);
     }
+    this.removePlayerSpatial(characterId);
     this.movePlayerZoneIndex(characterId, newZoneId);
+    this.insertPlayerSpatial(characterId);
   }
 
   private getZoneIdForCharacter(characterId: string): string | undefined {
@@ -343,6 +351,68 @@ export class NetworkServer implements NetworkContext {
       const p = this.state.players.get(id);
       if (p) cb(id, p);
     }
+  }
+
+  /**
+   * Tear down all zone-local resources a player owns (AOE zones, summons, song
+   * buffs, dummies). Called on EVERY zone transition — same-shard or cross-shard
+   * — BEFORE mutating `session.zoneId`. This fixes the long-standing leak where
+   * summons/AOE/song persisted in the old zone after the player left.
+   *
+   * Does NOT touch state maps, presence, party, trade, or DB — those are handled
+   * by disconnect (same-shard) or initiateZoneHandoff (cross-shard).
+   */
+  cleanupPlayerZoneResources(session: PlayerSession): void {
+    const characterId = session.characterId;
+
+    this.aoeZoneMgr.cleanupOwner(characterId);
+
+    const despawnedSummons = this.summonMgr.despawnAllForOwner(characterId);
+    for (const summonId of despawnedSummons) {
+      this.broadcastInZone(session.zoneId, {
+        type: PacketType.ENTITY_DESPAWN,
+        timestamp: Date.now(),
+        data: { entityId: summonId },
+      });
+    }
+
+    this.removeSongProximityBuffs(session);
+
+    this.dummyMgr.cleanupOwner(characterId, session.zoneId);
+
+    session.activeCast = null;
+  }
+
+  /**
+   * Full teardown for cross-shard handoff: zone resource cleanup + state-map
+   * removal + presence update. Called after the session has been serialized to
+   * Redis via ZoneHandoff.initiate. Does NOT save to DB (the old shard already
+   * saved) or mark presence offline (the player is still online, now on the new
+   * shard).
+   */
+  completeZoneHandoffDeparture(session: PlayerSession): void {
+    const characterId = session.characterId;
+
+    this.cleanupPlayerZoneResources(session);
+
+    this.broadcastInZone(session.zoneId, {
+      type: PacketType.ENTITY_DESPAWN,
+      timestamp: Date.now(),
+      data: { entityId: characterId },
+    });
+
+    this.state.players.delete(characterId);
+    this.state.playerToSocket.delete(characterId);
+    this.unregisterPlayerFromZone(characterId);
+    this.clearMovementThrottle(characterId);
+  }
+
+  async resolveZoneHandoff(characterId: string): Promise<PlayerSession | null> {
+    return this.zoneHandoff.resolve(characterId);
+  }
+
+  async initiateZoneHandoff(session: PlayerSession): Promise<boolean> {
+    return this.zoneHandoff.initiate(session.characterId, session);
   }
 
   sendToPlayer(characterId: string, packet: Packet): void {

@@ -20,6 +20,7 @@ import { SummonManager } from '../world/SummonManager';
 import { DummyMeta } from '../world/DummyManager';
 import { QuestSystem } from '../../systems/QuestSystem';
 import { PresenceService } from '../presence/PresenceService';
+import { ZoneOwnership } from '../presence/ZoneOwnership';
 
 export interface ServerGameState {
   players: Map<string, PlayerSession>;
@@ -44,6 +45,7 @@ export interface NetworkContext {
   readonly summonMgr: SummonManager;
   readonly questSys: QuestSystem;
   readonly presence: PresenceService;
+  readonly zoneOwnership: ZoneOwnership;
 
   findCharacterBySocket(socketId: string): string | undefined;
   findPlayerByCharacterId(characterId: string): PlayerSession | undefined;
@@ -56,6 +58,10 @@ export interface NetworkContext {
   registerPlayerInZone(characterId: string, zoneId: string): void;
   unregisterPlayerFromZone(characterId: string): void;
   movePlayerToZone(characterId: string, newZoneId: string): void;
+  cleanupPlayerZoneResources(session: PlayerSession): void;
+  completeZoneHandoffDeparture(session: PlayerSession): void;
+  initiateZoneHandoff(session: PlayerSession): Promise<boolean>;
+  resolveZoneHandoff(characterId: string): Promise<PlayerSession | null>;
   forEachPlayerInZone(zoneId: string, cb: (id: string, player: PlayerSession) => void): void;
 
   isPartyMember(characterId: string, targetId: string): boolean;

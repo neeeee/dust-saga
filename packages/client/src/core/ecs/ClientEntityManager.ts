@@ -68,14 +68,28 @@ export class ClientEntityManager {
 export class InterpolationManager {
   private positionBuffer: Map<string, Array<{ position: any; timestamp: number }>> = new Map();
   private rotationBuffer: Map<string, Array<{ rotation: any; timestamp: number }>> = new Map();
-  private interpolationDelay: number = 100;
+  private interpolationDelay: number = 150;
+  private serverClockOffset: number = 0;
+  private clockOffsetInitialized: boolean = false;
+
+  private toClientTime(serverTimestamp: number): number {
+    if (!this.clockOffsetInitialized) {
+      this.serverClockOffset = serverTimestamp - Date.now();
+      this.clockOffsetInitialized = true;
+    } else {
+      const instantOffset = serverTimestamp - Date.now();
+      this.serverClockOffset = this.serverClockOffset * 0.95 + instantOffset * 0.05;
+    }
+    return serverTimestamp - this.serverClockOffset;
+  }
 
   addPositionUpdate(entityId: string, position: any, timestamp: number): void {
     if (!this.positionBuffer.has(entityId)) {
       this.positionBuffer.set(entityId, []);
     }
     const buffer = this.positionBuffer.get(entityId)!;
-    buffer.push({ position, timestamp });
+    const clientTime = this.toClientTime(timestamp);
+    buffer.push({ position, timestamp: clientTime });
     
     if (buffer.length > 20) {
       buffer.shift();
@@ -87,7 +101,8 @@ export class InterpolationManager {
       this.rotationBuffer.set(entityId, []);
     }
     const buffer = this.rotationBuffer.get(entityId)!;
-    buffer.push({ rotation, timestamp });
+    const clientTime = this.toClientTime(timestamp);
+    buffer.push({ rotation, timestamp: clientTime });
     
     if (buffer.length > 20) {
       buffer.shift();
@@ -114,7 +129,19 @@ export class InterpolationManager {
       }
     }
 
-    return buffer[buffer.length - 1].position;
+    const last = buffer[buffer.length - 1];
+    const prev = buffer[buffer.length - 2];
+    const dt = last.timestamp - prev.timestamp;
+    if (dt > 0) {
+      const extrapolateDt = Math.min(targetTime - last.timestamp, dt * 2);
+      return {
+        x: last.position.x + (last.position.x - prev.position.x) / dt * extrapolateDt,
+        y: last.position.y + (last.position.y - prev.position.y) / dt * extrapolateDt,
+        z: last.position.z + (last.position.z - prev.position.z) / dt * extrapolateDt,
+      };
+    }
+
+    return last.position;
   }
 
   getInterpolatedRotation(entityId: string, currentTime: number): any | null {

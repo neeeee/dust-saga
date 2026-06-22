@@ -88,56 +88,70 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
   const playerId = ctx.state.socketToPlayer.get(socket.id);
   if (!playerId) return;
 
-  const characters = await ctx.auth.getCharacters(playerId);
-  const char = characters.find(c => c.id === data.characterId);
-  if (!char) {
-    ctx.sendToSocket(socket.id, {
-      type: PacketType.ERROR,
-      timestamp: Date.now(),
-      data: { message: 'Character not found' }
-    });
-    return;
-  }
+  let session: PlayerSession;
 
-  const session = ctx.playerSys.createSession(
-    playerId,
-    socket.id,
-    playerId,
-    char.id,
-    char.name,
-    char.race || 'human',
-    (char.job_id || char.class) as any,
-    char.level,
-    char.stat_points ? (typeof char.stat_points === 'string' ? JSON.parse(char.stat_points) : char.stat_points) : createDefaultStatPoints(),
-    char.unspent_stat_points || 0,
-    char.unspent_skill_points || 0,
-    char.skill_proficiencies ? (typeof char.skill_proficiencies === 'string' ? JSON.parse(char.skill_proficiencies) : char.skill_proficiencies) : createDefaultSkillProficiencies(),
-    char.skill_adeptness ? (typeof char.skill_adeptness === 'string' ? JSON.parse(char.skill_adeptness) : char.skill_adeptness) : createDefaultSkillAdeptness(getDesignJobId(char.job_id || char.class)),
-    char.experience || 0
-  );
-
-  session.zoneId = char.zone_id || 'starter_zone';
-  session.nation = (char.nation as 'varik' | 'pfelstein' | 'latugan' | null) || null;
-  session.lastSafeZoneId = char.last_safe_zone_id || session.zoneId;
-  session.gold = char.gold || 100;
-  session.racialPassive = char.racial_passive || undefined;
-
-  if (char.inventory) {
-    const parsed = typeof char.inventory === 'string' ? JSON.parse(char.inventory) : char.inventory;
-    if (Array.isArray(parsed)) session.inventory = parsed;
-  }
-  if (char.equipment) {
-    const parsed = typeof char.equipment === 'string' ? JSON.parse(char.equipment) : char.equipment;
-    if (parsed && typeof parsed === 'object') session.equipment = normalizeEquipment(parsed);
-  }
-
-  ctx.playerSys.recalcStats(session);
-
-  const zoneDef = getZoneDefinition(session.zoneId);
-  if (char.position_x === 0 && char.position_y === 0 && char.position_z === 0) {
-    session.position = { ...(zoneDef?.playerSpawn || { x: 0, y: 0, z: 0 }) };
+  // ── Cross-shard handoff resolution ───────────────────────────────────────
+  // If the player was handed off from another shard, use the live session
+  // from Redis (preserves buffs, cooldowns, recent inventory changes). Falls
+  // back to normal DB-based creation if no handoff is pending.
+  const handoffSession = await ctx.resolveZoneHandoff(data.characterId);
+  if (handoffSession) {
+    session = handoffSession;
+    session.socketId = socket.id;
+    session.playerId = playerId;
+    ctx.playerSys.recalcStats(session);
   } else {
-    session.position = { x: char.position_x, y: char.position_y, z: char.position_z };
+    const characters = await ctx.auth.getCharacters(playerId);
+    const char = characters.find(c => c.id === data.characterId);
+    if (!char) {
+      ctx.sendToSocket(socket.id, {
+        type: PacketType.ERROR,
+        timestamp: Date.now(),
+        data: { message: 'Character not found' }
+      });
+      return;
+    }
+
+    session = ctx.playerSys.createSession(
+      playerId,
+      socket.id,
+      playerId,
+      char.id,
+      char.name,
+      char.race || 'human',
+      (char.job_id || char.class) as any,
+      char.level,
+      char.stat_points ? (typeof char.stat_points === 'string' ? JSON.parse(char.stat_points) : char.stat_points) : createDefaultStatPoints(),
+      char.unspent_stat_points || 0,
+      char.unspent_skill_points || 0,
+      char.skill_proficiencies ? (typeof char.skill_proficiencies === 'string' ? JSON.parse(char.skill_proficiencies) : char.skill_proficiencies) : createDefaultSkillProficiencies(),
+      char.skill_adeptness ? (typeof char.skill_adeptness === 'string' ? JSON.parse(char.skill_adeptness) : char.skill_adeptness) : createDefaultSkillAdeptness(getDesignJobId(char.job_id || char.class)),
+      char.experience || 0
+    );
+
+    session.zoneId = char.zone_id || 'starter_zone';
+    session.nation = (char.nation as 'varik' | 'pfelstein' | 'latugan' | null) || null;
+    session.lastSafeZoneId = char.last_safe_zone_id || session.zoneId;
+    session.gold = char.gold || 100;
+    session.racialPassive = char.racial_passive || undefined;
+
+    if (char.inventory) {
+      const parsed = typeof char.inventory === 'string' ? JSON.parse(char.inventory) : char.inventory;
+      if (Array.isArray(parsed)) session.inventory = parsed;
+    }
+    if (char.equipment) {
+      const parsed = typeof char.equipment === 'string' ? JSON.parse(char.equipment) : char.equipment;
+      if (parsed && typeof parsed === 'object') session.equipment = normalizeEquipment(parsed);
+    }
+
+    ctx.playerSys.recalcStats(session);
+
+    const zoneDef = getZoneDefinition(session.zoneId);
+    if (char.position_x === 0 && char.position_y === 0 && char.position_z === 0) {
+      session.position = { ...(zoneDef?.playerSpawn || { x: 0, y: 0, z: 0 }) };
+    } else {
+      session.position = { x: char.position_x, y: char.position_y, z: char.position_z };
+    }
   }
 
   ctx.state.players.set(session.characterId, session);

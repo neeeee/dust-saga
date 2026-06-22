@@ -372,6 +372,8 @@ export class GameClient {
       }
 
       for (const player of players) {
+        if (player.id === this.playerId) continue;
+
         await this.engine.createPlayerEntity(
           player.id,
           new BabylonVector3(player.position.x, player.position.y, player.position.z),
@@ -381,7 +383,7 @@ export class GameClient {
         this.knownEntities.set(player.id, { type: 'player', data: player.data });
         this.entityManager.createEntity(player.id);
 
-        if (player.data?.invisible && player.id !== this.playerId) {
+        if (player.data?.invisible) {
           this.applyEntityVisibility(player.id, true);
         }
       }
@@ -479,12 +481,13 @@ export class GameClient {
 
     this.network.onPacket(PacketType.PLAYER_POSITION_UPDATE, (packet: any) => {
       const data = packet.data;
+      const serverTimestamp = packet.timestamp || Date.now();
 
       if (data.entities) {
         data.entities.forEach((entity: any) => {
           if (entity.id === this.playerId) return;
           const pos = { x: entity.position.x, y: entity.position.y, z: entity.position.z };
-          this.interpolationManager.addPositionUpdate(entity.id, pos, Date.now());
+          this.interpolationManager.addPositionUpdate(entity.id, pos, serverTimestamp);
 
           if (entity.health !== undefined) {
             this.engine.updateEntityHealth(entity.id, entity.health, entity.maxHealth);
@@ -510,9 +513,9 @@ export class GameClient {
       if (data.summons) {
         data.summons.forEach((summon: any) => {
           const pos = { x: summon.position.x, y: summon.position.y, z: summon.position.z };
-          this.interpolationManager.addPositionUpdate(summon.id, pos, Date.now());
+          this.interpolationManager.addPositionUpdate(summon.id, pos, serverTimestamp);
           if (summon.rotation) {
-            this.interpolationManager.addRotationUpdate(summon.id, summon.rotation, Date.now());
+            this.interpolationManager.addRotationUpdate(summon.id, summon.rotation, serverTimestamp);
           }
           if (summon.health !== undefined && summon.maxHealth !== undefined) {
             this.engine.updateEntityHealth(summon.id, summon.health, summon.maxHealth);
@@ -524,9 +527,9 @@ export class GameClient {
         if (data.characterId === this.playerId) return;
 
         const pos = { x: data.position.x, y: data.position.y, z: data.position.z };
-        this.interpolationManager.addPositionUpdate(data.characterId || data.socketId, pos, Date.now());
+        this.interpolationManager.addPositionUpdate(data.characterId || data.socketId, pos, serverTimestamp);
         if (data.rotation) {
-          this.interpolationManager.addRotationUpdate(data.characterId || data.socketId, data.rotation, Date.now());
+          this.interpolationManager.addRotationUpdate(data.characterId || data.socketId, data.rotation, serverTimestamp);
         }
         if (data.invisible !== undefined) {
           this.applyEntityVisibility(data.characterId, data.invisible);
@@ -873,6 +876,8 @@ export class GameClient {
   }
 
   private async processEntitySpawn(id: string, type: string, position: any, data: any): Promise<void> {
+    if (type === 'player' && id === this.playerId) return;
+
     const pos = new BabylonVector3(position.x, position.y, position.z);
 
     this.knownEntities.set(id, { type, data });
@@ -880,14 +885,6 @@ export class GameClient {
 
     if (type === 'player') {
       await this.engine.createPlayerEntity(id, pos, data.modelFile, data.name);
-
-      if (id === this.playerId) {
-        this.engine.setPlayerMesh(id);
-        this.playerMesh = this.engine.getPlayerMesh();
-        if (this.playerMesh) {
-          this.engine.attachCameraToEntity(id);
-        }
-      }
     } else if (type === 'enemy') {
       await this.engine.createEnemyEntity(id, pos, data.modelFile, data.health, data.maxHealth, data.name);
       this.enemies.set(id, data);

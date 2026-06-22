@@ -8,7 +8,7 @@ export function registerHandlers(registry: Map<PacketType, PacketHandler>): void
   registry.set(PacketType.ENTER_ZONE, handleEnterZone);
 }
 
-function handleEnterZone(ctx: NetworkContext, socket: Socket, data: any): void {
+async function handleEnterZone(ctx: NetworkContext, socket: Socket, data: any): Promise<void> {
   const characterId = ctx.findCharacterBySocket(socket.id);
   if (!characterId) return;
 
@@ -18,20 +18,55 @@ function handleEnterZone(ctx: NetworkContext, socket: Socket, data: any): void {
   const targetZone = getZoneDefinition(data.zoneId);
   if (!targetZone) return;
 
-  ctx.broadcastInZone(session.zoneId, {
+  const oldZoneId = session.zoneId;
+
+  // ── Cross-shard handoff check ────────────────────────────────────────────
+  // When ZONE_OWNERSHIP is configured and the target zone belongs to another
+  // shard, serialize the live session to Redis, tear down locally, and send a
+  // ZONE_HANDOFF redirect. The client reconnects to the new shard, which picks
+  // up the session from Redis on character-select. In single-process mode
+  // (no ZONE_OWNERSHIP) getOwner always returns the local shard — this branch
+  // is never taken.
+  const targetShard = await ctx.zoneOwnership.getOwner(data.zoneId);
+  if (targetShard !== ctx.zoneOwnership.getShardId()) {
+    const ok = await ctx.initiateZoneHandoff(session);
+    if (ok) {
+      ctx.completeZoneHandoffDeparture(session);
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.ZONE_HANDOFF,
+        timestamp: Date.now(),
+        data: {
+          targetShard,
+          shardUrl: ctx.zoneOwnership.getShardUrl(),
+          characterId,
+        },
+      });
+      return;
+    }
+    // Handoff failed (Redis unavailable) — fall through to local zone transition
+  }
+
+  // ── Same-shard zone transition with leak fixes ───────────────────────────
+  // Clean up zone-local resources (summons, AOE, song, dummies) BEFORE
+  // mutating zoneId. This fixes the long-standing leak where these resources
+  // persisted in the old zone after the player left.
+  ctx.cleanupPlayerZoneResources(session);
+
+  ctx.broadcastInZone(oldZoneId, {
     type: PacketType.ENTITY_DESPAWN,
     timestamp: Date.now(),
     data: { entityId: characterId }
   });
 
   session.zoneId = data.zoneId;
-  ctx.movePlayerToZone(characterId, data.zoneId);
   session.currentNpcId = null;
   if (targetZone.type === ZoneType.SAFE || targetZone.type === ZoneType.NATION) {
     session.lastSafeZoneId = data.zoneId;
   }
   session.position = { ...targetZone.playerSpawn };
   session.invulnerableUntil = Date.now() + 3000;
+
+  ctx.movePlayerToZone(characterId, data.zoneId);
 
   ctx.broadcastInZone(data.zoneId, {
     type: PacketType.ENTITY_SPAWN,
