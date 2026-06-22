@@ -5,6 +5,10 @@ import type { EnmitySystem } from './EnmitySystem';
 
 type EnemyState = 'idle' | 'patrol' | 'chase' | 'attack' | 'return' | 'dead';
 
+type PlayerMap = Map<string, { position: { x: number; y: number; z: number }; characterId: string }>;
+type SummonMap = Map<string, { position: { x: number; y: number; z: number }; summonId: string }>;
+type EnemyMap = Map<string, EnemyInstance>;
+
 export class AISystem extends System {
   private attackCallbacks: Array<(enemyId: string, targetId: string, damage: number) => void> = [];
   private attackSummonCallbacks: Array<(enemyId: string, summonId: string, damage: number) => void> = [];
@@ -139,10 +143,15 @@ export class AISystem extends System {
     return this.findPlayerTarget(players, targetId) || this.findSummonTarget(summons, targetId);
   }
 
-  updateEnemies(
-    enemies: Map<string, EnemyInstance>,
-    players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>,
-    summons: Map<string, { position: { x: number; y: number; z: number }; summonId: string }>,
+  /**
+   * Decision pass: state transitions, aggro detection, enmity decay, target
+   * selection. Staggered (1/N enemies per tick) for CPU savings — this is the
+   * expensive part (scanning players, linked aggro, etc.).
+   */
+  updateDecisions(
+    enemies: EnemyMap,
+    players: PlayerMap,
+    summons: SummonMap,
     deltaTime: number,
     staggerBucket?: number,
     staggerMod?: number
@@ -159,16 +168,57 @@ export class AISystem extends System {
       const def = getEnemyDefinition(enemy.enemyType);
       if (!def) return;
 
-      const stateHandlers: Record<Exclude<EnemyState, 'dead'>, () => void> = {
-        idle: () => this.updateIdle(enemy, enemies, players, summons, def),
-        patrol: () => this.updatePatrol(enemy, enemies, players, summons, def, deltaTime),
-        chase: () => this.updateChase(enemy, players, summons, def, deltaTime),
-        attack: () => this.updateAttack(enemy, players, summons, def, deltaTime),
-        return: () => this.updateReturn(enemy, enemies, players, summons, def, deltaTime),
-      };
+      switch (enemy.state) {
+        case 'idle':
+          this.decideIdle(enemy, enemies, players, summons, def);
+          break;
+        case 'patrol':
+          this.decidePatrol(enemy, enemies, players, summons, def);
+          break;
+        case 'chase':
+          this.decideChase(enemy, players, summons, def, deltaTime);
+          break;
+        case 'attack':
+          this.decideAttack(enemy, players, summons, def, deltaTime);
+          break;
+        case 'return':
+          this.decideReturn(enemy, enemies, players, summons, def, deltaTime);
+          break;
+      }
+    });
+  }
 
-      const handler = stateHandlers[enemy.state as Exclude<EnemyState, 'dead'>];
-      if (handler) handler();
+  /**
+   * Movement pass: move entities toward their targets based on current state.
+   * Runs every tick for ALL enemies — cheap (just math), ensures smooth
+   * movement instead of step-wise jumps from the staggered decision pass.
+   */
+  updateMovement(
+    enemies: EnemyMap,
+    players: PlayerMap,
+    summons: SummonMap,
+    deltaTime: number
+  ): void {
+    enemies.forEach((enemy) => {
+      if (enemy.state === 'dead') return;
+
+      const def = getEnemyDefinition(enemy.enemyType);
+      if (!def) return;
+
+      switch (enemy.state) {
+        case 'patrol':
+          this.movePatrol(enemy, def, deltaTime);
+          break;
+        case 'chase':
+          this.moveChase(enemy, players, summons, def, deltaTime);
+          break;
+        case 'attack':
+          this.performAttack(enemy, players, summons, def);
+          break;
+        case 'return':
+          this.moveReturn(enemy, def, deltaTime);
+          break;
+      }
     });
   }
 
@@ -224,17 +274,18 @@ export class AISystem extends System {
     return true;
   }
 
-  private updateIdle(
+  // ── Decision handlers (staggered) ─────────────────────────────────────────
+
+  private decideIdle(
     enemy: EnemyInstance,
-    enemies: Map<string, EnemyInstance>,
-    players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>,
-    summons: Map<string, { position: { x: number; y: number; z: number }; summonId: string }>,
+    enemies: EnemyMap,
+    players: PlayerMap,
+    summons: SummonMap,
     def: ReturnType<typeof getEnemyDefinition>,
   ): void {
     if (!def) return;
 
     if (def.aggroRange > 0 && this.tryEngageFromEnmity(enemy, players, summons)) return;
-
     if (def.aggroRange > 0 && this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
 
     const target = this.pickAggroTarget(enemy, players, summons, def.aggroRange, def.aggroStrategy || 'first');
@@ -251,14 +302,19 @@ export class AISystem extends System {
     }
   }
 
-  private updatePatrol(enemy: EnemyInstance, enemies: Map<string, EnemyInstance>, players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>, summons: Map<string, { position: { x: number; y: number; z: number }; summonId: string }>, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
+  private decidePatrol(
+    enemy: EnemyInstance,
+    enemies: EnemyMap,
+    players: PlayerMap,
+    summons: SummonMap,
+    def: ReturnType<typeof getEnemyDefinition>,
+  ): void {
     if (!def || enemy.patrolPoints.length === 0) {
       this.transitionTo(enemy, 'idle');
       return;
     }
 
     if (def.aggroRange > 0 && this.tryEngageFromEnmity(enemy, players, summons)) return;
-
     if (def.aggroRange > 0 && this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
 
     const target = enemy.patrolPoints[enemy.currentPatrolIndex];
@@ -267,88 +323,135 @@ export class AISystem extends System {
     if (dist < 1) {
       enemy.currentPatrolIndex = this.pickPatrolIndex(enemy, def.patrolStrategy || 'random');
       this.transitionTo(enemy, 'idle');
+    }
+  }
+
+  private decideChase(
+    enemy: EnemyInstance,
+    players: PlayerMap,
+    summons: SummonMap,
+    def: ReturnType<typeof getEnemyDefinition>,
+    deltaTime: number
+  ): void {
+    if (!def || !enemy.targetId) {
+      this.transitionTo(enemy, 'return');
       return;
     }
 
+    if (this.enmitySys) {
+      this.enmitySys.decay(enemy, deltaTime, true);
+      const topTarget = this.enmitySys.getTopTarget(enemy);
+      if (topTarget && topTarget.characterId !== enemy.targetId) {
+        const newTarget = this.resolveTargetPosition(topTarget.characterId, players, summons);
+        if (newTarget) {
+          enemy.targetId = topTarget.characterId;
+        }
+      }
+    }
+
+    const targetPos = this.resolveTargetPosition(enemy.targetId, players, summons);
+    if (!targetPos) {
+      this.transitionTo(enemy, 'return');
+      return;
+    }
+
+    const dist = distance2D(enemy.position, targetPos);
+    if (dist <= def.attackRange) {
+      this.transitionTo(enemy, 'attack');
+    }
+  }
+
+  private decideAttack(
+    enemy: EnemyInstance,
+    players: PlayerMap,
+    summons: SummonMap,
+    def: ReturnType<typeof getEnemyDefinition>,
+    deltaTime: number
+  ): void {
+    if (!def || !enemy.targetId) {
+      this.transitionTo(enemy, 'return');
+      return;
+    }
+
+    if (this.enmitySys) {
+      this.enmitySys.decay(enemy, deltaTime, true);
+      const topTarget = this.enmitySys.getTopTarget(enemy);
+      if (topTarget && topTarget.characterId !== enemy.targetId) {
+        const newTarget = this.resolveTargetPosition(topTarget.characterId, players, summons);
+        if (newTarget) {
+          enemy.targetId = topTarget.characterId;
+        }
+      }
+    }
+
+    const targetPos = this.resolveTargetPosition(enemy.targetId, players, summons);
+    if (!targetPos) {
+      this.transitionTo(enemy, 'return');
+      return;
+    }
+
+    const dist = distance2D(enemy.position, targetPos);
+    if (dist > def.attackRange * 1.5) {
+      this.transitionTo(enemy, 'chase');
+    }
+  }
+
+  private decideReturn(
+    enemy: EnemyInstance,
+    enemies: EnemyMap,
+    players: PlayerMap,
+    summons: SummonMap,
+    def: ReturnType<typeof getEnemyDefinition>,
+    deltaTime: number
+  ): void {
+    if (!def) return;
+
+    if (def.aggroRange > 0 && this.tryEngageFromEnmity(enemy, players, summons)) return;
+    if (def.aggroRange > 0 && this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
+
+    if (this.enmitySys) {
+      this.enmitySys.decay(enemy, deltaTime, false);
+    }
+
+    const dist = distance2D(enemy.position, enemy.spawnPosition);
+    if (dist < 1) {
+      if (this.enmitySys) {
+        this.enmitySys.clearEnmity(enemy);
+      }
+      this.transitionTo(enemy, 'idle');
+      const def2 = getEnemyDefinition(enemy.enemyType);
+      if (def2) {
+        enemy.health = def2.health;
+        enemy.statusEffects = [];
+      }
+    }
+  }
+
+  // ── Movement handlers (every tick) ─────────────────────────────────────────
+
+  private movePatrol(enemy: EnemyInstance, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
+    if (!def || enemy.patrolPoints.length === 0) return;
+    const target = enemy.patrolPoints[enemy.currentPatrolIndex];
     const speed = (def.patrolSpeed || 1) * deltaTime * this.getSpeedMultiplier(enemy);
     this.moveEntity(enemy, target, speed);
   }
 
-  private updateChase(
-    enemy: EnemyInstance,
-    players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>,
-    summons: Map<string, { position: { x: number; y: number; z: number }; summonId: string }>,
-    def: ReturnType<typeof getEnemyDefinition>,
-    deltaTime: number
-  ): void {
-    if (!def || !enemy.targetId) {
-      this.transitionTo(enemy, 'return');
-      return;
-    }
-
-    if (this.enmitySys) {
-      this.enmitySys.decay(enemy, deltaTime, true);
-      const topTarget = this.enmitySys.getTopTarget(enemy);
-      if (topTarget && topTarget.characterId !== enemy.targetId) {
-        const newTarget = this.resolveTargetPosition(topTarget.characterId, players, summons);
-        if (newTarget) {
-          enemy.targetId = topTarget.characterId;
-        }
-      }
-    }
-
+  private moveChase(enemy: EnemyInstance, players: PlayerMap, summons: SummonMap, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
+    if (!def || !enemy.targetId) return;
     const targetPos = this.resolveTargetPosition(enemy.targetId, players, summons);
-    if (!targetPos) {
-      this.transitionTo(enemy, 'return');
-      return;
-    }
-
+    if (!targetPos) return;
     const dist = distance2D(enemy.position, targetPos);
-
-    if (dist <= def.attackRange) {
-      this.transitionTo(enemy, 'attack');
-      return;
-    }
-
+    if (dist <= def.attackRange) return;
     const speed = def.speed * deltaTime * this.getSpeedMultiplier(enemy);
     this.moveEntity(enemy, targetPos, speed);
   }
 
-  private updateAttack(
-    enemy: EnemyInstance,
-    players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>,
-    summons: Map<string, { position: { x: number; y: number; z: number }; summonId: string }>,
-    def: ReturnType<typeof getEnemyDefinition>,
-    deltaTime: number
-  ): void {
-    if (!def || !enemy.targetId) {
-      this.transitionTo(enemy, 'return');
-      return;
-    }
-
-    if (this.enmitySys) {
-      this.enmitySys.decay(enemy, deltaTime, true);
-      const topTarget = this.enmitySys.getTopTarget(enemy);
-      if (topTarget && topTarget.characterId !== enemy.targetId) {
-        const newTarget = this.resolveTargetPosition(topTarget.characterId, players, summons);
-        if (newTarget) {
-          enemy.targetId = topTarget.characterId;
-        }
-      }
-    }
-
+  private performAttack(enemy: EnemyInstance, players: PlayerMap, summons: SummonMap, def: ReturnType<typeof getEnemyDefinition>): void {
+    if (!def || !enemy.targetId) return;
     const targetPos = this.resolveTargetPosition(enemy.targetId, players, summons);
-    if (!targetPos) {
-      this.transitionTo(enemy, 'return');
-      return;
-    }
-
+    if (!targetPos) return;
     const dist = distance2D(enemy.position, targetPos);
-
-    if (dist > def.attackRange * 1.5) {
-      this.transitionTo(enemy, 'chase');
-      return;
-    }
+    if (dist > def.attackRange * 1.5) return;
 
     enemy.rotation = Math.atan2(targetPos.x - enemy.position.x, targetPos.z - enemy.position.z);
 
@@ -365,32 +468,8 @@ export class AISystem extends System {
     }
   }
 
-  private updateReturn(enemy: EnemyInstance, enemies: Map<string, EnemyInstance>, players: Map<string, { position: { x: number; y: number; z: number }; characterId: string }>, summons: Map<string, { position: { x: number; y: number; z: number }; summonId: string }>, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
+  private moveReturn(enemy: EnemyInstance, def: ReturnType<typeof getEnemyDefinition>, deltaTime: number): void {
     if (!def) return;
-
-    if (def.aggroRange > 0 && this.tryEngageFromEnmity(enemy, players, summons)) return;
-
-    if (def.aggroRange > 0 && this.checkLinkedAggro(enemy, enemies, players, summons, def.aggroRange)) return;
-
-    if (this.enmitySys) {
-      this.enmitySys.decay(enemy, deltaTime, false);
-    }
-
-    const dist = distance2D(enemy.position, enemy.spawnPosition);
-
-    if (dist < 1) {
-      if (this.enmitySys) {
-        this.enmitySys.clearEnmity(enemy);
-      }
-      this.transitionTo(enemy, 'idle');
-      const def2 = getEnemyDefinition(enemy.enemyType);
-      if (def2) {
-        enemy.health = def2.health;
-        enemy.statusEffects = [];
-      }
-      return;
-    }
-
     const speed = def.speed * 1.5 * deltaTime;
     this.moveEntity(enemy, enemy.spawnPosition, speed);
   }

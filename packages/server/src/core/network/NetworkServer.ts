@@ -3631,13 +3631,20 @@ export class NetworkServer implements NetworkContext {
         zoneSummons.set(summon.id, { position: summon.position, summonId: summon.id });
       }
 
-      this.ai.updateEnemies(
+      this.ai.updateDecisions(
         this.spawnMgr.getEnemiesInZone(zoneId),
         zonePlayers,
         zoneSummons,
         this.AI_TICK_STAGGER / this.tickRate,
         this.aiTickBucket,
         this.AI_TICK_STAGGER
+      );
+
+      this.ai.updateMovement(
+        this.spawnMgr.getEnemiesInZone(zoneId),
+        zonePlayers,
+        zoneSummons,
+        1 / this.tickRate
       );
     }
   }
