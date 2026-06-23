@@ -154,6 +154,7 @@
         @kick-member="handlePartyKick"
         @promote-member="handlePartyPromote"
         @roll-loot="handlePartyLootRoll"
+        @target-member="handlePartyTarget"
       />
 
       <PartyCreateDialog
@@ -505,6 +506,10 @@ function handleToggleRest() {
 
 function handleSkillBarKey(barIndex: number, slotIndex: number) {
   handleUseSkillSlot(barIndex, slotIndex);
+}
+
+function handlePartyTarget(characterId: string) {
+  gameClient?.targetEntity(characterId);
 }
 
 function handlePartyAction(targetIdStr: string) {

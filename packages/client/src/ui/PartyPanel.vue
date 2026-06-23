@@ -13,8 +13,9 @@
       <div
         v-for="member in party.members"
         :key="member.characterId"
-        class="party-member"
+        class="party-member clickable"
         :class="{ 'is-leader': member.isLeader, 'is-self': member.characterId === myId }"
+        @click="$emit('target-member', member.characterId)"
       >
         <div class="member-info">
           <span class="member-name">{{ member.characterName }}</span>
@@ -92,6 +93,7 @@ defineEmits<{
   'kick-member': [characterId: string];
   'promote-member': [characterId: string];
   'roll-loot': [lootId: string];
+  'target-member': [characterId: string];
 }>();
 
 const isLeader = (() => props.party?.leaderId === props.myId)();
@@ -200,6 +202,8 @@ onUnmounted(() => {
 }
 .party-member.is-self { border-left: 2px solid #7af; }
 .party-member.is-leader { border-left: 2px solid #fd0; }
+.party-member.clickable { cursor: pointer; }
+.party-member.clickable:hover { background: rgba(255,255,255,0.12); }
 .member-info {
   display: flex;
   align-items: center;

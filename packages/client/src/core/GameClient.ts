@@ -1183,6 +1183,29 @@ export class GameClient {
     this.callbacks.onTargetChange?.(targetId);
   }
 
+  targetEntity(entityId: string): void {
+    const entity = this.knownEntities.get(entityId);
+    if (!entity) return;
+    this.autoAttacking = false;
+    this.targetId = entityId;
+    this.engine.setTargetIndicator(entityId);
+    if (entity.type === 'player') {
+      this.callbacks.onTargetChange?.(entityId, {
+        name: entity.data.name || 'Player',
+        level: entity.data.level || 0,
+        health: entity.data.health || 0,
+        maxHealth: entity.data.maxHealth || 0,
+        type: 'player',
+        class: entity.data.class || entity.data.jobId || ''
+      });
+    } else if (entity.type === 'enemy') {
+      const ed = this.enemies.get(entityId);
+      this.callbacks.onTargetChange?.(entityId, ed ? {
+        name: ed.name || 'Enemy', level: ed.level || 1, health: ed.health || 0, maxHealth: ed.maxHealth || 1, type: 'enemy'
+      } : null);
+    }
+  }
+
   setMinimapCanvas(canvas: HTMLCanvasElement): void {
     this.engine.setMinimapCanvas(canvas);
   }
