@@ -48,6 +48,8 @@ export interface PlayerSession {
   lastRegenTick: number;
   invulnerableUntil: number;
   isDead: boolean;
+  isResting: boolean;
+  restStartedAt: number;
   currentNpcId: string | null;
   deathTime: number;
   nation: 'varik' | 'pfelstein' | 'latugan' | null;

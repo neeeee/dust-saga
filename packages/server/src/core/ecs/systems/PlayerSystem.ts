@@ -172,6 +172,8 @@ export class PlayerSystem extends System {
       lastRegenTick: Date.now(),
       invulnerableUntil: Date.now() + 3000,
       isDead: false,
+      isResting: false,
+      restStartedAt: 0,
       currentNpcId: null,
       deathTime: 0,
       nation: null,

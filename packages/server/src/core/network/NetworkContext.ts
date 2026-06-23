@@ -59,6 +59,7 @@ export interface NetworkContext {
   unregisterPlayerFromZone(characterId: string): void;
   movePlayerToZone(characterId: string, newZoneId: string): void;
   cleanupPlayerZoneResources(session: PlayerSession): void;
+  cancelRest(session: PlayerSession): void;
   completeZoneHandoffDeparture(session: PlayerSession): void;
   initiateZoneHandoff(session: PlayerSession): Promise<boolean>;
   resolveZoneHandoff(characterId: string): Promise<PlayerSession | null>;

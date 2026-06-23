@@ -39,6 +39,8 @@ export interface GameCallbacks {
   onSkillUsed: (skillName: string, mpCost: number, cooldownRemaining: number) => void;
   onSkillError: (skillName: string, error: string) => void;
   onEntityStatusEffects: (entityId: string, effects: any[]) => void;
+  onRestStateChange: (isResting: boolean) => void;
+  onEntityRestStateChange: (characterId: string, isResting: boolean) => void;
   onEnhancementResult: (data: { success: boolean; weaponSlotIndex: number; enhancementLevel: number; enhancementElement: string }) => void;
 }
 
@@ -873,6 +875,14 @@ export class GameClient {
     this.network.onPacket(PacketType.ENTER_ZONE, (packet: any) => {
       this.currentZoneId = packet.data.zoneId;
     });
+
+    this.network.onPacket(PacketType.PLAYER_REST, (packet: any) => {
+      const { characterId, isResting } = packet.data;
+      if (characterId === this.playerId) {
+        this.callbacks.onRestStateChange?.(isResting);
+      }
+      this.callbacks.onEntityRestStateChange?.(characterId, isResting);
+    });
   }
 
   private async processEntitySpawn(id: string, type: string, position: any, data: any): Promise<void> {
@@ -1291,6 +1301,10 @@ export class GameClient {
       this.cancelAOETargeting();
     }
     this.network.useSkill(skillName, targetId || this.targetId);
+  }
+
+  toggleRest(): void {
+    this.network.toggleRest();
   }
 
   sendPartyCreate(targetId: string, visibility: string, lootRule: string): void {

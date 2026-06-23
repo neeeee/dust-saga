@@ -53,10 +53,12 @@
         :target-class="targetClass"
         :target-status-effects="targetStatusEffects"
         :status-effects="playerStatusEffects"
+        :is-resting="isResting"
         @toggle-inventory="showInventory = !showInventory"
         @toggle-quests="showQuests = !showQuests"
         @toggle-character="showInventory = !showInventory"
         @toggle-skills="showSkillWindow = !showSkillWindow"
+        @toggle-rest="handleToggleRest"
         @clear-target="gameClient?.setTarget(null)"
         @use-skill="handleUseSkillSlot"
         @party-action="handlePartyAction"
@@ -300,6 +302,7 @@ const playerJobId = ref('');
 const showSkillWindow = ref(false);
 const skillStore = useSkillStore();
 const playerStatusEffects = ref<any[]>([]);
+const isResting = ref(false);
 const showGMPanel = ref(false);
 const dummyStats = ref<Record<string, any>>({});
 
@@ -496,6 +499,10 @@ function handleUseSkillSlot(barIndex: number, slotIndex: number) {
   gameClient.useSkill(slot.skillName, targetId.value);
 }
 
+function handleToggleRest() {
+  gameClient?.toggleRest();
+}
+
 function handleSkillBarKey(barIndex: number, slotIndex: number) {
   handleUseSkillSlot(barIndex, slotIndex);
 }
@@ -668,6 +675,7 @@ onMounted(async () => {
     onDeath: (data) => {
       if (data.isDead) {
         isDead.value = true;
+        isResting.value = false;
         revivedBy.value = undefined;
       } else {
         isDead.value = false;
@@ -753,6 +761,11 @@ onMounted(async () => {
       if (entityId === targetId.value) {
         targetStatusEffects.value = effects;
       }
+    },
+    onRestStateChange: (resting) => {
+      isResting.value = resting;
+    },
+    onEntityRestStateChange: (_characterId, _resting) => {
     },
   });
 
@@ -949,6 +962,8 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     showStatPanel.value = !showStatPanel.value;
   } else if (e.code === 'KeyK') {
     showSkillWindow.value = !showSkillWindow.value;
+  } else if (e.code === 'KeyR') {
+    gameClient?.toggleRest();
   } else if (e.code === 'Tab') {
     e.preventDefault();
     gameClient?.cycleTarget(e.shiftKey ? -1 : 1);

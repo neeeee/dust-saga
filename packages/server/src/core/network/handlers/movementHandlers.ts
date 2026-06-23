@@ -35,6 +35,10 @@ function handlePlayerMove(ctx: NetworkContext, socket: Socket, data: any): void 
   ctx.updatePlayerSpatialPosition(characterId, { x: data.position.x, z: data.position.z });
 
   if (moved) {
+    if (session.isResting) {
+      ctx.cancelRest(session);
+    }
+
     const blockingEffect = session.statusEffects?.find(
       (e: any) => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance && !e.buffData?.defensiveMarch
     );

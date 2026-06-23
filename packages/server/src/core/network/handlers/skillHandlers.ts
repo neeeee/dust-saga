@@ -35,6 +35,8 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
   const { skillName, targetId, aoePosition } = data;
   if (!skillName) return;
 
+  ctx.cancelRest(session);
+
   if (aoePosition && GROUND_TARGETED_AOE_SKILLS.has(skillName)) {
     handleGroundAOESkillUse(ctx, session, skillName, aoePosition);
     return;

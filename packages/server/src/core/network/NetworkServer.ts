@@ -9,7 +9,7 @@ import {
   getDesignJobId,
   StatType, JobId, Race, processRacialOnDamage, applyRacialPotionHealing,
   getAdvancementOptions, BaseClass,
-  REGEN_CONFIG, SKILL_TARGET_RULES, SkillTargetType, SkillType,
+  REGEN_CONFIG, REST_REGEN_CONFIG, SKILL_TARGET_RULES, SkillTargetType, SkillType,
   PartyVisibility, LootRule, MAX_LOOT_POOL,
   GROUND_TARGETED_AOE_SKILLS, DEFAULT_AOE_RADIUS,
   AOETargetMode,
@@ -365,6 +365,10 @@ export class NetworkServer implements NetworkContext {
   cleanupPlayerZoneResources(session: PlayerSession): void {
     const characterId = session.characterId;
 
+    if (session.isResting) {
+      this.cancelRest(session);
+    }
+
     this.aoeZoneMgr.cleanupOwner(characterId);
 
     const despawnedSummons = this.summonMgr.despawnAllForOwner(characterId);
@@ -381,6 +385,16 @@ export class NetworkServer implements NetworkContext {
     this.dummyMgr.cleanupOwner(characterId, session.zoneId);
 
     session.activeCast = null;
+  }
+
+  cancelRest(session: PlayerSession): void {
+    if (!session.isResting) return;
+    session.isResting = false;
+    this.broadcastInZone(session.zoneId, {
+      type: PacketType.PLAYER_REST,
+      timestamp: Date.now(),
+      data: { characterId: session.characterId, isResting: false }
+    });
   }
 
   /**
@@ -511,6 +525,7 @@ export class NetworkServer implements NetworkContext {
   handlePlayerDeath(session: PlayerSession): void {
     session.stats.health = 0;
     session.isDead = true;
+    session.isResting = false;
     session.deathTime = Date.now();
     session.activeCast = null;
 
@@ -690,6 +705,8 @@ export class NetworkServer implements NetworkContext {
 
   applyPlayerDamage(target: PlayerSession, damage: number, attackerId: string, damageType: string, isCritical: boolean, zoneId: string, attackerPosition?: { x: number; y: number; z: number }): { redirected: boolean; damageTaken: number } {
     if (damage <= 0) return { redirected: false, damageTaken: 0 };
+
+    this.cancelRest(target);
 
     if (target.statusEffects) {
       const invIdx = target.statusEffects.findIndex(e => e.type === StatusEffectType.INVISIBLE);
@@ -1719,7 +1736,7 @@ export class NetworkServer implements NetworkContext {
         type: 'player',
         position: player.position,
         rotation: player.rotation,
-        data: { name: player.characterName, class: player.jobId, race: player.race, jobId: player.jobId, level: player.stats.level, health: player.stats.health, maxHealth: player.stats.maxHealth, modelFile: JOB_DEFINITIONS[player.jobId]?.modelFile, invisible: player.statusEffects?.some(e => e.type === StatusEffectType.INVISIBLE) || false }
+        data: { name: player.characterName, class: player.jobId, race: player.race, jobId: player.jobId, level: player.stats.level, health: player.stats.health, maxHealth: player.stats.maxHealth, modelFile: JOB_DEFINITIONS[player.jobId]?.modelFile, invisible: player.statusEffects?.some(e => e.type === StatusEffectType.INVISIBLE) || false, isResting: player.isResting }
       });
     });
 
@@ -3402,14 +3419,30 @@ export class NetworkServer implements NetworkContext {
       }
 
       if (session.stats.health > 0 && now - session.lastRegenTick >= REGEN_CONFIG.TICK_INTERVAL_MS) {
-        const inCombat = now - session.lastAttackTime < REGEN_CONFIG.OUT_OF_COMBAT_DELAY_MS;
-        const lpRegen = Math.floor(session.stats.maxHealth / REGEN_CONFIG.LP_DIVISOR)
-          + Math.floor(session.statPoints.STA / REGEN_CONFIG.LP_STA_DIVISOR);
-        const mpRegen = Math.floor(session.stats.maxMana / REGEN_CONFIG.MP_DIVISOR)
-          + Math.floor(session.statPoints.SPI / REGEN_CONFIG.MP_SPI_DIVISOR);
+        let lpGain: number;
+        let mpGain: number;
 
-        const lpGain = inCombat ? Math.floor(lpRegen * REGEN_CONFIG.IN_COMBAT_LP_MULTIPLIER) : lpRegen;
-        const mpGain = inCombat ? Math.floor(mpRegen * REGEN_CONFIG.IN_COMBAT_MP_MULTIPLIER) : mpRegen;
+        if (session.isResting) {
+          const restTicksElapsed = Math.floor((now - session.restStartedAt) / REGEN_CONFIG.TICK_INTERVAL_MS);
+          let rampUp = 1;
+          if (restTicksElapsed <= 1) rampUp = REST_REGEN_CONFIG.RAMP_TICK_0;
+          else if (restTicksElapsed === 2) rampUp = REST_REGEN_CONFIG.RAMP_TICK_1;
+
+          const lpRegen = Math.floor(session.stats.maxHealth / REST_REGEN_CONFIG.HP_DIVISOR)
+            + Math.floor(session.statPoints.STA / REST_REGEN_CONFIG.HP_STA_DIVISOR);
+          const mpRegen = Math.floor(session.stats.maxMana / REST_REGEN_CONFIG.MP_DIVISOR)
+            + Math.floor(session.statPoints.SPI / REST_REGEN_CONFIG.MP_SPI_DIVISOR);
+          lpGain = Math.floor(lpRegen * rampUp);
+          mpGain = Math.floor(mpRegen * rampUp);
+        } else {
+          const inCombat = now - session.lastAttackTime < REGEN_CONFIG.OUT_OF_COMBAT_DELAY_MS;
+          const lpRegen = Math.floor(session.stats.maxHealth / REGEN_CONFIG.LP_DIVISOR)
+            + Math.floor(session.statPoints.STA / REGEN_CONFIG.LP_STA_DIVISOR);
+          const mpRegen = Math.floor(session.stats.maxMana / REGEN_CONFIG.MP_DIVISOR)
+            + Math.floor(session.statPoints.SPI / REGEN_CONFIG.MP_SPI_DIVISOR);
+          lpGain = inCombat ? Math.floor(lpRegen * REGEN_CONFIG.IN_COMBAT_LP_MULTIPLIER) : lpRegen;
+          mpGain = inCombat ? Math.floor(mpRegen * REGEN_CONFIG.IN_COMBAT_MP_MULTIPLIER) : mpRegen;
+        }
 
         let changed = false;
         if (lpGain > 0 && session.stats.health < session.stats.maxHealth) {

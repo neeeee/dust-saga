@@ -87,6 +87,8 @@ export class DummyManager {
       lastRegenTick: 0,
       invulnerableUntil: Date.now() + 999999999,
       isDead: false,
+      isResting: false,
+      restStartedAt: 0,
       currentNpcId: null,
       deathTime: 0,
       nation: null,

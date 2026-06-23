@@ -40,6 +40,7 @@ function handleRespawnRequest(ctx: NetworkContext, socket: Socket, _data: any): 
   }
 
   session.isDead = false;
+  session.isResting = false;
   session.deathTime = 0;
   session.stats.health = session.stats.maxHealth;
   session.stats.mana = session.stats.maxMana;
@@ -62,7 +63,7 @@ function handleRespawnRequest(ctx: NetworkContext, socket: Socket, _data: any): 
         type: 'player',
         position: session.position,
         rotation: session.rotation,
-        data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth }
+        data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth, isResting: false }
       }
     });
     ctx.sendZoneState(socket, respawnZoneId, characterId);

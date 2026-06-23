@@ -182,6 +182,14 @@ export class NetworkClient {
     });
   }
 
+  toggleRest(): void {
+    this.sendPacket({
+      type: PacketType.PLAYER_REST,
+      timestamp: Date.now(),
+      data: {}
+    });
+  }
+
   useSkill(skillName: string, targetId: string | null = null, aoePosition?: { x: number; y: number; z: number }): void {
     const data: any = { skillName, targetId };
     if (aoePosition) {

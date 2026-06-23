@@ -87,6 +87,7 @@
         <button class="action-btn" @click="$emit('toggle-quests')" title="Quests (J)">Q</button>
         <button class="action-btn" @click="$emit('toggle-character')" title="Character (C)">C</button>
         <button class="action-btn" @click="$emit('toggle-skills')" title="Skills (K)">K</button>
+        <button class="action-btn" :class="{ active: isResting }" @click="$emit('toggle-rest')" title="Rest (R)">R</button>
       </div>
     </div>
   </div>
@@ -198,6 +199,7 @@ const props = defineProps<{
   targetClass: string;
   targetStatusEffects: any[];
   statusEffects: any[];
+  isResting: boolean;
 }>();
 
 defineEmits<{
@@ -205,6 +207,7 @@ defineEmits<{
   'toggle-quests': [];
   'toggle-character': [];
   'toggle-skills': [];
+  'toggle-rest': [];
   'clear-target': [];
   'use-skill': [barIndex: number, slotIndex: number];
   'whisper-player': [playerName: string];
@@ -608,5 +611,10 @@ defineExpose({ minimapCanvas });
 
 .action-btn:hover {
   background: rgba(102, 126, 234, 0.4);
+}
+
+.action-btn.active {
+  background: rgba(80, 200, 120, 0.5);
+  border-color: rgba(80, 200, 120, 0.8);
 }
 </style>

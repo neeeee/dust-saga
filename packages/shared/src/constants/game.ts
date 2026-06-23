@@ -47,6 +47,15 @@ export const REGEN_CONFIG = {
   IN_COMBAT_MP_MULTIPLIER: 0.1,
 } as const;
 
+export const REST_REGEN_CONFIG = {
+  HP_DIVISOR: 10,
+  MP_DIVISOR: 10,
+  HP_STA_DIVISOR: 1,
+  MP_SPI_DIVISOR: 1,
+  RAMP_TICK_0: 0.5,
+  RAMP_TICK_1: 0.75,
+} as const;
+
 export const NETWORK_CONFIG = {
   HEARTBEAT_INTERVAL: 30000,
   CONNECTION_TIMEOUT: 10000,
