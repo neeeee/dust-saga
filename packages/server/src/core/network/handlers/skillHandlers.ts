@@ -23,6 +23,23 @@ function checkDevotionMana(ctx: NetworkContext, session: PlayerSession, mpCost: 
 
 export function registerHandlers(registry: Map<PacketType, PacketHandler>): void {
   registry.set(PacketType.SKILL_USE, handleSkillUse);
+  registry.set(PacketType.SKILL_CANCEL, handleSkillCancel);
+}
+
+function handleSkillCancel(ctx: NetworkContext, socket: Socket, _data: any): void {
+  const characterId = ctx.findCharacterBySocket(socket.id);
+  if (!characterId) return;
+
+  const session = ctx.state.players.get(characterId);
+  if (!session || !session.activeCast) return;
+
+  const skillName = session.activeCast.skillName;
+  session.activeCast = null;
+  ctx.sendToPlayer(characterId, {
+    type: PacketType.COOLDOWN_UPDATE,
+    timestamp: Date.now(),
+    data: { skillName, type: 'cast_cancel' }
+  });
 }
 
 function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {

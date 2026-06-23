@@ -1307,6 +1307,10 @@ export class GameClient {
     this.network.toggleRest();
   }
 
+  cancelCast(): void {
+    this.network.cancelCast();
+  }
+
   sendPartyCreate(targetId: string, visibility: string, lootRule: string): void {
     this.network.sendPacket({ type: PacketType.PARTY_CREATE_REQUEST, timestamp: Date.now(), data: { targetId, visibility, lootRule } });
   }

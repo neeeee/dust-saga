@@ -968,6 +968,7 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     e.preventDefault();
     gameClient?.cycleTarget(e.shiftKey ? -1 : 1);
   } else if (e.code === 'Escape') {
+    gameClient?.cancelCast();
     showInventory.value = false;
     showQuests.value = false;
     if (showDialog.value) {

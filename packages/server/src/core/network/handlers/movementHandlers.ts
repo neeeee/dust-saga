@@ -39,6 +39,16 @@ function handlePlayerMove(ctx: NetworkContext, socket: Socket, data: any): void 
       ctx.cancelRest(session);
     }
 
+    if (session.activeCast) {
+      const castSkillName = session.activeCast.skillName;
+      session.activeCast = null;
+      ctx.sendToPlayer(session.characterId, {
+        type: PacketType.COOLDOWN_UPDATE,
+        timestamp: Date.now(),
+        data: { skillName: castSkillName, type: 'cast_cancel' }
+      });
+    }
+
     const blockingEffect = session.statusEffects?.find(
       (e: any) => e.type === StatusEffectType.BUFF_BLOCKING_STANCE && e.buffData?.blockingStance && !e.buffData?.defensiveMarch
     );

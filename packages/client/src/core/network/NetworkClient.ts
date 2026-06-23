@@ -190,6 +190,14 @@ export class NetworkClient {
     });
   }
 
+  cancelCast(): void {
+    this.sendPacket({
+      type: PacketType.SKILL_CANCEL,
+      timestamp: Date.now(),
+      data: {}
+    });
+  }
+
   useSkill(skillName: string, targetId: string | null = null, aoePosition?: { x: number; y: number; z: number }): void {
     const data: any = { skillName, targetId };
     if (aoePosition) {
