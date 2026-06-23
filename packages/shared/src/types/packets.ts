@@ -106,6 +106,7 @@ export enum PacketType {
   ZONE_HANDOFF = 172,
   PLAYER_REST = 173,
   SKILL_CANCEL = 174,
+  ENTITY_ANIMATION = 175,
 }
 
 export interface Packet {

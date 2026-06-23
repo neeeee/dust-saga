@@ -1850,6 +1850,12 @@ export class NetworkServer implements NetworkContext {
       }
     });
 
+    this.broadcastInZone(session.zoneId, {
+      type: PacketType.ENTITY_ANIMATION,
+      timestamp: Date.now(),
+      data: { entityId: characterId, animation: 'Attack' }
+    }, characterId);
+
     this.sendToPlayer(characterId, {
       type: PacketType.STATS_UPDATE,
       timestamp: Date.now(),
@@ -2153,6 +2159,12 @@ export class NetworkServer implements NetworkContext {
           : 0
       }
     });
+
+    this.broadcastInZone(session.zoneId, {
+      type: PacketType.ENTITY_ANIMATION,
+      timestamp: Date.now(),
+      data: { entityId: characterId, animation: 'Attack' }
+    }, characterId);
   }
 
   applyDevotionRefund(session: PlayerSession, skillName: string, devotionFx: StatusEffect): void {
@@ -3005,6 +3017,12 @@ export class NetworkServer implements NetworkContext {
               : 0
           }
         });
+
+        this.broadcastInZone(session.zoneId, {
+          type: PacketType.ENTITY_ANIMATION,
+          timestamp: Date.now(),
+          data: { entityId: session.characterId, animation: 'Attack' }
+        }, session.characterId);
 
         if (result.missed && castResult.targetId) {
           this.broadcastInZone(session.zoneId, {

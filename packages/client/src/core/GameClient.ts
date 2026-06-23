@@ -87,6 +87,9 @@ export class GameClient {
   private clickToMoveTargetIndex: number = 0;
   private isClickToMoveActive: boolean = false;
   private partyMemberIds: Set<string> = new Set();
+  private isResting: boolean = false;
+  private restingEntities: Set<string> = new Set();
+  private attackAnimUntil: Map<string, number> = new Map();
 
   constructor(canvas: HTMLCanvasElement | null) {
     this.engine = new GameEngine(canvas);
@@ -528,13 +531,19 @@ export class GameClient {
       if (!data.entities && !data.summons) {
         if (data.characterId === this.playerId) return;
 
+        const entityId = data.characterId || data.socketId;
         const pos = { x: data.position.x, y: data.position.y, z: data.position.z };
-        this.interpolationManager.addPositionUpdate(data.characterId || data.socketId, pos, serverTimestamp);
+        this.interpolationManager.addPositionUpdate(entityId, pos, serverTimestamp);
         if (data.rotation) {
-          this.interpolationManager.addRotationUpdate(data.characterId || data.socketId, data.rotation, serverTimestamp);
+          this.interpolationManager.addRotationUpdate(entityId, data.rotation, serverTimestamp);
         }
         if (data.invisible !== undefined) {
           this.applyEntityVisibility(data.characterId, data.invisible);
+        }
+        if (data.isMoving !== undefined
+            && !this.restingEntities.has(entityId)
+            && Date.now() >= (this.attackAnimUntil.get(entityId) || 0)) {
+          this.engine.startAnimation(entityId, data.isMoving ? 'Walk' : 'Idle');
         }
       }
     });
@@ -876,10 +885,28 @@ export class GameClient {
       this.currentZoneId = packet.data.zoneId;
     });
 
+    this.network.onPacket(PacketType.ENTITY_ANIMATION, (packet: any) => {
+      const { entityId, animation } = packet.data;
+      if (entityId === this.playerId) return;
+      this.attackAnimUntil.set(entityId, Date.now() + 600);
+      this.engine.startAnimationOnce(entityId, animation, () => {
+        this.attackAnimUntil.delete(entityId);
+      });
+    });
+
     this.network.onPacket(PacketType.PLAYER_REST, (packet: any) => {
       const { characterId, isResting } = packet.data;
       if (characterId === this.playerId) {
+        this.isResting = isResting;
         this.callbacks.onRestStateChange?.(isResting);
+      } else {
+        if (isResting) {
+          this.restingEntities.add(characterId);
+          this.engine.startAnimation(characterId, 'Death');
+        } else {
+          this.restingEntities.delete(characterId);
+          this.engine.startAnimation(characterId, 'Idle');
+        }
       }
       this.callbacks.onEntityRestStateChange?.(characterId, isResting);
     });
@@ -978,7 +1005,12 @@ export class GameClient {
       }
     }
 
-    if (isMoving) {
+    const now = Date.now();
+    if (this.isResting) {
+      this.engine.startAnimation(this.playerId!, 'Death');
+    } else if (now < (this.attackAnimUntil.get(this.playerId!) || 0)) {
+      // Attack animation playing — don't override
+    } else if (isMoving) {
       this.engine.startAnimation(this.playerId!, 'Walk');
     } else {
       this.engine.startAnimation(this.playerId!, 'Idle');
@@ -987,7 +1019,6 @@ export class GameClient {
 
     this.engine.updateMoveIndicator(deltaTime);
 
-    const now = Date.now();
     if (now - this.lastMoveSend > 50) {
       this.network.sendMovement(
         {
@@ -1020,6 +1051,10 @@ export class GameClient {
       );
       if (now - this.lastAutoAttackTime >= autoCooldown) {
         this.network.sendAttack(this.targetId);
+        this.attackAnimUntil.set(this.playerId!, now + 600);
+        this.engine.startAnimationOnce(this.playerId!, 'Attack', () => {
+          this.attackAnimUntil.delete(this.playerId!);
+        });
         this.lastAutoAttackTime = now;
       }
     }
@@ -1029,6 +1064,10 @@ export class GameClient {
       if (now - this.lastManualAttackTime >= GAME_CONFIG.MANUAL_ATTACK_COOLDOWN) {
         const facingAngle = Math.atan2(camForward.x, camForward.z);
         this.network.sendManualAttack(facingAngle);
+        this.attackAnimUntil.set(this.playerId!, now + 600);
+        this.engine.startAnimationOnce(this.playerId!, 'Attack', () => {
+          this.attackAnimUntil.delete(this.playerId!);
+        });
         this.lastManualAttackTime = now;
         this.autoAttacking = false;
         this.lastAutoAttackTime = now + GAME_CONFIG.MANUAL_ATTACK_COOLDOWN;

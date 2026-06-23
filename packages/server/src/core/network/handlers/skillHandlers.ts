@@ -251,6 +251,12 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
     }
   });
 
+  ctx.broadcastInZone(session.zoneId, {
+    type: PacketType.ENTITY_ANIMATION,
+    timestamp: Date.now(),
+    data: { entityId: characterId, animation: 'Attack' }
+  }, characterId);
+
   if (result.createdItems && result.createdItems.length > 0) {
     for (const ci of result.createdItems) {
       if (ci.consumeItems) {

@@ -33,6 +33,12 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
     session.lastAttackTime = Date.now();
   }
 
+  ctx.broadcastInZone(session.zoneId, {
+    type: PacketType.ENTITY_ANIMATION,
+    timestamp: Date.now(),
+    data: { entityId: characterId, animation: 'Attack' }
+  }, characterId);
+
   for (const damageInfo of damageInfos) {
 
     const enemy = ctx.spawnMgr.getEnemy(data.targetId);
@@ -106,6 +112,12 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
   if (session.currentNpcId) return;
 
   ctx.cancelRest(session);
+
+  ctx.broadcastInZone(session.zoneId, {
+    type: PacketType.ENTITY_ANIMATION,
+    timestamp: Date.now(),
+    data: { entityId: characterId, animation: 'Attack' }
+  }, characterId);
 
   const zoneEnemies = ctx.spawnMgr.getEnemiesInZone(session.zoneId) || new Map();
   const zonePlayerBuf = new Map<string, PlayerSession>();

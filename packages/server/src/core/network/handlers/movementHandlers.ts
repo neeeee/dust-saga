@@ -102,7 +102,8 @@ function handlePlayerMove(ctx: NetworkContext, socket: Socket, data: any): void 
         characterId,
         position: data.position,
         rotation: data.rotation || session.rotation,
-        invisible: isInvis
+        invisible: isInvis,
+        isMoving: !!moved
       }
     }, characterId);
   }
