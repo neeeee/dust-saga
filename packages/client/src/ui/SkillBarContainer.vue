@@ -5,8 +5,8 @@
       :key="i"
       :bar-index="i"
       :bar="bar"
-      :pos-x="skillStore.state.layout.positions[i]?.x ?? 0"
-      :pos-y="skillStore.state.layout.positions[i]?.y ?? 0"
+      :pos-x="barPixelPositions[i]?.x ?? 0"
+      :pos-y="barPixelPositions[i]?.y ?? 0"
       @use-skill="(bi, si) => $emit('use-skill', bi, si)"
       @close="skillStore.removeBar(i)"
       @move="(bi, x, y) => skillStore.moveBar(bi, x, y)"
@@ -25,6 +25,7 @@ import SkillBar from './SkillBar.vue';
 import { useSkillStore } from '../composables/useSkillStore';
 
 const skillStore = useSkillStore();
+const { barPixelPositions } = skillStore;
 
 defineEmits<{
   'use-skill': [barIndex: number, slotIndex: number];

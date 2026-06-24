@@ -38,7 +38,9 @@ export const BAR_KEYBIND_LABELS: string[][] = [
 
 export interface SkillBarLayout {
   bars: SkillBarSlot[][];
+  // Normalized viewport fractions (0..1) when v >= 2; legacy absolute pixels when absent.
   positions: { x: number; y: number }[];
+  v?: number;
 }
 
 export function createEmptySkillBar(): SkillBarSlot[] {

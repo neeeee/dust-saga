@@ -132,6 +132,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue';
+import { useViewport, REF_WIDTH, REF_HEIGHT, clamp01 } from '../composables/useViewport';
 
 const props = defineProps<{
   visible: boolean;
@@ -147,8 +148,11 @@ const emit = defineEmits<{
   open: [];
 }>();
 
-const posX = ref(10);
-const posY = ref(10);
+const { viewportWidth, viewportHeight } = useViewport();
+const normX = ref(clamp01(10 / REF_WIDTH));
+const normY = ref(clamp01(10 / REF_HEIGHT));
+const posX = computed(() => normX.value * viewportWidth.value);
+const posY = computed(() => normY.value * viewportHeight.value);
 const dragging = ref(false);
 const dragOffset = ref({ x: 0, y: 0 });
 
@@ -262,8 +266,8 @@ function startDrag(e: MouseEvent) {
 
   const onMove = (ev: MouseEvent) => {
     if (!dragging.value) return;
-    posX.value = ev.clientX - dragOffset.value.x;
-    posY.value = ev.clientY - dragOffset.value.y;
+    normX.value = clamp01((ev.clientX - dragOffset.value.x) / (viewportWidth.value || REF_WIDTH));
+    normY.value = clamp01((ev.clientY - dragOffset.value.y) / (viewportHeight.value || REF_HEIGHT));
   };
   const onUp = () => {
     dragging.value = false;

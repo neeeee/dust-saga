@@ -1,4 +1,4 @@
-import { reactive, ref, watch } from 'vue';
+import { reactive, ref, computed, watch } from 'vue';
 import {
   SkillBarSlot,
   SkillBarSlotCategory,
@@ -6,7 +6,6 @@ import {
   MAX_SKILL_BARS,
   SkillBarLayout,
   createEmptySkillBar,
-  createDefaultLayout,
   CLASS_SKILL_DATA,
   getClassSpecificSkillsForJob,
   getCategoryForSubCategory,
@@ -19,6 +18,7 @@ import {
   getDesignJobId,
   getEffectiveProficiencies,
 } from '@dust-saga/shared';
+import { useViewport, REF_WIDTH, REF_HEIGHT, clamp01 } from './useViewport';
 
 export interface SkillCooldownState {
   skillName: string;
@@ -63,10 +63,37 @@ export interface SubCategoryInfo {
 }
 
 const STORAGE_KEY_PREFIX = 'dust-saga-skillbar';
+const LAYOUT_VERSION = 2;
 let currentCharacterId: string | null = null;
 
 function getStorageKey(): string {
   return currentCharacterId ? `${STORAGE_KEY_PREFIX}-${currentCharacterId}` : STORAGE_KEY_PREFIX;
+}
+
+// Default skill bar position as normalized viewport fractions (centered, near bottom),
+// derived from the 1280x720 reference resolution.
+const DEFAULT_BAR_NORM = {
+  x: clamp01((REF_WIDTH / 2 - 250) / REF_WIDTH),
+  y: clamp01((REF_HEIGHT - 60) / REF_HEIGHT),
+};
+
+function defaultLayoutNormalized(): SkillBarLayout {
+  return {
+    v: LAYOUT_VERSION,
+    bars: [createEmptySkillBar()],
+    positions: [{ ...DEFAULT_BAR_NORM }],
+  };
+}
+
+function migrateLegacyLayout(parsed: SkillBarLayout): SkillBarLayout {
+  if (parsed.v === LAYOUT_VERSION) return parsed;
+  const w = (typeof window !== 'undefined' ? window.innerWidth : 0) || REF_WIDTH;
+  const h = (typeof window !== 'undefined' ? window.innerHeight : 0) || REF_HEIGHT;
+  const positions = (parsed.positions || []).map((p, i) => {
+    if (i === 0 && p.x === 0 && p.y === 0) return { ...DEFAULT_BAR_NORM };
+    return { x: clamp01(p.x / w), y: clamp01(p.y / h) };
+  });
+  return { v: LAYOUT_VERSION, bars: parsed.bars, positions };
 }
 
 interface SkillStoreState {
@@ -83,12 +110,7 @@ interface SkillStoreState {
 }
 
 const state = reactive<SkillStoreState>({
-  layout: {
-    bars: [createEmptySkillBar()],
-    positions: [
-      { x: typeof window !== 'undefined' ? Math.round(window.innerWidth / 2 - 250) : 0, y: typeof window !== 'undefined' ? window.innerHeight - 60 : 0 },
-    ],
-  },
+  layout: defaultLayoutNormalized(),
   cooldowns: {},
   cast: {
     active: false,
@@ -138,11 +160,11 @@ function loadLayout(): SkillBarLayout {
     if (saved) {
       const parsed = JSON.parse(saved) as SkillBarLayout;
       if (parsed.bars && parsed.bars.length > 0 && parsed.positions && parsed.positions.length > 0) {
-        return parsed;
+        return migrateLegacyLayout(parsed);
       }
     }
   } catch {}
-  return createDefaultLayout();
+  return defaultLayoutNormalized();
 }
 
 function saveLayout(): void {
@@ -168,16 +190,18 @@ function findSkillAcrossBars(skillName: string): { barIndex: number; slotIndex: 
 }
 
 export function useSkillStore() {
+  const { viewportWidth, viewportHeight } = useViewport();
+
+  const barPixelPositions = computed(() =>
+    state.layout.positions.map((p) => ({
+      x: p.x * viewportWidth.value,
+      y: p.y * viewportHeight.value,
+    }))
+  );
+
   function initForCharacter(characterId: string): void {
     currentCharacterId = characterId;
-    const saved = loadLayout();
-    if (saved.positions[0] && saved.positions[0].x === 0 && saved.positions[0].y === 0) {
-      saved.positions[0] = {
-        x: Math.round(window.innerWidth / 2 - 250),
-        y: window.innerHeight - 60,
-      };
-    }
-    state.layout = saved;
+    state.layout = loadLayout();
   }
 
   function updateSkillProficiencies(proficiencies: Record<string, number>, adeptness?: Record<string, number>, jobId?: string, baseClass?: string, unspentSkillPoints?: number, level?: number): void {
@@ -232,9 +256,11 @@ export function useSkillStore() {
     if (state.layout.bars.length >= MAX_SKILL_BARS) return false;
     const lastPos = state.layout.positions[state.layout.positions.length - 1];
     state.layout.bars.push(createEmptySkillBar());
+    // Stack additional bars above the previous one by a normalized offset (~70px at ref height).
+    const offsetY = 70 / REF_HEIGHT;
     state.layout.positions.push({
-      x: lastPos ? lastPos.x : window.innerWidth / 2,
-      y: lastPos ? lastPos.y - 70 : window.innerHeight - 130,
+      x: lastPos ? lastPos.x : DEFAULT_BAR_NORM.x,
+      y: lastPos ? clamp01(lastPos.y - offsetY) : clamp01(DEFAULT_BAR_NORM.y - offsetY),
     });
     return true;
   }
@@ -248,7 +274,12 @@ export function useSkillStore() {
 
   function moveBar(barIndex: number, x: number, y: number): void {
     if (barIndex < 0 || barIndex >= state.layout.positions.length) return;
-    state.layout.positions[barIndex] = { x, y };
+    const w = viewportWidth.value || REF_WIDTH;
+    const h = viewportHeight.value || REF_HEIGHT;
+    state.layout.positions[barIndex] = {
+      x: clamp01(x / w),
+      y: clamp01(y / h),
+    };
   }
 
   function startCooldown(skillName: string, cooldownMs: number): void {
@@ -480,6 +511,7 @@ export function useSkillStore() {
   return {
     state,
     now: _now,
+    barPixelPositions,
     initForCharacter,
     updateSkillProficiencies,
     setSkillInSlot,

@@ -1,25 +1,42 @@
-import { ref, onUnmounted } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
+import { useViewport, REF_WIDTH, REF_HEIGHT, clamp01 } from './useViewport';
+
+const STORAGE_VERSION = 2;
 
 export function useDraggable(
   handleSelector: string,
   storageKey?: string,
   defaultPos?: { x: number; y: number }
 ) {
-  const posX = ref(defaultPos?.x ?? 0);
-  const posY = ref(defaultPos?.y ?? 0);
+  const { viewportWidth, viewportHeight } = useViewport();
+
+  const normX = ref(clamp01((defaultPos?.x ?? 0) / REF_WIDTH));
+  const normY = ref(clamp01((defaultPos?.y ?? 0) / REF_HEIGHT));
+
   const isDragging = ref(false);
 
   let offset = { x: 0, y: 0 };
   let currentTarget: HTMLElement | null = null;
 
+  const posX = computed(() => normX.value * viewportWidth.value);
+  const posY = computed(() => normY.value * viewportHeight.value);
+
   function loadPosition(): void {
     if (!storageKey) return;
     try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const { x, y } = JSON.parse(saved);
-        posX.value = x;
-        posY.value = y;
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return;
+      if (parsed.v === STORAGE_VERSION && typeof parsed.nx === 'number' && typeof parsed.ny === 'number') {
+        normX.value = clamp01(parsed.nx);
+        normY.value = clamp01(parsed.ny);
+        return;
+      }
+      if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
+        normX.value = clamp01(parsed.x / (viewportWidth.value || REF_WIDTH));
+        normY.value = clamp01(parsed.y / (viewportHeight.value || REF_HEIGHT));
+        return;
       }
     } catch {}
   }
@@ -27,8 +44,30 @@ export function useDraggable(
   function savePosition(): void {
     if (!storageKey) return;
     try {
-      localStorage.setItem(storageKey, JSON.stringify({ x: posX.value, y: posY.value }));
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({ v: STORAGE_VERSION, nx: normX.value, ny: normY.value })
+      );
     } catch {}
+  }
+
+  function clampToViewport(px: number, py: number): { x: number; y: number } {
+    const w = viewportWidth.value || REF_WIDTH;
+    const h = viewportHeight.value || REF_HEIGHT;
+    let x = px;
+    let y = py;
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (currentTarget) {
+      const maxX = Math.max(0, w - currentTarget.offsetWidth);
+      const maxY = Math.max(0, h - currentTarget.offsetHeight);
+      if (x > maxX) x = maxX;
+      if (y > maxY) y = maxY;
+    } else {
+      if (x > w) x = w;
+      if (y > h) y = h;
+    }
+    return { x, y };
   }
 
   function onMouseDown(e: MouseEvent): void {
@@ -48,8 +87,9 @@ export function useDraggable(
 
   function onMouseMove(e: MouseEvent): void {
     if (!isDragging.value) return;
-    posX.value = e.clientX - offset.x;
-    posY.value = e.clientY - offset.y;
+    const clamped = clampToViewport(e.clientX - offset.x, e.clientY - offset.y);
+    normX.value = clamp01(clamped.x / (viewportWidth.value || REF_WIDTH));
+    normY.value = clamp01(clamped.y / (viewportHeight.value || REF_HEIGHT));
   }
 
   function onMouseUp(): void {
