@@ -135,6 +135,9 @@ export class GameClient {
     this.setupClickHandler();
     this.setupClickToMove();
     this.setupAOETargeting(canvas);
+    this.isRunning = true;
+    this.lastUpdate = performance.now();
+    this.gameLoop();
   }
 
   private lastClickEntityId: string | null = null;
@@ -1431,5 +1434,45 @@ export class GameClient {
     this.engine.dispose();
     this.entityManager.clear();
     this.interpolationManager.clear();
+  }
+
+  returnToCharacterSelect(): void {
+    this.network.returnToCharacterSelect();
+    this.isRunning = false;
+    this.input?.dispose();
+    this.input = null;
+    this.engine.dispose();
+    this.entityManager.clear();
+    this.interpolationManager.clear();
+    this.knownEntities.clear();
+    this.enemies.clear();
+    this.playerId = null;
+    this.playerMesh = null;
+    this.targetId = null;
+    this.autoAttacking = false;
+    this.isResting = false;
+    this.restingEntities.clear();
+    this.attackAnimUntil.clear();
+    this.engineReadyPromise = new Promise((resolve) => { this.engineReadyResolve = resolve; });
+  }
+
+  logoutToTitle(): void {
+    this.network.sendLogout();
+    this.isRunning = false;
+    this.input?.dispose();
+    this.input = null;
+    this.engine.dispose();
+    this.entityManager.clear();
+    this.interpolationManager.clear();
+    this.knownEntities.clear();
+    this.enemies.clear();
+    this.playerId = null;
+    this.playerMesh = null;
+    this.targetId = null;
+    this.autoAttacking = false;
+    this.isResting = false;
+    this.restingEntities.clear();
+    this.attackAnimUntil.clear();
+    this.engineReadyPromise = new Promise((resolve) => { this.engineReadyResolve = resolve; });
   }
 }

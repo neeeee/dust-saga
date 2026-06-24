@@ -12,6 +12,8 @@ export function registerHandlers(registry: Map<PacketType, PacketHandler>): void
   registry.set(PacketType.CHARACTER_CREATE, handleCharacterCreate);
   registry.set(PacketType.CHARACTER_SELECT, handleCharacterSelect);
   registry.set(PacketType.CHARACTER_DELETE, handleCharacterDelete);
+  registry.set(PacketType.RETURN_TO_CHARACTER_SELECT, handleReturnToCharacterSelect);
+  registry.set(PacketType.LOGOUT, handleLogout);
 }
 
 async function handleCharacterList(ctx: NetworkContext, socket: Socket, _data: any): Promise<void> {
@@ -82,6 +84,55 @@ async function handleCharacterCreate(ctx: NetworkContext, socket: Socket, data: 
       data: { message: result.error }
     });
   }
+}
+
+async function handleLogout(ctx: NetworkContext, socket: Socket, _data: any): Promise<void> {
+  const characterId = ctx.findCharacterBySocket(socket.id);
+  if (characterId) {
+    const session = ctx.state.players.get(characterId);
+    if (session) {
+      await ctx.auth.saveCharacter(characterId, {
+        level: session.stats.level,
+        experience: session.stats.experience,
+        position: session.position,
+        zoneId: session.zoneId,
+        statPoints: session.statPoints,
+        unspentStatPoints: session.unspentStatPoints,
+        unspentSkillPoints: session.unspentSkillPoints,
+        skillProficiencies: session.skillProficiencies,
+        skillAdeptness: session.skillAdeptness,
+        jobId: session.jobId,
+        nation: session.nation,
+        lastSafeZoneId: session.lastSafeZoneId,
+        inventory: session.inventory,
+        equipment: session.equipment,
+        gold: session.gold,
+      }).catch(err => console.error('Failed to save character on logout:', err));
+
+      ctx.cleanupPlayerZoneResources(session);
+
+      ctx.broadcastInZone(session.zoneId, {
+        type: PacketType.ENTITY_DESPAWN,
+        timestamp: Date.now(),
+        data: { entityId: characterId }
+      });
+
+      const partyResult = ctx.partySys.handleDisconnect(characterId);
+      if (partyResult && partyResult.party.members.length > 0) {
+        ctx.sendPartyUpdate(partyResult.party.partyId);
+      }
+
+      ctx.tradeSys.handleDisconnect(characterId);
+
+      ctx.state.players.delete(characterId);
+      ctx.state.playerToSocket.delete(characterId);
+      ctx.unregisterPlayerFromZone(characterId);
+      ctx.clearMovementThrottle(characterId);
+      void ctx.presence.markOffline(characterId);
+    }
+  }
+
+  ctx.state.socketToPlayer.delete(socket.id);
 }
 
 async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: any): Promise<void> {
@@ -211,5 +262,78 @@ async function handleCharacterDelete(ctx: NetworkContext, socket: Socket, data: 
     type: PacketType.CHARACTER_DELETE,
     timestamp: Date.now(),
     data: { characterId: data.characterId }
+  });
+}
+
+async function handleReturnToCharacterSelect(ctx: NetworkContext, socket: Socket, _data: any): Promise<void> {
+  const characterId = ctx.findCharacterBySocket(socket.id);
+  if (!characterId) return;
+
+  const session = ctx.state.players.get(characterId);
+  if (session) {
+    await ctx.auth.saveCharacter(characterId, {
+      level: session.stats.level,
+      experience: session.stats.experience,
+      position: session.position,
+      zoneId: session.zoneId,
+      statPoints: session.statPoints,
+      unspentStatPoints: session.unspentStatPoints,
+      unspentSkillPoints: session.unspentSkillPoints,
+      skillProficiencies: session.skillProficiencies,
+      skillAdeptness: session.skillAdeptness,
+      jobId: session.jobId,
+      nation: session.nation,
+      lastSafeZoneId: session.lastSafeZoneId,
+      inventory: session.inventory,
+      equipment: session.equipment,
+      gold: session.gold,
+    }).catch(err => console.error('Failed to save character on logout:', err));
+
+    ctx.cleanupPlayerZoneResources(session);
+
+    ctx.broadcastInZone(session.zoneId, {
+      type: PacketType.ENTITY_DESPAWN,
+      timestamp: Date.now(),
+      data: { entityId: characterId }
+    });
+
+    const partyResult = ctx.partySys.handleDisconnect(characterId);
+    if (partyResult && partyResult.party.members.length > 0) {
+      ctx.sendPartyUpdate(partyResult.party.partyId);
+    }
+
+    ctx.tradeSys.handleDisconnect(characterId);
+
+    ctx.state.players.delete(characterId);
+    ctx.state.playerToSocket.delete(characterId);
+    ctx.unregisterPlayerFromZone(characterId);
+    ctx.clearMovementThrottle(characterId);
+    void ctx.presence.markOffline(characterId);
+
+    ctx.state.socketToPlayer.set(socket.id, session.playerId);
+  }
+
+  const playerId = ctx.state.socketToPlayer.get(socket.id);
+  if (!playerId) return;
+
+  const characters = await ctx.auth.getCharacters(playerId);
+  const characterInfos = characters.map(c => {
+    const jobDef = JOB_DEFINITIONS[(c.job_id || c.class) as JobId];
+    return {
+      id: c.id,
+      name: c.name,
+      class: c.class || c.job_id,
+      race: c.race || 'human',
+      jobId: c.job_id || c.class,
+      level: c.level,
+      zoneId: c.zone_id || 'starter_zone',
+      modelFile: jobDef?.modelFile || 'Adventurer.glb'
+    };
+  });
+
+  ctx.sendToSocket(socket.id, {
+    type: PacketType.CHARACTER_LIST,
+    timestamp: Date.now(),
+    data: { characters: characterInfos }
   });
 }

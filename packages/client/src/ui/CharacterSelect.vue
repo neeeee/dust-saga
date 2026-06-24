@@ -29,6 +29,9 @@
         <button class="btn-create" @click="showCreateForm = true">
           Create New
         </button>
+        <button class="btn-title" @click="$emit('return-to-title')">
+          Return to Title
+        </button>
       </div>
 
       <div v-if="showCreateForm" class="create-form-overlay" @click.self="showCreateForm = false">
@@ -127,6 +130,7 @@ const emit = defineEmits<{
   'select-character': [characterId: string];
   'create-character': [data: { name: string; characterClass: string; race: string; racialPassive: string }];
   'delete-character': [characterId: string];
+  'return-to-title': [];
 }>();
 
 const races = Object.values(RACE_DATA);
@@ -327,6 +331,21 @@ function handleCreate() {
   border-radius: 6px;
   font-size: 1rem;
   cursor: pointer;
+}
+
+.btn-title {
+  padding: 0.75rem 2rem;
+  background: transparent;
+  color: #888;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.btn-title:hover {
+  color: #ccc;
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .create-form-overlay {

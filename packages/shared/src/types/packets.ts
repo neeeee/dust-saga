@@ -107,6 +107,8 @@ export enum PacketType {
   PLAYER_REST = 173,
   SKILL_CANCEL = 174,
   ENTITY_ANIMATION = 175,
+  RETURN_TO_CHARACTER_SELECT = 176,
+  LOGOUT = 177,
 }
 
 export interface Packet {

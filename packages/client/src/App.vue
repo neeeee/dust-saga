@@ -34,6 +34,7 @@
       @select-character="handleSelectCharacter"
       @create-character="handleCreateCharacter"
       @delete-character="handleDeleteCharacter"
+      @return-to-title="handleReturnToTitle"
     />
 
     <div v-else-if="gameState === 'playing'" class="game-container">
@@ -59,6 +60,7 @@
         @toggle-character="showInventory = !showInventory"
         @toggle-skills="showSkillWindow = !showSkillWindow"
         @toggle-rest="handleToggleRest"
+        @toggle-settings="showSettings = !showSettings"
         @clear-target="gameClient?.setTarget(null)"
         @use-skill="handleUseSkillSlot"
         @party-action="handlePartyAction"
@@ -192,6 +194,23 @@
         @open="showGMPanel = true"
       />
 
+      <SettingsPanel
+        :visible="showSettings"
+        @close="showSettings = false"
+        @logout="handleLogout"
+        @return-to-character-select="handleReturnToCharacterSelect"
+      />
+
+      <div v-if="logoutCountdown > 0" class="logout-overlay">
+        <div class="logout-box">
+          <div class="logout-message">
+            {{ logoutType === 'title' ? 'Returning to title screen' : 'Returning to character select' }}
+            in {{ logoutCountdown }}s
+          </div>
+          <button class="logout-cancel" @click="cancelLogout">Cancel</button>
+        </div>
+      </div>
+
       <TradeWindow
         :visible="showTradeWindow"
         :trade="tradeState"
@@ -242,6 +261,7 @@ import EnhancementWindow from './ui/EnhancementWindow.vue';
 import GMPanel from './ui/GMPanel.vue';
 import TradeWindow from './ui/TradeWindow.vue';
 import TradeInviteDialog from './ui/TradeInviteDialog.vue';
+import SettingsPanel from './ui/SettingsPanel.vue';
 import { useSkillStore } from './composables/useSkillStore';
 
 type GameState = 'auth' | 'character-select' | 'loading' | 'playing';
@@ -305,7 +325,12 @@ const skillStore = useSkillStore();
 const playerStatusEffects = ref<any[]>([]);
 const isResting = ref(false);
 const showGMPanel = ref(false);
+const showSettings = ref(false);
 const dummyStats = ref<Record<string, any>>({});
+
+const logoutCountdown = ref(0);
+const logoutType = ref<'character-select' | 'title'>('title');
+let logoutTimer: ReturnType<typeof setInterval> | null = null;
 
 const partyData = ref<PartyData | null>(null);
 const partyLootPool = ref<PartyLootItem[]>([]);
@@ -324,6 +349,13 @@ const tradeInviteData = ref<{ fromName: string; fromId: string }>({ fromName: ''
 
 let gameClient: GameClient | null = null;
 let currentDialogNPCId = '';
+
+function handleReturnToTitle() {
+  if (!gameClient) return;
+  gameClient.logoutToTitle();
+  characters.value = [];
+  gameState.value = 'auth';
+}
 
 function handleAuth() {
   if (!gameClient) return;
@@ -502,6 +534,64 @@ function handleUseSkillSlot(barIndex: number, slotIndex: number) {
 
 function handleToggleRest() {
   gameClient?.toggleRest();
+}
+
+function handleLogout(): void {
+  startLogoutCountdown('title');
+}
+
+function handleReturnToCharacterSelect(): void {
+  startLogoutCountdown('character-select');
+}
+
+function startLogoutCountdown(type: 'character-select' | 'title'): void {
+  if (logoutTimer) return;
+  logoutType.value = type;
+  logoutCountdown.value = 10;
+  showSettings.value = false;
+  logoutTimer = setInterval(() => {
+    logoutCountdown.value--;
+    if (logoutCountdown.value <= 0) {
+      executeLogout();
+    }
+  }, 1000);
+}
+
+function cancelLogout(): void {
+  if (logoutTimer) {
+    clearInterval(logoutTimer);
+    logoutTimer = null;
+  }
+  logoutCountdown.value = 0;
+}
+
+function executeLogout(): void {
+  if (logoutTimer) {
+    clearInterval(logoutTimer);
+    logoutTimer = null;
+  }
+  const wasTitle = logoutType.value === 'title';
+  logoutCountdown.value = 0;
+
+  showSettings.value = false;
+  showInventory.value = false;
+  showQuests.value = false;
+  showSkillWindow.value = false;
+  showStatPanel.value = false;
+  showEnhancement.value = false;
+  showDialog.value = false;
+  isResting.value = false;
+  isDead.value = false;
+
+  if (gameClient) {
+    if (wasTitle) {
+      gameClient.logoutToTitle();
+      gameState.value = 'auth';
+    } else {
+      gameClient.returnToCharacterSelect();
+      gameState.value = 'loading';
+    }
+  }
 }
 
 function handleSkillBarKey(barIndex: number, slotIndex: number) {
@@ -793,6 +883,9 @@ onMounted(async () => {
 
   network.onPacket(PacketType.CHARACTER_LIST, (packet: any) => {
     characters.value = packet.data.characters || [];
+    if (gameState.value === 'loading' || gameState.value === 'playing') {
+      gameState.value = 'character-select';
+    }
   });
 
   network.onPacket(PacketType.CHARACTER_CREATE, (packet: any) => {
@@ -1151,5 +1244,46 @@ watch(playerStatusEffects, (effects) => {
   height: 100vh;
   background: #0a0a15;
   color: white;
+}
+
+.logout-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}
+
+.logout-box {
+  background: rgba(20, 20, 40, 0.95);
+  padding: 2rem 3rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  text-align: center;
+}
+
+.logout-message {
+  color: white;
+  font-size: 1.1rem;
+  margin-bottom: 1.2rem;
+}
+
+.logout-cancel {
+  padding: 0.6rem 2rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.logout-cancel:hover {
+  background: #5568d3;
 }
 </style>

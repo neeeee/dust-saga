@@ -88,6 +88,7 @@
         <button class="action-btn" @click="$emit('toggle-character')" title="Character (C)">C</button>
         <button class="action-btn" @click="$emit('toggle-skills')" title="Skills (K)">K</button>
         <button class="action-btn" :class="{ active: isResting }" @click="$emit('toggle-rest')" title="Rest (R)">R</button>
+        <button class="action-btn" @click="$emit('toggle-settings')" title="Settings">&#9881;</button>
       </div>
     </div>
   </div>
@@ -208,6 +209,7 @@ defineEmits<{
   'toggle-character': [];
   'toggle-skills': [];
   'toggle-rest': [];
+  'toggle-settings': [];
   'clear-target': [];
   'use-skill': [barIndex: number, slotIndex: number];
   'whisper-player': [playerName: string];

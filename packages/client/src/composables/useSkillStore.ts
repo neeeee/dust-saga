@@ -508,6 +508,13 @@ export function useSkillStore() {
 
   const _now = now;
 
+  function resetLayout(): void {
+    try {
+      localStorage.removeItem(getStorageKey());
+    } catch {}
+    state.layout = defaultLayoutNormalized();
+  }
+
   return {
     state,
     now: _now,
@@ -520,6 +527,7 @@ export function useSkillStore() {
     addBar,
     removeBar,
     moveBar,
+    resetLayout,
     startCooldown,
     getCooldownRemaining,
     getCooldownProgress,

@@ -1,7 +1,21 @@
-import { ref, computed, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 import { useViewport, REF_WIDTH, REF_HEIGHT, clamp01 } from './useViewport';
 
 const STORAGE_VERSION = 2;
+
+const uiResetTrigger = ref(0);
+
+export function resetAllDraggablePositions(): void {
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('panel-')) {
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach(k => localStorage.removeItem(k));
+  uiResetTrigger.value++;
+}
 
 export function useDraggable(
   handleSelector: string,
@@ -111,6 +125,18 @@ export function useDraggable(
     document.removeEventListener('mousemove', onMouseMove);
     document.removeEventListener('mouseup', onMouseUp);
   }
+
+  watch(uiResetTrigger, () => {
+    if (!storageKey) return;
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) {
+      normX.value = clamp01((defaultPos?.x ?? 0) / REF_WIDTH);
+      normY.value = clamp01((defaultPos?.y ?? 0) / REF_HEIGHT);
+      savePosition();
+    } else {
+      loadPosition();
+    }
+  });
 
   onUnmounted(() => {
     document.removeEventListener('mousemove', onMouseMove);
