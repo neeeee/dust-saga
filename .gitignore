@@ -22,6 +22,9 @@ release/
 .env.local
 .env.*.local
 
+# Local admin API helpers (may contain tokens)
+apireq
+
 # IDE
 .vscode/
 .idea/
