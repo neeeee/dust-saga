@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import {
-  Packet, PacketType, getQuest,
+  PacketType,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -10,6 +10,11 @@ export function registerHandlers(registry: Map<PacketType, PacketHandler>): void
   registry.set(PacketType.QUEST_ABANDON, handleQuestAbandon);
 }
 
+function resolveQuestId(data: any): string | null {
+  if (!data || typeof data.questId !== 'string' || !data.questId.trim()) return null;
+  return data.questId;
+}
+
 function handleQuestAccept(ctx: NetworkContext, socket: Socket, data: any): void {
   const characterId = ctx.findCharacterBySocket(socket.id);
   if (!characterId) return;
@@ -17,12 +22,20 @@ function handleQuestAccept(ctx: NetworkContext, socket: Socket, data: any): void
   const session = ctx.state.players.get(characterId);
   if (!session) return;
 
-  if (ctx.questSys.acceptQuest(session, data.questId)) {
+  const questId = resolveQuestId(data);
+  if (!questId) {
+    ctx.sendToPlayer(characterId, { type: PacketType.ERROR, timestamp: Date.now(), data: { message: 'Invalid quest id.' } });
+    return;
+  }
+
+  if (ctx.questSys.acceptQuest(session, questId)) {
     ctx.sendToPlayer(characterId, {
       type: PacketType.QUEST_ACCEPT,
       timestamp: Date.now(),
-      data: { questId: data.questId, quest: session.quests.find(q => q.questId === data.questId) }
+      data: { questId, quest: session.quests.find(q => q.questId === questId), quests: session.quests }
     });
+  } else {
+    ctx.sendToPlayer(characterId, { type: PacketType.ERROR, timestamp: Date.now(), data: { message: 'Cannot accept that quest.' } });
   }
 }
 
@@ -33,29 +46,50 @@ function handleQuestComplete(ctx: NetworkContext, socket: Socket, data: any): vo
   const session = ctx.state.players.get(characterId);
   if (!session) return;
 
-  const rewards = ctx.questSys.completeQuest(session, data.questId);
-  if (rewards) {
-    ctx.playerSys.grantExperience(session, rewards.experience);
-    rewards.items.forEach(item => {
-      ctx.playerSys.addItemToInventory(session, item.itemId, item.quantity);
-    });
-
-    ctx.sendToPlayer(characterId, {
-      type: PacketType.QUEST_COMPLETE,
-      timestamp: Date.now(),
-      data: { questId: data.questId, rewards }
-    });
-    ctx.sendToPlayer(characterId, {
-      type: PacketType.INVENTORY_UPDATE,
-      timestamp: Date.now(),
-      data: { inventory: session.inventory, equipment: session.equipment }
-    });
-    ctx.sendToPlayer(characterId, {
-      type: PacketType.STATS_UPDATE,
-      timestamp: Date.now(),
-      data: { characterId, stats: session.stats }
-    });
+  const questId = resolveQuestId(data);
+  if (!questId) {
+    ctx.sendToPlayer(characterId, { type: PacketType.ERROR, timestamp: Date.now(), data: { message: 'Invalid quest id.' } });
+    return;
   }
+
+  const result = ctx.questSys.completeQuest(session, questId);
+  if (!result) {
+    ctx.sendToPlayer(characterId, { type: PacketType.ERROR, timestamp: Date.now(), data: { message: 'Cannot turn in that quest (not ready or missing required items).' } });
+    return;
+  }
+
+  for (const item of result.consumeItems) {
+    ctx.playerSys.removeItemFromInventory(session, item.itemId, item.quantity);
+  }
+
+  ctx.playerSys.grantExperience(session, result.experience);
+  if (result.gold) {
+    session.gold += result.gold;
+  }
+  result.items.forEach(item => {
+    ctx.playerSys.addItemToInventory(session, item.itemId, item.quantity);
+  });
+
+  ctx.sendToPlayer(characterId, {
+    type: PacketType.QUEST_COMPLETE,
+    timestamp: Date.now(),
+    data: { questId, rewards: { experience: result.experience, gold: result.gold, items: result.items } }
+  });
+  ctx.sendToPlayer(characterId, {
+    type: PacketType.INVENTORY_UPDATE,
+    timestamp: Date.now(),
+    data: { inventory: session.inventory, equipment: session.equipment, gold: session.gold }
+  });
+  ctx.sendToPlayer(characterId, {
+    type: PacketType.QUEST_PROGRESS,
+    timestamp: Date.now(),
+    data: { questId, status: 'turned_in', quests: session.quests }
+  });
+  ctx.sendToPlayer(characterId, {
+    type: PacketType.STATS_UPDATE,
+    timestamp: Date.now(),
+    data: { characterId, stats: session.stats }
+  });
 }
 
 function handleQuestAbandon(ctx: NetworkContext, socket: Socket, data: any): void {
@@ -65,10 +99,17 @@ function handleQuestAbandon(ctx: NetworkContext, socket: Socket, data: any): voi
   const session = ctx.state.players.get(characterId);
   if (!session) return;
 
-  ctx.questSys.abandonQuest(session, data.questId);
-  ctx.sendToPlayer(characterId, {
-    type: PacketType.QUEST_ABANDON,
-    timestamp: Date.now(),
-    data: { questId: data.questId }
-  });
+  const questId = resolveQuestId(data);
+  if (!questId) {
+    ctx.sendToPlayer(characterId, { type: PacketType.ERROR, timestamp: Date.now(), data: { message: 'Invalid quest id.' } });
+    return;
+  }
+
+  if (ctx.questSys.abandonQuest(session, questId)) {
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.QUEST_ABANDON,
+      timestamp: Date.now(),
+      data: { questId, quests: session.quests }
+    });
+  }
 }

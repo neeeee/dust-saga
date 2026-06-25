@@ -147,6 +147,21 @@ export class DatabaseManager {
         UNIQUE(character_id, slot)
       );
 
+      CREATE TABLE IF NOT EXISTS quests (
+        id VARCHAR(80) PRIMARY KEY,
+        title VARCHAR(120) NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        type VARCHAR(20) NOT NULL,
+        required_level INTEGER NOT NULL DEFAULT 1,
+        required_quest VARCHAR(80),
+        npc_id VARCHAR(80) NOT NULL,
+        objectives JSONB NOT NULL DEFAULT '[]',
+        rewards JSONB NOT NULL DEFAULT '{"experience":0,"gold":0,"items":[]}',
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_quests_npc ON quests(npc_id);
+
       CREATE INDEX IF NOT EXISTS idx_characters_zone ON characters(zone_id);
       CREATE INDEX IF NOT EXISTS idx_characters_player ON characters(player_id);
     `;
@@ -179,6 +194,7 @@ export class DatabaseManager {
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS equipment JSONB DEFAULT '{"weapon":null,"armor":null,"helmet":null,"boots":null,"gloves":null,"legs":null,"shield":null,"earring_1":null,"earring_2":null,"necklace":null,"belt":null,"ring_1":null,"ring_2":null}'`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS gold INTEGER DEFAULT 100`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS racial_passive VARCHAR(50)`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS character_quests JSONB DEFAULT '[]'`,
     ];
 
     for (const sql of migrations) {

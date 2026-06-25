@@ -26,11 +26,32 @@ function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void
 
   session.currentNpcId = data.npcId;
 
+  const talkProgress = ctx.questSys.onTalk(session, data.npcId);
+  if (talkProgress.progressed.length > 0) {
+    const msgs = talkProgress.completed.map(qid => {
+      const def = ctx.questSys.getQuestDefinition(qid);
+      return `Quest "${def?.title || qid}" completed! Return to the NPC.`;
+    });
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.QUEST_PROGRESS,
+      timestamp: Date.now(),
+      data: { quests: session.quests, message: msgs.join('\n') }
+    });
+  }
+
   let dialog = npc.dialogs.find(d => d.id === (data.dialogId || 'greeting'));
   if (!dialog) dialog = npc.dialogs[0];
 
-  const questsForNpc = npc.quests || [];
-  const availableQuests = ctx.questSys.getAvailableQuests(session).filter(q => questsForNpc.includes(q));
+  const staticQuestIds = npc.quests || [];
+  const availableQuests = ctx.questSys.getAvailableQuests(session)
+    .filter(qid => {
+      const def = ctx.questSys.getQuestDefinition(qid);
+      return def?.npcId === data.npcId || staticQuestIds.includes(qid);
+    })
+    .map(qid => {
+      const def = ctx.questSys.getQuestDefinition(qid);
+      return { id: qid, title: def?.title || qid, description: def?.description || '' };
+    });
 
   ctx.sendToPlayer(characterId, {
     type: PacketType.NPC_DIALOG,

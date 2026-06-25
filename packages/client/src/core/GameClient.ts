@@ -783,20 +783,27 @@ export class GameClient {
       this.lootBeacons.delete(packet.data.lootId);
     });
 
-    this.network.onPacket(PacketType.QUEST_ACCEPT, (_packet: any) => {
+    this.network.onPacket(PacketType.QUEST_ACCEPT, (packet: any) => {
+      if (Array.isArray(packet.data.quests)) this.callbacks.onQuestUpdate?.(packet.data.quests);
       this.callbacks.onNotification?.(`Quest accepted!`, 'success');
     });
 
     this.network.onPacket(PacketType.QUEST_PROGRESS, (packet: any) => {
-      this.callbacks.onNotification?.(packet.data.message, 'info');
+      if (Array.isArray(packet.data.quests)) this.callbacks.onQuestUpdate?.(packet.data.quests);
+      if (packet.data.message) this.callbacks.onNotification?.(packet.data.message, 'info');
     });
 
     this.network.onPacket(PacketType.QUEST_COMPLETE, (packet: any) => {
+      if (Array.isArray(packet.data.quests)) this.callbacks.onQuestUpdate?.(packet.data.quests);
       const rewards = packet.data.rewards;
       this.callbacks.onNotification?.(
         `Quest completed! +${rewards.experience} XP, +${rewards.gold} gold`,
         'success'
       );
+    });
+
+    this.network.onPacket(PacketType.QUEST_ABANDON, (packet: any) => {
+      if (Array.isArray(packet.data.quests)) this.callbacks.onQuestUpdate?.(packet.data.quests);
     });
 
     this.network.onPacket(PacketType.ENHANCEMENT_RESULT, (packet: any) => {

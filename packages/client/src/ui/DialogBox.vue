@@ -34,11 +34,12 @@
         <h4>Available Quests</h4>
         <button
           v-for="q in availableQuests"
-          :key="q"
+          :key="q.id || q"
           class="quest-offer-btn"
-          @click.stop="$emit('accept-quest', q)"
+          @click.stop="$emit('accept-quest', q.id || q)"
         >
-          {{ getQuestTitle(q) }}
+          <span class="quest-offer-title">{{ q.title || getQuestTitle(q.id || q) }}</span>
+          <span v-if="q.description" class="quest-offer-desc">{{ q.description }}</span>
         </button>
       </div>
     </div>
@@ -54,7 +55,7 @@ const props = defineProps<{
   npcName: string;
   dialog: any;
   shopItems: any[];
-  availableQuests: string[];
+  availableQuests: Array<string | { id: string; title?: string; description?: string }>;
   npcScreenPos: { x: number; y: number } | null;
 }>();
 
@@ -260,5 +261,13 @@ onUnmounted(() => {
 
 .quest-offer-btn:hover {
   background: rgba(76, 175, 80, 0.25);
+}
+
+.quest-offer-desc {
+  display: block;
+  font-size: 0.68rem;
+  color: #aaa;
+  margin-top: 2px;
+  font-weight: normal;
 }
 </style>

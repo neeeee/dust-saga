@@ -35,6 +35,7 @@ export interface MockCharacter {
   equipment?: string;
   gold?: number;
   racial_passive?: string | null;
+  character_quests?: string;
 }
 
 export class AuthManager {
@@ -165,7 +166,7 @@ export class AuthManager {
 
     try {
       const result = await this.db.postgres!.query(
-        'SELECT id, name, class, race, racial_passive, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies, skill_adeptness, experience, nation, last_safe_zone_id, inventory, equipment, gold FROM characters WHERE player_id = $1',
+        'SELECT id, name, class, race, racial_passive, job_id, level, position_x, position_y, position_z, zone_id, stat_points, unspent_stat_points, unspent_skill_points, skill_proficiencies, skill_adeptness, experience, nation, last_safe_zone_id, inventory, equipment, gold, character_quests FROM characters WHERE player_id = $1',
         [playerId]
       );
       return result.rows;
@@ -278,6 +279,7 @@ export class AuthManager {
     inventory?: any;
     equipment?: any;
     gold?: number;
+    quests?: any;
   }): Promise<void> {
     if (!this.db.isPostgresConnected()) {
       for (const [, chars] of this.mockCharacters) {
@@ -300,6 +302,7 @@ export class AuthManager {
           if (data.inventory !== undefined) ch.inventory = JSON.stringify(data.inventory);
           if (data.equipment !== undefined) ch.equipment = JSON.stringify(data.equipment);
           if (data.gold !== undefined) ch.gold = data.gold;
+          if (data.quests !== undefined) ch.character_quests = JSON.stringify(data.quests);
           break;
         }
       }
@@ -312,7 +315,8 @@ export class AuthManager {
           level = $1, experience = $2, position_x = $3, position_y = $4, position_z = $5,
           zone_id = $6, stat_points = $7, unspent_stat_points = $8,
           unspent_skill_points = $9, skill_proficiencies = $10, skill_adeptness = $11, job_id = $12,
-          nation = $14, last_safe_zone_id = $15, inventory = $16, equipment = $17, gold = $18
+          nation = $14, last_safe_zone_id = $15, inventory = $16, equipment = $17, gold = $18,
+          character_quests = $19
          WHERE id = $13`,
         [
           data.level, data.experience.toString(),
@@ -326,6 +330,7 @@ export class AuthManager {
           JSON.stringify(data.inventory || []),
           JSON.stringify(data.equipment || { ...DEFAULT_EQUIPMENT }),
           data.gold ?? 100,
+          JSON.stringify(data.quests || []),
         ]
       );
     } catch (error) {

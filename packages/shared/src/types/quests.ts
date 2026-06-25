@@ -52,4 +52,6 @@ export interface ActiveQuest {
   status: QuestStatus;
   objectives: QuestObjective[];
   startedAt: number;
+  title?: string;
+  description?: string;
 }

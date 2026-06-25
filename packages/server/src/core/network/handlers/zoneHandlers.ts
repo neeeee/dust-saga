@@ -82,6 +82,19 @@ async function handleEnterZone(ctx: NetworkContext, socket: Socket, data: any): 
 
   ctx.sendZoneState(socket, data.zoneId, characterId);
 
+  const exploreProgress = ctx.questSys.onExplore(session, data.zoneId);
+  if (exploreProgress.progressed.length > 0) {
+    const msgs = exploreProgress.completed.map(qid => {
+      const def = ctx.questSys.getQuestDefinition(qid);
+      return `Quest "${def?.title || qid}" completed! Return to the NPC.`;
+    });
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.QUEST_PROGRESS,
+      timestamp: Date.now(),
+      data: { quests: session.quests, message: msgs.join('\n') }
+    });
+  }
+
   ctx.sendToPlayer(characterId, {
     type: PacketType.ENTER_ZONE,
     timestamp: Date.now(),

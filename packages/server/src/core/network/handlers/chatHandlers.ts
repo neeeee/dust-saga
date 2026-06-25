@@ -131,6 +131,12 @@ function handleChatCommand(ctx: NetworkContext, socket: Socket, session: PlayerS
     ctx.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: dummies.length > 0 ? dummies.join('\n') : 'No dummies spawned.', channel: 'system' } });
   } else if (cmd === '/return') {
     handleReturn(ctx, socket, session);
+  } else if (cmd === '/questlist') {
+    handleQuestList(ctx, session);
+  } else if (cmd === '/questreload') {
+    handleQuestReload(ctx, session);
+  } else if (cmd === '/questdelete') {
+    handleQuestDelete(ctx, session, parts);
   }
 }
 
@@ -503,4 +509,37 @@ function handleReturn(ctx: NetworkContext, socket: Socket, session: PlayerSessio
     timestamp: Date.now(),
     data: { sender: 'System', message: 'Returned to spawn.', channel: 'system' }
   });
+}
+
+function sysMsg(ctx: NetworkContext, session: PlayerSession, message: string): void {
+  ctx.sendToPlayer(session.characterId, {
+    type: PacketType.CHAT_MESSAGE,
+    timestamp: Date.now(),
+    data: { sender: 'System', message, channel: 'system' }
+  });
+}
+
+function handleQuestList(ctx: NetworkContext, session: PlayerSession): void {
+  const quests = ctx.questSys.getAllQuestDefinitions();
+  if (quests.length === 0) {
+    sysMsg(ctx, session, 'No quests defined.');
+    return;
+  }
+  const lines = quests.map(q => `[${q.id}] "${q.title}" (npc:${q.npcId}, lvl ${q.requiredLevel}, ${q.objectives.length} obj)`);
+  sysMsg(ctx, session, `${quests.length} quest(s):\n${lines.join('\n')}`);
+}
+
+async function handleQuestReload(ctx: NetworkContext, session: PlayerSession): Promise<void> {
+  await ctx.questSys.reload();
+  sysMsg(ctx, session, `Quests reloaded from DB. ${ctx.questSys.getAllQuestDefinitions().length} quest(s) active.`);
+}
+
+async function handleQuestDelete(ctx: NetworkContext, session: PlayerSession, parts: string[]): Promise<void> {
+  const questId = parts[1];
+  if (!questId) {
+    sysMsg(ctx, session, 'Usage: /questdelete <questId>');
+    return;
+  }
+  const result = await ctx.questSys.deleteQuest(questId);
+  sysMsg(ctx, session, result.success ? `Deleted quest "${questId}".` : `Failed: ${result.error}`);
 }

@@ -24,6 +24,20 @@ app.get('/api/classes', (req, res) => {
   res.json(CLASS_DEFINITIONS);
 });
 
+function adminGuard(req: express.Request, res: express.Response): boolean {
+  const expected = process.env.ADMIN_TOKEN;
+  if (!expected) return true;
+  const provided = req.headers['authorization'];
+  const token = typeof provided === 'string' && provided.startsWith('Bearer ')
+    ? provided.slice(7)
+    : (req.headers['x-admin-token'] as string);
+  if (token !== expected) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return false;
+  }
+  return true;
+}
+
 async function startServer() {
   try {
     console.log('Starting Dust Saga Server...');
@@ -40,6 +54,44 @@ async function startServer() {
     const networkServer = new NetworkServer(httpServer, {
       redis: db.redis,
       isRedisConnected: () => db.isRedisConnected(),
+    });
+
+    await networkServer.questSys.initialize(db);
+
+    // ── Quest admin API (creation tool) ────────────────────────────────────
+    // Create / list / delete quest definitions stored in the DB. Secured by an
+    // optional ADMIN_TOKEN env var (open in dev when unset). Quest definitions
+    // created here are persisted to the `quests` table and the in-memory cache
+    // is updated live, so they become available immediately without a restart.
+    app.get('/api/admin/quests', (req, res) => {
+      if (!adminGuard(req, res)) return;
+      res.json(networkServer.questSys.getAllQuestDefinitions());
+    });
+
+    app.post('/api/admin/quests', async (req, res) => {
+      if (!adminGuard(req, res)) return;
+      const result = await networkServer.questSys.createQuest(req.body);
+      if (!result.success) {
+        res.status(400).json({ error: result.error });
+        return;
+      }
+      res.status(201).json({ success: true, id: req.body.id });
+    });
+
+    app.delete('/api/admin/quests/:id', async (req, res) => {
+      if (!adminGuard(req, res)) return;
+      const result = await networkServer.questSys.deleteQuest(req.params.id);
+      if (!result.success) {
+        res.status(404).json({ error: result.error });
+        return;
+      }
+      res.json({ success: true });
+    });
+
+    app.post('/api/admin/quests/reload', async (req, res) => {
+      if (!adminGuard(req, res)) return;
+      await networkServer.questSys.reload();
+      res.json({ success: true, count: networkServer.questSys.getAllQuestDefinitions().length });
     });
 
     // B2: attach the Socket.IO Redis adapter when Redis is available so zone-room

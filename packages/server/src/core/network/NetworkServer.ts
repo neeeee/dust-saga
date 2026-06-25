@@ -24,7 +24,7 @@ import {
   NATION_ZONE_MAP,
   ZoneType,
   normalizeEquipment,
-  getEnemyDefinition, getZoneDefinition, NPC_DATABASE, getNPCsInZone, getItem, getQuest, QUEST_DATABASE, ITEM_DATABASE,
+  getEnemyDefinition, getZoneDefinition, NPC_DATABASE, getNPCsInZone, getItem, ITEM_DATABASE,
   SpatialEntry,
   SUMMON_STATS, BANISH_RADIUS,
   getGloomRecoilRate,
@@ -562,6 +562,49 @@ export class NetworkServer implements NetworkContext {
     this.refreshPartyForMember(session.characterId);
   }
 
+  grantQuestKillCredit(killer: PlayerSession, enemyType: string, zoneId: string): void {
+    const creditRecipients: PlayerSession[] = [killer];
+    const party = this.partySys.getPartyForMember(killer.characterId);
+    if (party) {
+      for (const member of party.members) {
+        if (member.characterId === killer.characterId) continue;
+        const memberSession = this.findPlayerByCharacterId(member.characterId);
+        if (!memberSession) continue;
+        if (memberSession.zoneId !== zoneId) continue;
+        const dx = memberSession.position.x - killer.position.x;
+        const dz = memberSession.position.z - killer.position.z;
+        if (Math.sqrt(dx * dx + dz * dz) <= 50) {
+          creditRecipients.push(memberSession);
+        }
+      }
+    }
+
+    for (const recipient of creditRecipients) {
+      const progress = this.questSys.onEnemyKill(recipient, enemyType);
+      if (progress.progressed.length === 0 && progress.completed.length === 0) continue;
+
+      this.sendToPlayer(recipient.characterId, {
+        type: PacketType.QUEST_PROGRESS,
+        timestamp: Date.now(),
+        data: { quests: recipient.quests }
+      });
+
+      progress.completed.forEach(questId => {
+        const def = this.questSys.getQuestDefinition(questId);
+        this.sendToPlayer(recipient.characterId, {
+          type: PacketType.QUEST_PROGRESS,
+          timestamp: Date.now(),
+          data: {
+            questId,
+            status: 'completed',
+            quests: recipient.quests,
+            message: `Quest "${def?.title || questId}" completed! Return to the NPC.`
+          }
+        });
+      });
+    }
+  }
+
   handleEnemyKill(enemyId: string, killerId: string): void {
     const enemy = this.spawnMgr.getEnemy(enemyId);
     if (!enemy) return;
@@ -582,14 +625,7 @@ export class NetworkServer implements NetworkContext {
         data: { characterId: killer.characterId, stats: killer.stats }
       });
 
-      const completedQuests = this.questSys.onEnemyKill(killer, enemy.enemyType);
-      completedQuests.forEach(questId => {
-        this.sendToPlayer(killer.characterId, {
-          type: PacketType.QUEST_PROGRESS,
-          timestamp: Date.now(),
-          data: { questId, status: 'completed', message: `Quest "${getQuest(questId)?.title}" completed! Return to the NPC.` }
-        });
-      });
+      this.grantQuestKillCredit(killer, enemy.enemyType, killer.zoneId);
 
       const lootItems = this.loot.generateLoot(enemyDef.lootTable, enemy.position, killerId);
       const party = this.partySys.getPartyForMember(killerId);
@@ -1343,14 +1379,7 @@ export class NetworkServer implements NetworkContext {
           data: { characterId: killer.characterId, stats: killer.stats }
         });
 
-        const completedQuests = this.questSys.onEnemyKill(killer, enemy.enemyType);
-        completedQuests.forEach(questId => {
-          this.sendToPlayer(killer.characterId, {
-            type: PacketType.QUEST_PROGRESS,
-            timestamp: Date.now(),
-            data: { questId, status: 'completed', message: `Quest "${getQuest(questId)?.title}" completed! Return to the NPC.` }
-          });
-        });
+        this.grantQuestKillCredit(killer, enemy.enemyType, killer.zoneId);
 
         const lootItems = this.loot.generateLoot(enemyDef.lootTable, enemy.position, killerId);
         const party = this.partySys.getPartyForMember(killerId);
@@ -3836,6 +3865,7 @@ export class NetworkServer implements NetworkContext {
             inventory: session.inventory,
             equipment: session.equipment,
             gold: session.gold,
+            quests: session.quests,
         }).catch(err => console.error(`Failed to save ${session.characterId}:`, err))
       ));
     }

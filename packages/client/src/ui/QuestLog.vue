@@ -16,7 +16,7 @@
         :class="quest.status"
       >
         <div class="quest-header">
-          <h4>{{ getQuestTitle(quest.questId) }}</h4>
+          <h4>{{ quest.title || getQuestTitle(quest.questId) }}</h4>
           <span class="quest-status" :class="quest.status">{{ statusLabel(quest.status) }}</span>
         </div>
         <div class="quest-objectives">
@@ -55,6 +55,8 @@ defineProps<{
   quests: Array<{
     questId: string;
     status: string;
+    title?: string;
+    description?: string;
     objectives: Array<{
       id: string;
       type: string;

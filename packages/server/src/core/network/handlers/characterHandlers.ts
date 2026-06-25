@@ -194,6 +194,10 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
       const parsed = typeof char.equipment === 'string' ? JSON.parse(char.equipment) : char.equipment;
       if (parsed && typeof parsed === 'object') session.equipment = normalizeEquipment(parsed);
     }
+    if (char.character_quests) {
+      const parsed = typeof char.character_quests === 'string' ? JSON.parse(char.character_quests) : char.character_quests;
+      if (Array.isArray(parsed)) session.quests = parsed;
+    }
 
     ctx.playerSys.recalcStats(session);
 
