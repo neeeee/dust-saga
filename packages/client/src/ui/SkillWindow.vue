@@ -19,105 +19,194 @@
 
     <div class="skill-list" ref="listRef">
       <template v-if="searchQuery.trim()">
-        <div v-for="r in searchResults" :key="r.subCat.name + '-' + r.skill.name" class="search-result">
-          <div class="search-subcat-label" @click="toggleAccordion(r.subCat.name)">
-            <span class="arrow">{{ openAccordions.has(r.subCat.name) ? '&#9660;' : '&#9654;' }}</span>
-            <span>{{ r.subCat.name }}</span>
-            <span class="subcat-pts">{{ r.subCat.currentPoints + r.subCat.minAdeptness }}/{{ r.subCat.maxPoints }}</span>
+        <div
+          v-for="r in searchResults"
+          :key="r.catName + '-' + r.subName + '-' + r.skill.name"
+          class="skill-entry search-entry"
+          :class="{ locked: !r.skill.unlocked, passive: r.skill.isPassive }"
+          :draggable="r.skill.unlocked && !r.skill.isPassive"
+          @dragstart="onDragStart(r.skill, $event)"
+          @click="onSkillClick(r.skill)"
+        >
+          <div class="skill-icon" :style="{ backgroundColor: r.skill.unlocked ? getCategoryColor(r.skill.category) : 'rgba(255,255,255,0.05)' }">
+            {{ getAbbrev(r.skill.name) }}
           </div>
-          <div v-if="openAccordions.has(r.subCat.name)" class="accordion-body">
-            <div
-              v-for="skill in getSortedSkills(r.subCat)"
-              :key="skill.name"
-              class="skill-entry"
-              :class="{ locked: !skill.unlocked, passive: skill.isPassive, highlight: skill.name === r.skill.name }"
-              :draggable="skill.unlocked && !skill.isPassive"
-              @dragstart="onDragStart(skill, $event)"
-              @click="onSkillClick(skill)"
-            >
-              <div class="skill-icon" :style="{ backgroundColor: skill.unlocked ? getCategoryColor(r.subCat.category) : 'rgba(255,255,255,0.05)' }">
-                {{ getAbbrev(skill.name) }}
-              </div>
-              <div v-if="!iconOnly" class="skill-info">
-                <div class="skill-name">
-                  {{ skill.name }}
-                  <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">{{ r.subCat.currentPoints + r.subCat.minAdeptness }}/{{ skill.reqPoints }}</span>
-                  <span class="req-tag cross" v-else-if="!skill.unlocked && skill.crossReqs">{{ formatCrossReqs(skill.crossReqs) }}</span>
-                  <span class="req-tag level" v-else-if="!skill.unlocked && skill.reqLevel">Lv {{ skill.reqLevel }}</span>
-                  <span class="passive-tag" v-if="skill.isPassive">Passive</span>
-                </div>
-                <div class="skill-desc">{{ skill.description }}</div>
-              </div>
-              <div v-if="!iconOnly" class="skill-stats">
-                <span v-if="skill.mpCost" class="stat mp">{{ skill.mpCost }}</span>
-                <span v-if="skill.castTime > 0" class="stat cast">{{ skill.castTime }}s</span>
-                <span v-if="skill.cooldown > 0" class="stat cd">{{ skill.cooldown }}s</span>
-              </div>
+          <div v-if="!iconOnly" class="skill-info">
+            <div class="skill-name">
+              {{ r.skill.name }}
+              <span class="crumb">{{ r.subName ? r.catName + ' \u203a ' + r.subName : r.catName }}</span>
+              <span class="req-tag" v-if="!r.skill.unlocked && r.skill.reqPoints >= 0 && r.skill.isCategorySkill">{{ r.skill.reqPoints }} adept</span>
+              <span class="req-tag" v-else-if="!r.skill.unlocked && r.skill.reqPoints >= 0">{{ r.skill.reqPoints }}</span>
+              <span class="req-tag cross" v-else-if="!r.skill.unlocked && r.skill.crossReqs">{{ formatCrossReqs(r.skill.crossReqs) }}</span>
+              <span class="req-tag level" v-else-if="!r.skill.unlocked && r.skill.reqLevel">Lv {{ r.skill.reqLevel }}</span>
+              <span class="passive-tag" v-if="r.skill.isPassive">Passive</span>
             </div>
+            <div class="skill-desc">{{ r.skill.description }}</div>
+          </div>
+          <div v-if="!iconOnly" class="skill-stats">
+            <span v-if="r.skill.mpCost" class="stat mp">{{ r.skill.mpCost }}</span>
+            <span v-if="r.skill.castTime > 0" class="stat cast">{{ r.skill.castTime }}s</span>
+            <span v-if="r.skill.cooldown > 0" class="stat cd">{{ r.skill.cooldown }}s</span>
           </div>
         </div>
         <div v-if="searchResults.length === 0" class="empty-msg">No results for "{{ searchQuery }}"</div>
       </template>
 
       <template v-else>
-        <div v-for="subCat in allSubCategories" :key="subCat.name" class="accordion">
-          <div class="accordion-header" @click="toggleAccordion(subCat.name)">
-            <span class="arrow">{{ openAccordions.has(subCat.name) ? '&#9660;' : '&#9654;' }}</span>
-            <span class="subcat-name">{{ subCat.name }}</span>
-            <span class="subcat-pts">{{ subCat.currentPoints + subCat.minAdeptness }}<template v-if="subCat.maxPoints > 0">/{{ subCat.maxPoints }}</template></span>
-            <div class="alloc-controls" v-if="subCat.maxPoints > 0">
-              <button class="alloc-btn minus" :disabled="pendingAlloc[subCat.name] <= 0" @click.stop="removePending(subCat.name)">-</button>
-              <span class="alloc-change" v-if="pendingAlloc[subCat.name] > 0">+{{ pendingAlloc[subCat.name] }}</span>
-              <button class="alloc-btn plus" :disabled="effectiveUnspent <= 0 || subCat.currentPoints + (pendingAlloc[subCat.name] || 0) >= subCat.maxPoints - subCat.minAdeptness" @click.stop="addPending(subCat.name)">+</button>
+        <div v-for="cat in categories" :key="cat.key" class="category">
+          <div class="category-header" @click="toggleCategory(cat.key)">
+            <span class="arrow">{{ openCategories.has(cat.key) ? '&#9660;' : '&#9654;' }}</span>
+            <span class="category-name" :style="{ color: getCategoryColor(cat.key) }">{{ cat.name }}</span>
+            <span class="category-pts">
+              {{ cat.adeptness }}<template v-if="cat.maxPotential > 0">/{{ cat.maxPotential }}</template>
+            </span>
+          </div>
+          <div v-if="openCategories.has(cat.key)" class="category-body">
+            <template v-if="cat.categorySkills.length">
+              <template v-if="iconOnly">
+                <div class="icon-grid cat-icon-grid">
+                  <div
+                    v-for="skill in getSortedSkills(cat.categorySkills)"
+                    :key="skill.name"
+                    class="icon-cell"
+                    :class="{ locked: !skill.unlocked, passive: skill.isPassive }"
+                    :draggable="skill.unlocked && !skill.isPassive"
+                    @dragstart="onDragStart(skill, $event)"
+                    @click="onSkillClick(skill)"
+                    :title="skill.name + (skill.isPassive ? ' (Passive)' : '')"
+                  >
+                    <div class="skill-icon" :style="{ backgroundColor: skill.unlocked ? getCategoryColor(cat.key) : 'rgba(255,255,255,0.05)' }">
+                      {{ getAbbrev(skill.name) }}
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <template v-else>
+                <div
+                  v-for="skill in getSortedSkills(cat.categorySkills)"
+                  :key="skill.name"
+                  class="skill-entry cat-skill"
+                  :class="{ locked: !skill.unlocked, passive: skill.isPassive }"
+                  :draggable="skill.unlocked && !skill.isPassive"
+                  @dragstart="onDragStart(skill, $event)"
+                  @click="onSkillClick(skill)"
+                >
+                  <div class="skill-icon" :style="{ backgroundColor: skill.unlocked ? getCategoryColor(cat.key) : 'rgba(255,255,255,0.05)' }">
+                    {{ getAbbrev(skill.name) }}
+                  </div>
+                  <div class="skill-info">
+                    <div class="skill-name">
+                      {{ skill.name }}
+                      <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">{{ skill.reqPoints }} adept</span>
+                      <span class="passive-tag" v-if="skill.isPassive">Passive</span>
+                    </div>
+                    <div class="skill-desc">{{ skill.description }}</div>
+                  </div>
+                  <div class="skill-stats">
+                    <span v-if="skill.mpCost" class="stat mp">{{ skill.mpCost }}</span>
+                    <span v-if="skill.castTime > 0" class="stat cast">{{ skill.castTime }}s</span>
+                    <span v-if="skill.cooldown > 0" class="stat cd">{{ skill.cooldown }}s</span>
+                  </div>
+                </div>
+              </template>
+            </template>
+
+            <div v-for="sub in cat.subCategories" :key="sub.name" class="accordion">
+              <div class="accordion-header" @click="toggleAccordion(sub.name)">
+                <span class="arrow">{{ openAccordions.has(sub.name) ? '&#9660;' : '&#9654;' }}</span>
+                <span class="subcat-name">{{ sub.name }}</span>
+                <span class="subcat-pts">{{ sub.currentPoints + sub.minAdeptness }}<template v-if="sub.maxPoints > 0">/{{ sub.maxPoints }}</template></span>
+                <div class="alloc-controls" v-if="sub.maxPoints > 0">
+                  <button class="alloc-btn minus" :disabled="pendingAlloc[sub.name] <= 0" @click.stop="removePending(sub.name)">-</button>
+                  <span class="alloc-change" v-if="pendingAlloc[sub.name] > 0">+{{ pendingAlloc[sub.name] }}</span>
+                  <button class="alloc-btn plus" :disabled="effectiveUnspent <= 0 || sub.currentPoints + (pendingAlloc[sub.name] || 0) >= sub.maxPoints - sub.minAdeptness" @click.stop="addPending(sub.name)">+</button>
+                </div>
+              </div>
+              <div v-if="openAccordions.has(sub.name)" :class="iconOnly ? 'icon-grid' : 'accordion-body'">
+                <template v-if="iconOnly">
+                  <div
+                    v-for="skill in getSortedSkills(sub.skills)"
+                    :key="skill.name"
+                    class="icon-cell"
+                    :class="{ locked: !skill.unlocked, passive: skill.isPassive }"
+                    :draggable="skill.unlocked && !skill.isPassive"
+                    @dragstart="onDragStart(skill, $event)"
+                    @click="onSkillClick(skill)"
+                    :title="skill.name + (skill.isPassive ? ' (Passive)' : '')"
+                  >
+                    <div class="skill-icon" :style="{ backgroundColor: skill.unlocked ? getCategoryColor(sub.category) : 'rgba(255,255,255,0.05)' }">
+                      {{ getAbbrev(skill.name) }}
+                    </div>
+                  </div>
+                </template>
+                <template v-else>
+                  <div
+                    v-for="skill in getSortedSkills(sub.skills)"
+                    :key="skill.name"
+                    class="skill-entry"
+                    :class="{ locked: !skill.unlocked, passive: skill.isPassive }"
+                    :draggable="skill.unlocked && !skill.isPassive"
+                    @dragstart="onDragStart(skill, $event)"
+                    @click="onSkillClick(skill)"
+                  >
+                    <div class="skill-icon" :style="{ backgroundColor: skill.unlocked ? getCategoryColor(sub.category) : 'rgba(255,255,255,0.05)' }">
+                      {{ getAbbrev(skill.name) }}
+                    </div>
+                    <div class="skill-info">
+                      <div class="skill-name">
+                        {{ skill.name }}
+                         <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">{{ sub.currentPoints + sub.minAdeptness + (pendingAlloc[sub.name] || 0) }}/{{ skill.reqPoints }}</span>
+                         <span class="req-tag cross" v-else-if="!skill.unlocked && skill.crossReqs">{{ formatCrossReqs(skill.crossReqs) }}</span>
+                         <span class="req-tag level" v-else-if="!skill.unlocked && skill.reqLevel">Lv {{ skill.reqLevel }}</span>
+                        <span class="passive-tag" v-if="skill.isPassive">Passive</span>
+                      </div>
+                      <div class="skill-desc">{{ skill.description }}</div>
+                    </div>
+                    <div class="skill-stats">
+                      <span v-if="skill.mpCost" class="stat mp">{{ skill.mpCost }}</span>
+                      <span v-if="skill.castTime > 0" class="stat cast">{{ skill.castTime }}s</span>
+                      <span v-if="skill.cooldown > 0" class="stat cd">{{ skill.cooldown }}s</span>
+                    </div>
+                  </div>
+                </template>
+              </div>
             </div>
           </div>
-          <div v-if="openAccordions.has(subCat.name)" :class="iconOnly ? 'icon-grid' : 'accordion-body'">
-            <template v-if="iconOnly">
-              <div
-                v-for="skill in getSortedSkills(subCat)"
-                :key="skill.name"
-                class="icon-cell"
-                :class="{ locked: !skill.unlocked, passive: skill.isPassive }"
-                :draggable="skill.unlocked && !skill.isPassive"
-                @dragstart="onDragStart(skill, $event)"
-                @click="onSkillClick(skill)"
-                :title="skill.name + (skill.isPassive ? ' (Passive)' : '')"
-              >
-                <div class="skill-icon" :style="{ backgroundColor: skill.unlocked ? getCategoryColor(subCat.category) : 'rgba(255,255,255,0.05)' }">
-                  {{ getAbbrev(skill.name) }}
-                </div>
+        </div>
+
+        <div v-if="classSkills.length" class="category">
+          <div class="category-header" @click="toggleCategory('class')">
+            <span class="arrow">{{ openCategories.has('class') ? '&#9660;' : '&#9654;' }}</span>
+            <span class="category-name class-name">Class</span>
+            <span class="category-pts">{{ classSkills.length }}</span>
+          </div>
+          <div v-if="openCategories.has('class')" class="category-body">
+            <div
+              v-for="skill in getSortedSkills(classSkills)"
+              :key="skill.name"
+              class="skill-entry cat-skill"
+              :class="{ locked: !skill.unlocked, passive: skill.isPassive }"
+              :draggable="skill.unlocked && !skill.isPassive"
+              @dragstart="onDragStart(skill, $event)"
+              @click="onSkillClick(skill)"
+            >
+              <div class="skill-icon" :style="{ backgroundColor: skill.unlocked ? getCategoryColor('special') : 'rgba(255,255,255,0.05)' }">
+                {{ getAbbrev(skill.name) }}
               </div>
-            </template>
-            <template v-else>
-              <div
-                v-for="skill in getSortedSkills(subCat)"
-                :key="skill.name"
-                class="skill-entry"
-                :class="{ locked: !skill.unlocked, passive: skill.isPassive }"
-                :draggable="skill.unlocked && !skill.isPassive"
-                @dragstart="onDragStart(skill, $event)"
-                @click="onSkillClick(skill)"
-              >
-                <div class="skill-icon" :style="{ backgroundColor: skill.unlocked ? getCategoryColor(subCat.category) : 'rgba(255,255,255,0.05)' }">
-                  {{ getAbbrev(skill.name) }}
+              <div class="skill-info">
+                <div class="skill-name">
+                  {{ skill.name }}
+                  <span class="req-tag level" v-if="!skill.unlocked && skill.reqLevel">Lv {{ skill.reqLevel }}</span>
+                  <span class="passive-tag" v-if="skill.isPassive">Passive</span>
                 </div>
-                <div class="skill-info">
-                  <div class="skill-name">
-                    {{ skill.name }}
-                     <span class="req-tag" v-if="!skill.unlocked && skill.reqPoints >= 0">{{ subCat.currentPoints + subCat.minAdeptness + (pendingAlloc[subCat.name] || 0) }}/{{ skill.reqPoints }}</span>
-                     <span class="req-tag cross" v-else-if="!skill.unlocked && skill.crossReqs">{{ formatCrossReqs(skill.crossReqs) }}</span>
-                     <span class="req-tag level" v-else-if="!skill.unlocked && skill.reqLevel">Lv {{ skill.reqLevel }}</span>
-                    <span class="passive-tag" v-if="skill.isPassive">Passive</span>
-                  </div>
-                  <div class="skill-desc">{{ skill.description }}</div>
-                </div>
-                <div class="skill-stats">
-                  <span v-if="skill.mpCost" class="stat mp">{{ skill.mpCost }}</span>
-                  <span v-if="skill.castTime > 0" class="stat cast">{{ skill.castTime }}s</span>
-                  <span v-if="skill.cooldown > 0" class="stat cd">{{ skill.cooldown }}s</span>
-                </div>
+                <div class="skill-desc">{{ skill.description }}</div>
               </div>
-            </template>
+              <div class="skill-stats">
+                <span v-if="skill.mpCost" class="stat mp">{{ skill.mpCost }}</span>
+                <span v-if="skill.castTime > 0" class="stat cast">{{ skill.castTime }}s</span>
+                <span v-if="skill.cooldown > 0" class="stat cd">{{ skill.cooldown }}s</span>
+              </div>
+            </div>
           </div>
         </div>
       </template>
@@ -132,7 +221,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted, onUnmounted } from 'vue';
-import { useSkillStore, AvailableSkill, SubCategoryInfo } from '../composables/useSkillStore';
+import { useSkillStore, AvailableSkill, CategoryGroup } from '../composables/useSkillStore';
 import { getCategoryColor } from '@dust-saga/shared';
 import { useDraggable } from '../composables/useDraggable';
 
@@ -149,10 +238,12 @@ const props = defineProps<{
   const skillStore = useSkillStore();
 const searchQuery = ref('');
 const iconOnly = ref(false);
+const openCategories = reactive(new Set<string>());
 const openAccordions = reactive(new Set<string>());
 const pendingAlloc = reactive<Record<string, number>>({});
 
-const allSubCategories = computed(() => skillStore.getSubCategories());
+const categories = computed<CategoryGroup[]>(() => skillStore.getCategories());
+const classSkills = computed<AvailableSkill[]>(() => skillStore.getClassSkills());
 
 const totalPending = computed(() => {
   let sum = 0;
@@ -163,24 +254,39 @@ const totalPending = computed(() => {
 const effectiveUnspent = computed(() => skillStore.state.unspentSkillPoints - totalPending.value);
 const hasPending = computed(() => totalPending.value > 0);
 
-const searchResults = computed(() => {
+interface SearchResult {
+  catName: string;
+  subName: string;
+  skill: AvailableSkill;
+}
+
+const searchResults = computed<SearchResult[]>(() => {
   const q = searchQuery.value.toLowerCase().trim();
   if (!q) return [];
-  const results: Array<{ subCat: SubCategoryInfo; skill: AvailableSkill }> = [];
-  for (const subCat of allSubCategories.value) {
-    for (const skill of subCat.skills) {
-      if (skill.name.toLowerCase().includes(q)) {
-        results.push({ subCat, skill });
+  const results: SearchResult[] = [];
+  for (const cat of categories.value) {
+    for (const sk of cat.categorySkills) {
+      if (sk.name.toLowerCase().includes(q)) results.push({ catName: cat.name, subName: '', skill: sk });
+    }
+    for (const sub of cat.subCategories) {
+      for (const sk of sub.skills) {
+        if (sk.name.toLowerCase().includes(q)) results.push({ catName: cat.name, subName: sub.name, skill: sk });
       }
     }
   }
-  for (const r of results) {
-    if (!openAccordions.has(r.subCat.name)) {
-      openAccordions.add(r.subCat.name);
-    }
+  for (const sk of classSkills.value) {
+    if (sk.name.toLowerCase().includes(q)) results.push({ catName: 'Class', subName: '', skill: sk });
   }
   return results;
 });
+
+function toggleCategory(key: string): void {
+  if (openCategories.has(key)) {
+    openCategories.delete(key);
+  } else {
+    openCategories.add(key);
+  }
+}
 
 function toggleAccordion(name: string): void {
   if (openAccordions.has(name)) {
@@ -192,7 +298,7 @@ function toggleAccordion(name: string): void {
 
 function addPending(name: string): void {
   if (effectiveUnspent.value <= 0) return;
-  const sub = allSubCategories.value.find(s => s.name === name);
+  const sub = categories.value.flatMap(c => c.subCategories).find(s => s.name === name);
   if (!sub) return;
   if ((sub.currentPoints + (pendingAlloc[name] || 0)) >= sub.maxPoints - sub.minAdeptness) return;
   pendingAlloc[name] = (pendingAlloc[name] || 0) + 1;
@@ -225,8 +331,8 @@ function handleClose(): void {
   emit('close');
 }
 
-function getSortedSkills(subCat: SubCategoryInfo): AvailableSkill[] {
-  return [...subCat.skills].sort((a, b) => {
+function getSortedSkills(skills: AvailableSkill[]): AvailableSkill[] {
+  return [...skills].sort((a, b) => {
     if (a.unlocked !== b.unlocked) return a.unlocked ? -1 : 1;
     return (a.reqPoints >= 0 ? a.reqPoints : 999) - (b.reqPoints >= 0 ? b.reqPoints : 999);
   });
@@ -365,20 +471,44 @@ onUnmounted(() => {
 .skill-list::-webkit-scrollbar-track { background: transparent; }
 .skill-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
 
-.accordion-header, .search-subcat-label {
+.accordion-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
+  padding: 5px 10px 5px 18px;
   cursor: pointer;
   transition: background 0.1s;
   user-select: none;
 }
-.accordion-header:hover, .search-subcat-label:hover { background: rgba(255,255,255,0.05); }
+.accordion-header:hover { background: rgba(255,255,255,0.05); }
+
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+.category-header:hover { background: rgba(255,255,255,0.06); }
+
+.category-name { font-size: 0.85rem; font-weight: 700; flex: 1; }
+.category-name.class-name { color: #aaa; }
+.category-pts { color: #888; font-size: 0.7rem; font-weight: 600; }
+
+.category-body { padding: 2px 0 4px; }
 
 .arrow { font-size: 0.55rem; color: #666; width: 12px; text-align: center; }
-.subcat-name { color: #667eea; font-size: 0.78rem; font-weight: 600; flex: 1; }
+.subcat-name { color: #b0b8e8; font-size: 0.75rem; font-weight: 600; flex: 1; }
 .subcat-pts { color: #888; font-size: 0.68rem; margin-right: 6px; }
+
+.cat-skill { padding-left: 24px; }
+.cat-icon-grid { padding-left: 18px; }
+
+.crumb { color: #555; font-size: 0.6rem; font-weight: 500; }
+.search-entry { padding-left: 14px; }
 
 .alloc-controls { display: flex; align-items: center; gap: 3px; }
 

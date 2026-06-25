@@ -676,6 +676,10 @@ export function getZoneDefinition(id: string): ZoneDefinition | undefined {
   return ZONE_DATABASE[id];
 }
 
+export function isZonePvpEnabled(zoneId: string): boolean {
+  return ZONE_DATABASE[zoneId]?.isPvpEnabled === true;
+}
+
 export const NATION_ZONE_MAP: Record<string, { nation: 'varik' | 'pfelstein' | 'latugan'; zoneId: string; borderZoneId: string }> = {
   varik: { nation: 'varik', zoneId: 'varik_confederation', borderZoneId: 'mountains_of_jortio' },
   pfelstein: { nation: 'pfelstein', zoneId: 'kingdom_pfelstein', borderZoneId: 'nelstadt_plains' },

@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import {
-  Packet, PacketType, PlayerSession,
+  Packet, PacketType, PlayerSession, isZonePvpEnabled,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -21,6 +21,10 @@ function handleAttack(ctx: NetworkContext, socket: Socket, data: any): void {
   ctx.cancelRest(session);
 
   if (data.targetId && ctx.state.players.has(data.targetId) && ctx.isPartyMember(characterId, data.targetId)) return;
+
+  if (data.targetId && data.targetId !== characterId && ctx.state.players.has(data.targetId) && !isZonePvpEnabled(session.zoneId)) {
+    return;
+  }
 
   const damageInfos = ctx.combat.processPlayerAttack(
     session,
@@ -121,7 +125,9 @@ function handleManualAttack(ctx: NetworkContext, socket: Socket, data: any): voi
 
   const zoneEnemies = ctx.spawnMgr.getEnemiesInZone(session.zoneId) || new Map();
   const zonePlayerBuf = new Map<string, PlayerSession>();
-  ctx.forEachPlayerInZone(session.zoneId, (id, p) => zonePlayerBuf.set(id, p));
+  if (isZonePvpEnabled(session.zoneId)) {
+    ctx.forEachPlayerInZone(session.zoneId, (id, p) => zonePlayerBuf.set(id, p));
+  }
 
   const results = ctx.combat.processManualAttack(
     session,

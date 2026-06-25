@@ -28,6 +28,7 @@ import {
   SpatialEntry,
   SUMMON_STATS, BANISH_RADIUS,
   getGloomRecoilRate,
+  isZonePvpEnabled,
 } from '@dust-saga/shared';
 import { AuthManager } from '../auth/AuthManager';
 import { CombatSystem } from '../ecs/systems/CombatSystem';
@@ -2002,7 +2003,10 @@ export class NetworkServer implements NetworkContext {
 
     for (const entry of candidates) {
       if (entry.id === characterId) continue;
-      if (this.state.players.has(entry.id) && this.isPartyMember(characterId, entry.id)) continue;
+      if (this.state.players.has(entry.id)) {
+        if (this.isPartyMember(characterId, entry.id)) continue;
+        if (!isZonePvpEnabled(session.zoneId)) continue;
+      }
 
       const enemy = this.spawnMgr.getEnemy(entry.id);
       if (enemy && enemy.state === 'dead') continue;
@@ -2217,7 +2221,10 @@ export class NetworkServer implements NetworkContext {
     const batchEvents: Array<{ type: PacketType; data: any }> = [];
 
     for (const target of targets) {
-      if (this.state.players.has(target.id) && target.id !== characterId && this.isPartyMember(characterId, target.id)) continue;
+      if (target.id !== characterId && this.state.players.has(target.id)) {
+        if (this.isPartyMember(characterId, target.id)) continue;
+        if (!isZonePvpEnabled(session.zoneId)) continue;
+      }
 
       const targetResult = primaryResult && primaryResult.damage
         ? primaryResult

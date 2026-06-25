@@ -280,6 +280,31 @@ export enum SkillType {
   KNOCKBACK = 'knockback',
 }
 
+// Skill types that may be freely cast on other players in non-PvP zones
+// (buffs, heals, revives, and other purely beneficial effects).
+export const BENEFICIAL_SKILL_TYPES: ReadonlySet<SkillType> = new Set<SkillType>([
+  SkillType.HEAL,
+  SkillType.HEAL_OVER_TIME,
+  SkillType.PARTY_HEAL,
+  SkillType.HP_BUFF,
+  SkillType.MP_RESTORE,
+  SkillType.SACRIFICE_HEAL,
+  SkillType.REVIVE,
+  SkillType.BUFF,
+  SkillType.BARRIER,
+  SkillType.MANA_SHIELD,
+  SkillType.ABSORPTION,
+  SkillType.MANA_SWAP,
+  SkillType.SOUL_SWAP,
+  SkillType.DEVOTION,
+  SkillType.SONG,
+  SkillType.DISPEL,
+]);
+
+export function isBeneficialSkillType(type: SkillType): boolean {
+  return BENEFICIAL_SKILL_TYPES.has(type);
+}
+
 export interface OnHitEffect {
   type: StatusEffectType;
   chance?: number;

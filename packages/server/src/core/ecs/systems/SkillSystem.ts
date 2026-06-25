@@ -20,7 +20,7 @@ import {
   AOETargetMode,
   getItem,
 } from '@dust-saga/shared';
-import { CLASS_SKILL_DATA } from '@dust-saga/shared';
+import { CLASS_SKILL_DATA, CATEGORY_LEVEL_SKILLS, CATEGORY_ID_TO_KEY } from '@dust-saga/shared';
 import { CLASS_SPECIFIC_SKILLS, getClassSpecificSkillsForJob } from '@dust-saga/shared';
 import { findSkillDefinition as sharedFindSkillDefinition } from '@dust-saga/shared';
 
@@ -33,8 +33,21 @@ const CLASS_SKILL_LOOKUP: Map<string, SkillDefinition> = ((): Map<string, SkillD
       }
     }
   }
+  for (const skills of Object.values(CATEGORY_LEVEL_SKILLS)) {
+    for (const [name, def] of Object.entries(skills)) {
+      lookup.set(name, { ...def, name });
+    }
+  }
   return lookup;
 })();
+
+const CATEGORY_SKILL_TO_KEY: Record<string, string> = {};
+for (const [catId, skills] of Object.entries(CATEGORY_LEVEL_SKILLS)) {
+  const catKey = CATEGORY_ID_TO_KEY[Number(catId) as keyof typeof CATEGORY_ID_TO_KEY];
+  for (const skillName of Object.keys(skills)) {
+    CATEGORY_SKILL_TO_KEY[skillName] = catKey;
+  }
+}
 
 const CLASS_SPECIFIC_SKILL_LOOKUP: Map<string, SkillDefinition> = ((): Map<string, SkillDefinition> => {
   const lookup = new Map<string, SkillDefinition>();
@@ -276,9 +289,17 @@ export class SkillSystem {
     }
     if (skill.reqPoints) {
       if (typeof skill.reqPoints === 'number') {
-        const subPoints = subCategory ? (effectiveProficiencies[subCategory] || 0) : 0;
-        if (subPoints < skill.reqPoints) {
-          return { canUse: false, error: 'insufficient_proficiency' };
+        const catKey = CATEGORY_SKILL_TO_KEY[skillName];
+        if (catKey) {
+          const catAdeptness = session.skillAdeptness?.[catKey] || 0;
+          if (catAdeptness < skill.reqPoints) {
+            return { canUse: false, error: 'insufficient_proficiency' };
+          }
+        } else {
+          const subPoints = subCategory ? (effectiveProficiencies[subCategory] || 0) : 0;
+          if (subPoints < skill.reqPoints) {
+            return { canUse: false, error: 'insufficient_proficiency' };
+          }
         }
       } else if (Array.isArray(skill.reqPoints)) {
         if (!meetsRequirements(skill.reqPoints, (name: string) => effectiveProficiencies[name] || 0)) {
@@ -1543,6 +1564,12 @@ export class SkillSystem {
       return CLASS_SPECIFIC_SKILL_LOOKUP.get(skillName)!;
     }
     return CLASS_SKILL_LOOKUP.get(skillName) || null;
+  }
+
+  getSkillType(skillName: string): SkillType | undefined {
+    const skill = this.findSkillDefinition(skillName);
+    if (!skill) return undefined;
+    return skill.skillType ?? this.inferSkillType(skill);
   }
 
   getSubCategoryForSkill(skillName: string): string | null {

@@ -7,6 +7,8 @@ import {
   getSkillTargetType,
   BANISH_RADIUS,
   AOETargetMode,
+  isZonePvpEnabled,
+  isBeneficialSkillType,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 import { hasLineOfSight } from '../../world/LineOfSight';
@@ -66,6 +68,17 @@ function handleSkillUse(ctx: NetworkContext, socket: Socket, data: any): void {
     return;
   }
 
+  if (targetId && targetId !== characterId && ctx.state.players.has(targetId) && !isZonePvpEnabled(session.zoneId)) {
+    const skillType = ctx.skillSys.getSkillType(skillName);
+    if (skillType !== undefined && !isBeneficialSkillType(skillType)) {
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.SKILL_USE,
+        timestamp: Date.now(),
+        data: { skillName, error: 'pvp_disabled' }
+      });
+      return;
+    }
+  }
   const check = ctx.skillSys.canUseSkill(session, skillName, targetId || null);
   if (!check.canUse) {
     ctx.sendToPlayer(characterId, {

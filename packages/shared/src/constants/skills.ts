@@ -2843,6 +2843,130 @@ export const CLASS_SKILL_DATA: Record<
   },
 };
 
+export const CATEGORY_ID_TO_KEY: Record<SkillCategoryId, 'melee' | 'technique' | 'prayer' | 'magic' | 'special'> = {
+  [SkillCategoryId.MELEE]: 'melee',
+  [SkillCategoryId.TECHNIQUE]: 'technique',
+  [SkillCategoryId.PRAYER]: 'prayer',
+  [SkillCategoryId.MAGIC]: 'magic',
+  [SkillCategoryId.SPECIAL]: 'special',
+};
+
+export const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+  melee: 'Melee',
+  technique: 'Technique',
+  prayer: 'Prayer',
+  magic: 'Magic',
+  special: 'Horsemanship',
+};
+
+// Skills gated by overall category adeptness (sum of all subcategory adeptness
+// within the category). `reqPoints` here is the adeptness threshold, not a
+// proficiency threshold. These live at the category level, not in a subcategory.
+export const CATEGORY_LEVEL_SKILLS: Record<SkillCategoryId, Record<string, SkillDefinition>> = {
+  [SkillCategoryId.MELEE]: {
+    Slash: {
+      name: "Slash",
+      reqPoints: 3,
+      mpCost: 10,
+      castTime: 0,
+      cooldown: 10,
+      duration: 0,
+      description: "Quick combo strike that gives the enemy no chance to evade.",
+      damageType: DamageType.PHYSICAL,
+      damageSubType: PhysicalDamageSubType.SLASH,
+      basePower: 1,
+    },
+    Bash: {
+      name: "Bash",
+      reqPoints: 35,
+      mpCost: 18,
+      castTime: 0,
+      cooldown: 10,
+      duration: 0,
+      description: "A heavy blow that knocks the target back and may stun.",
+      damageType: DamageType.PHYSICAL,
+      damageSubType: PhysicalDamageSubType.BASH,
+      basePower: 2,
+      hasDebuff: true,
+      debuffEffectTable: { debuffCategory: 'stun' },
+      knockback: 2,
+    },
+    Misdirection: {
+      name: "Misdirection",
+      reqPoints: 70,
+      mpCost: 10,
+      castTime: 0,
+      cooldown: 60,
+      duration: 0,
+      description: "Distract nearby foes, removing their target on you.",
+      skillType: SkillType.UTILITY,
+      misdirection: true,
+    },
+    Unpain: {
+      name: "Unpain",
+      reqPoints: 100,
+      mpCost: 24,
+      castTime: 0,
+      cooldown: 30,
+      duration: 10,
+      description: "Become immune to knockdown, slow, and immobilize, but your attack is halved.",
+      isBuff: true,
+      selfBuffOnly: true,
+      buffEffectTable: {},
+    },
+  },
+  [SkillCategoryId.TECHNIQUE]: {
+    Backstep: {
+      name: "Backstep",
+      reqPoints: 3,
+      mpCost: 5,
+      castTime: 0,
+      cooldown: 3,
+      duration: 1,
+      description: "Leap backward, gaining greatly increased dodge briefly.",
+      isBuff: true,
+      selfBuffOnly: true,
+      buffEffectTable: { dodgeChance: 100 },
+    },
+  },
+  [SkillCategoryId.PRAYER]: {
+    Revidium: {
+      name: "Revidium",
+      reqPoints: 35,
+      mpCost: 14,
+      castTime: 2,
+      cooldown: 15,
+      duration: 0,
+      description: "Dispels one harmful magical effect from the target.",
+      dispelDebuff: true,
+    },
+    "Physical Barrier": {
+      name: "Physical Barrier",
+      reqPoints: 102,
+      mpCost: 128,
+      castTime: 2,
+      cooldown: 10,
+      duration: 60,
+      description: "Shield the target with a barrier that fully blocks one physical attack.",
+      barrier: 'physical',
+      skillType: SkillType.BARRIER,
+    },
+    "Magic Barrier": {
+      name: "Magic Barrier",
+      reqPoints: 102,
+      mpCost: 128,
+      castTime: 2,
+      cooldown: 10,
+      duration: 60,
+      description: "Shield the target with a barrier that fully blocks one magical attack.",
+      barrier: 'magical',
+      skillType: SkillType.BARRIER,
+    },
+  },
+  [SkillCategoryId.MAGIC]: {},
+  [SkillCategoryId.SPECIAL]: {},
+};
+
 const SKILL_LOOKUP: Map<string, import("../types/skills").SkillDefinition> = ((): Map<string, import("../types/skills").SkillDefinition> => {
   const lookup = new Map<string, import("../types/skills").SkillDefinition>();
   for (const category of Object.values(CLASS_SKILL_DATA)) {
@@ -2850,6 +2974,11 @@ const SKILL_LOOKUP: Map<string, import("../types/skills").SkillDefinition> = (()
       for (const [name, def] of Object.entries(subSkill.skills)) {
         lookup.set(name, { ...def, name });
       }
+    }
+  }
+  for (const skills of Object.values(CATEGORY_LEVEL_SKILLS)) {
+    for (const [name, def] of Object.entries(skills)) {
+      lookup.set(name, { ...def, name });
     }
   }
   return lookup;

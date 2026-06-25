@@ -12,6 +12,9 @@ import {
   SkillDefinition,
   SkillSubCategory,
   SUB_CATEGORY_TO_CATEGORY,
+  CATEGORY_LEVEL_SKILLS,
+  CATEGORY_ID_TO_KEY,
+  CATEGORY_DISPLAY_NAMES,
   meetsRequirements,
   getMaxPotential,
   getMinAdeptness,
@@ -49,6 +52,7 @@ export interface AvailableSkill {
   reqPoints: number;
   reqLevel?: number;
   crossReqs?: Array<{ skillName: string; points: number }>;
+  isCategorySkill?: boolean;
 }
 
 export interface SubCategoryInfo {
@@ -61,6 +65,23 @@ export interface SubCategoryInfo {
   skills: AvailableSkill[];
   category: string;
 }
+
+export interface CategoryGroup {
+  key: string;
+  name: string;
+  adeptness: number;
+  maxPotential: number;
+  categorySkills: AvailableSkill[];
+  subCategories: SubCategoryInfo[];
+}
+
+const CATEGORY_ORDER: Array<{ key: string; name: string }> = [
+  { key: 'melee', name: CATEGORY_DISPLAY_NAMES['melee'] },
+  { key: 'technique', name: CATEGORY_DISPLAY_NAMES['technique'] },
+  { key: 'prayer', name: CATEGORY_DISPLAY_NAMES['prayer'] },
+  { key: 'magic', name: CATEGORY_DISPLAY_NAMES['magic'] },
+  { key: 'special', name: CATEGORY_DISPLAY_NAMES['special'] },
+];
 
 const STORAGE_KEY_PREFIX = 'dust-saga-skillbar';
 const LAYOUT_VERSION = 2;
@@ -424,6 +445,32 @@ export function useSkillStore() {
       });
     }
 
+    for (const [catIdStr, catSkills] of Object.entries(CATEGORY_LEVEL_SKILLS)) {
+      const catId = Number(catIdStr);
+      const catKey = CATEGORY_ID_TO_KEY[catId as keyof typeof CATEGORY_ID_TO_KEY];
+      const catAdeptness = getCategoryAdeptnessSum(catKey);
+      for (const [name, def] of Object.entries(catSkills)) {
+        if (seen.has(name)) continue;
+        seen.add(name);
+        const threshold = typeof def.reqPoints === 'number' ? def.reqPoints : 0;
+        skills.push({
+          name,
+          description: def.description,
+          mpCost: def.mpCost,
+          castTime: def.castTime,
+          cooldown: def.cooldown,
+          isPassive: def.isPassive || false,
+          isAOE: def.isAOE || false,
+          category: catKey,
+          subCategory: '',
+          subCategoryId: 0,
+          unlocked: catAdeptness >= threshold,
+          reqPoints: threshold,
+          isCategorySkill: true,
+        });
+      }
+    }
+
     state.availableSkills = skills;
   }
 
@@ -495,6 +542,47 @@ export function useSkillStore() {
     return total;
   }
 
+  function getCategoryAdeptnessSum(categoryName: string): number {
+    const direct = state.skillAdeptness[categoryName] || 0;
+    let sum = 0;
+    let found = false;
+    for (const [subName, cat] of Object.entries(SUB_CATEGORY_TO_CATEGORY)) {
+      if (cat === categoryName) {
+        found = true;
+        sum += state.skillAdeptness[subName] || 0;
+      }
+    }
+    return found ? sum : direct;
+  }
+
+  function getCategories(): CategoryGroup[] {
+    const subs = getSubCategories();
+    return CATEGORY_ORDER.map(o => {
+      const subCats = subs.filter(s => s.category === o.key);
+      let adeptness = 0;
+      let maxPotential = 0;
+      for (const s of subCats) {
+        adeptness += state.skillAdeptness[s.name] || 0;
+        maxPotential += s.maxPoints;
+      }
+      const categorySkills = state.availableSkills.filter(
+        s => s.isCategorySkill && s.category === o.key,
+      );
+      return {
+        key: o.key,
+        name: o.name,
+        adeptness,
+        maxPotential,
+        categorySkills,
+        subCategories: subCats,
+      };
+    });
+  }
+
+  function getClassSkills(): AvailableSkill[] {
+    return state.availableSkills.filter(s => s.category === 'class');
+  }
+
   function clearAllCooldowns(): void {
     for (const key of Object.keys(state.cooldowns)) {
       delete state.cooldowns[key];
@@ -542,6 +630,8 @@ export function useSkillStore() {
     getSubCategories,
     getSubCategoriesByCategory,
     getCategoryPoints,
+    getCategories,
+    getClassSkills,
     clearAllCooldowns,
     startTick,
     stopTick,
