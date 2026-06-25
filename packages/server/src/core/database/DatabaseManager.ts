@@ -157,6 +157,7 @@ export class DatabaseManager {
         npc_id VARCHAR(80) NOT NULL,
         objectives JSONB NOT NULL DEFAULT '[]',
         rewards JSONB NOT NULL DEFAULT '{"experience":0,"gold":0,"items":[]}',
+        dialog JSONB DEFAULT '{}',
         created_at TIMESTAMP DEFAULT NOW()
       );
 
@@ -195,6 +196,8 @@ export class DatabaseManager {
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS gold INTEGER DEFAULT 100`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS racial_passive VARCHAR(50)`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS character_quests JSONB DEFAULT '[]'`,
+      `ALTER TABLE players ADD COLUMN IF NOT EXISTS role VARCHAR(16) NOT NULL DEFAULT 'player'`,
+      `ALTER TABLE quests ADD COLUMN IF NOT EXISTS dialog JSONB DEFAULT '{}'`,
     ];
 
     for (const sql of migrations) {

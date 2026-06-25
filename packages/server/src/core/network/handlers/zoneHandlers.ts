@@ -82,6 +82,9 @@ async function handleEnterZone(ctx: NetworkContext, socket: Socket, data: any): 
 
   ctx.sendZoneState(socket, data.zoneId, characterId);
 
+  session.lastQuestCell = null;
+  ctx.checkQuestCellEntry(session);
+
   const exploreProgress = ctx.questSys.onExplore(session, data.zoneId);
   if (exploreProgress.progressed.length > 0) {
     const msgs = exploreProgress.completed.map(qid => {

@@ -13,14 +13,23 @@ export enum QuestStatus {
   TURNED_IN = 'turned_in'
 }
 
+export interface DialogPage {
+  speaker?: string;
+  text: string;
+  emote?: string;
+}
+
 export interface QuestObjective {
   id: string;
   type: QuestType;
-  description: string;
+  description?: string;
   targetId: string;
   targetName: string;
   requiredCount: number;
   currentCount: number;
+  cell?: string;
+  zoneId?: string;
+  waypoint?: { x: number; z: number };
 }
 
 export interface QuestReward {
@@ -29,22 +38,29 @@ export interface QuestReward {
   items: Array<{ itemId: string; quantity: number }>;
 }
 
+export interface QuestObjectiveDefinition {
+  id: string;
+  type: QuestType;
+  targetId: string;
+  targetName: string;
+  requiredCount: number;
+  cell?: string;
+  zoneId?: string;
+}
+
 export interface QuestDefinition {
   id: string;
   title: string;
   description: string;
   type: QuestType;
-  objectives: Array<{
-    id: string;
-    type: QuestType;
-    targetId: string;
-    targetName: string;
-    requiredCount: number;
-  }>;
+  objectives: QuestObjectiveDefinition[];
   rewards: QuestReward;
   requiredLevel: number;
   requiredQuest?: string;
   npcId: string;
+  offerDialog?: DialogPage[];
+  inProgressDialog?: DialogPage[];
+  turnInDialog?: DialogPage[];
 }
 
 export interface ActiveQuest {

@@ -2,7 +2,7 @@ import { Socket } from 'socket.io';
 import {
   Packet, PacketType, PlayerSession, Validator,
   JOB_DEFINITIONS, RACE_DATA, createDefaultStatPoints, createDefaultSkillProficiencies, createDefaultSkillAdeptness,
-  getDesignJobId, JobId, Race, StatusEffectType,
+  getDesignJobId, JobId, Race, StatusEffectType, AccountRole,
   getZoneDefinition, normalizeEquipment,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
@@ -107,6 +107,7 @@ async function handleLogout(ctx: NetworkContext, socket: Socket, _data: any): Pr
         inventory: session.inventory,
         equipment: session.equipment,
         gold: session.gold,
+        quests: session.quests,
       }).catch(err => console.error('Failed to save character on logout:', err));
 
       ctx.cleanupPlayerZoneResources(session);
@@ -185,6 +186,7 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
     session.lastSafeZoneId = char.last_safe_zone_id || session.zoneId;
     session.gold = char.gold || 100;
     session.racialPassive = char.racial_passive || undefined;
+    session.role = await ctx.auth.getAccountRole(playerId);
 
     if (char.inventory) {
       const parsed = typeof char.inventory === 'string' ? JSON.parse(char.inventory) : char.inventory;
@@ -239,7 +241,8 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
       skillProficiencies: session.skillProficiencies,
       skillAdeptness: session.skillAdeptness,
       statBreakdown: session.statBreakdown,
-      racialPassive: session.racialPassive
+      racialPassive: session.racialPassive,
+      role: session.role
     }
   });
 
@@ -252,7 +255,7 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
       type: 'player',
       position: session.position,
       rotation: session.rotation,
-      data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth, modelFile: JOB_DEFINITIONS[session.jobId]?.modelFile, invisible: session.statusEffects?.some((e: any) => e.type === StatusEffectType.INVISIBLE) || false }
+      data: { name: session.characterName, class: session.jobId, race: session.race, jobId: session.jobId, level: session.stats.level, health: session.stats.health, maxHealth: session.stats.maxHealth, modelFile: JOB_DEFINITIONS[session.jobId]?.modelFile, invisible: session.statusEffects?.some((e: any) => e.type === StatusEffectType.INVISIBLE) || false, role: session.role }
     }
   });
 }
@@ -291,6 +294,7 @@ async function handleReturnToCharacterSelect(ctx: NetworkContext, socket: Socket
       inventory: session.inventory,
       equipment: session.equipment,
       gold: session.gold,
+      quests: session.quests,
     }).catch(err => console.error('Failed to save character on logout:', err));
 
     ctx.cleanupPlayerZoneResources(session);

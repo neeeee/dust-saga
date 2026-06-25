@@ -4,6 +4,24 @@ import { BuffData, StatBonusBreakdown, EffectiveStats } from './status';
 import { SkillCooldownEntry, ActiveCast } from './skills';
 import { StatusEffect } from './status';
 import { InventoryItem } from './items';
+import { QuestObjective } from './quests';
+
+export enum AccountRole {
+  PLAYER = 'player',
+  GM = 'gm',
+  ADMIN = 'admin',
+}
+
+export const ACCOUNT_ROLE_RANK: Record<AccountRole, number> = {
+  [AccountRole.PLAYER]: 0,
+  [AccountRole.GM]: 1,
+  [AccountRole.ADMIN]: 2,
+};
+
+export function roleAtLeast(actual: AccountRole | string | undefined | null, min: AccountRole): boolean {
+  const a = ACCOUNT_ROLE_RANK[(actual as AccountRole) || AccountRole.PLAYER] ?? 0;
+  return a >= (ACCOUNT_ROLE_RANK[min] ?? 0);
+}
 
 export interface PlayerStats {
   health: number;
@@ -30,6 +48,7 @@ export interface PlayerSession {
   characterName: string;
   race: string;
   racialPassive?: string;
+  role: AccountRole;
   jobId: JobId;
   baseClass: BaseClass;
   stats: PlayerStats;
@@ -80,20 +99,14 @@ export interface PlayerSession {
   quests: Array<{
     questId: string;
     status: string;
-    objectives: Array<{
-      id: string;
-      type: string;
-      targetId: string;
-      targetName: string;
-      requiredCount: number;
-      currentCount: number;
-    }>;
+    objectives: QuestObjective[];
     startedAt: number;
     title?: string;
     description?: string;
   }>;
   statsDirty?: boolean;
   resistCache?: Map<string, number>;
+  lastQuestCell?: string | null;
 }
 
 export interface EnmityEntry {

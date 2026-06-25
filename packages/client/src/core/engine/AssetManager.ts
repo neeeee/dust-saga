@@ -92,16 +92,28 @@ export class AssetManager {
     }
   }
 
-  createNamePlate(name: string, parentId: string): Mesh {
+  createNamePlate(name: string, parentId: string, options?: { role?: string }): Mesh {
     const plane = MeshBuilder.CreatePlane(`name_${parentId}`, { width: 2, height: 0.3 }, this.scene);
 
     const texture = new DynamicTexture(`name_tex_${parentId}`, { width: 256, height: 48 }, this.scene, true);
     texture.hasAlpha = true;
-    const ctx = texture.getContext();
+    const ctx = texture.getContext() as unknown as CanvasRenderingContext2D;
     ctx.clearRect(0, 0, 256, 48);
     ctx.font = 'bold 24px Arial';
-    ctx.fillStyle = 'white';
-    ctx.fillText(name, 128, 32);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const role = options?.role;
+    if (role === 'admin') {
+      ctx.fillStyle = '#ff6b6b';
+      ctx.fillText(`[ADMIN] ${name}`, 128, 24);
+    } else if (role === 'gm') {
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText(`[GM] ${name}`, 128, 24);
+    } else {
+      ctx.fillStyle = 'white';
+      ctx.fillText(name, 128, 24);
+    }
     texture.update();
 
     const mat = new StandardMaterial(`name_mat_${parentId}`, this.scene);

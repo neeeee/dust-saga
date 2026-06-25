@@ -20,7 +20,7 @@ async function handleLogin(ctx: NetworkContext, socket: Socket, data: any): Prom
     ctx.sendToSocket(socket.id, {
       type: PacketType.AUTH_SUCCESS,
       timestamp: Date.now(),
-      data: { playerId: result.playerId, username: result.username, token: result.token, level: result.level }
+      data: { playerId: result.playerId, username: result.username, token: result.token, level: result.level, role: result.role }
     });
   } else {
     ctx.sendToSocket(socket.id, {

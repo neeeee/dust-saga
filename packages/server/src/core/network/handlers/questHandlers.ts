@@ -29,6 +29,8 @@ function handleQuestAccept(ctx: NetworkContext, socket: Socket, data: any): void
   }
 
   if (ctx.questSys.acceptQuest(session, questId)) {
+    session.lastQuestCell = null;
+    ctx.checkQuestCellEntry(session);
     ctx.sendToPlayer(characterId, {
       type: PacketType.QUEST_ACCEPT,
       timestamp: Date.now(),

@@ -1,5 +1,8 @@
 import { PlayerSession, QuestDefinition, QuestStatus, QuestType } from '@dust-saga/shared';
 import { QUEST_DATABASE } from '@dust-saga/shared';
+import {
+  getZoneDefinition, parseCellLabel, cellCenter, isValidCellLabel,
+} from '@dust-saga/shared';
 import { DatabaseManager } from '../core/database/DatabaseManager';
 
 export interface QuestTurnInResult {
@@ -37,7 +40,7 @@ export class QuestSystem {
     if (this.db && this.dbAvailable) {
       try {
         const result = await this.db.postgres!.query(
-          'SELECT id, title, description, type, required_level, required_quest, npc_id, objectives, rewards FROM quests'
+          'SELECT id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog FROM quests'
         );
         for (const row of result.rows) {
           const def = this.rowToDefinition(row);
@@ -100,23 +103,48 @@ export class QuestSystem {
     const existing = session.quests.find(q => q.questId === questId);
     if (existing) return false;
 
+    const npcZoneId = this.resolveQuestZoneId(questDef);
+
     session.quests.push({
       questId,
       status: QuestStatus.IN_PROGRESS,
       title: questDef.title,
       description: questDef.description,
-      objectives: questDef.objectives.map(obj => ({
-        id: obj.id,
-        type: obj.type,
-        targetId: obj.targetId,
-        targetName: obj.targetName,
-        requiredCount: obj.requiredCount,
-        currentCount: 0
-      })),
+      objectives: questDef.objectives.map(obj => {
+        const runtimeObj: PlayerSession['quests'][0]['objectives'][0] = {
+          id: obj.id,
+          type: obj.type,
+          targetId: obj.targetId,
+          targetName: obj.targetName,
+          requiredCount: obj.requiredCount,
+          currentCount: 0,
+        };
+        if (obj.cell) {
+          runtimeObj.cell = obj.cell;
+          runtimeObj.zoneId = obj.zoneId || npcZoneId;
+          const cell = parseCellLabel(obj.cell);
+          const zoneIdForGrid = runtimeObj.zoneId || session.zoneId;
+          const zoneDef = getZoneDefinition(zoneIdForGrid);
+          if (cell && zoneDef) {
+            const center = cellCenter(cell, zoneDef.size);
+            runtimeObj.waypoint = { x: center.x, z: center.z };
+          }
+        } else if (obj.zoneId) {
+          runtimeObj.zoneId = obj.zoneId;
+        }
+        return runtimeObj;
+      }),
       startedAt: Date.now()
     });
 
     return true;
+  }
+
+  private resolveQuestZoneId(questDef: QuestDefinition): string | undefined {
+    for (const obj of questDef.objectives) {
+      if (obj.zoneId) return obj.zoneId;
+    }
+    return undefined;
   }
 
   onEnemyKill(session: PlayerSession, enemyType: string): QuestProgressResult {
@@ -157,6 +185,35 @@ export class QuestSystem {
 
   onExplore(session: PlayerSession, zoneOrLocationId: string): QuestProgressResult {
     return this.progressObjectives(session, QuestType.EXPLORE, zoneOrLocationId);
+  }
+
+  onCellEnter(session: PlayerSession, cellLabel: string, zoneId: string): QuestProgressResult {
+    const result: QuestProgressResult = { progressed: [], completed: [] };
+    const upper = cellLabel.toUpperCase();
+
+    session.quests
+      .filter(q => q.status === QuestStatus.IN_PROGRESS)
+      .forEach(quest => {
+        let changed = false;
+        quest.objectives
+          .filter(obj => (obj.type === QuestType.EXPLORE || obj.type === QuestType.ESCORT) && obj.cell && obj.currentCount < obj.requiredCount)
+          .forEach(obj => {
+            const matchesZone = !obj.zoneId || obj.zoneId === zoneId;
+            if (!matchesZone) return;
+            if (obj.cell?.toUpperCase() !== upper) return;
+            obj.currentCount++;
+            changed = true;
+          });
+
+        if (changed && !result.progressed.includes(quest.questId)) result.progressed.push(quest.questId);
+
+        if (changed && this.isQuestComplete(quest)) {
+          quest.status = QuestStatus.COMPLETED;
+          result.completed.push(quest.questId);
+        }
+      });
+
+    return result;
   }
 
   onEscort(session: PlayerSession, escortNpcId: string): QuestProgressResult {
@@ -228,13 +285,11 @@ export class QuestSystem {
     const validation = this.validateDefinition(def);
     if (!validation.valid) return { success: false, error: validation.error };
 
-    this.questCache.set(def.id, def);
-
     if (this.db && this.dbAvailable) {
       try {
         await this.db.postgres!.query(
-          `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            ON CONFLICT (id) DO UPDATE SET
              title = EXCLUDED.title,
              description = EXCLUDED.description,
@@ -243,11 +298,17 @@ export class QuestSystem {
              required_quest = EXCLUDED.required_quest,
              npc_id = EXCLUDED.npc_id,
              objectives = EXCLUDED.objectives,
-             rewards = EXCLUDED.rewards`,
+             rewards = EXCLUDED.rewards,
+             dialog = EXCLUDED.dialog`,
           [
             def.id, def.title, def.description || '', def.type,
             def.requiredLevel, def.requiredQuest || null, def.npcId,
             JSON.stringify(def.objectives), JSON.stringify(def.rewards),
+            JSON.stringify({
+              offer: def.offerDialog || [],
+              inProgress: def.inProgressDialog || [],
+              turnIn: def.turnInDialog || [],
+            }),
           ]
         );
       } catch (error) {
@@ -256,13 +317,12 @@ export class QuestSystem {
       }
     }
 
+    this.questCache.set(def.id, def);
     return { success: true };
   }
 
   async deleteQuest(questId: string): Promise<{ success: boolean; error?: string }> {
     if (!this.questCache.has(questId)) return { success: false, error: 'Quest not found' };
-
-    this.questCache.delete(questId);
 
     if (this.db && this.dbAvailable) {
       try {
@@ -273,6 +333,7 @@ export class QuestSystem {
       }
     }
 
+    this.questCache.delete(questId);
     return { success: true };
   }
 
@@ -286,6 +347,14 @@ export class QuestSystem {
       if (!obj.id || !obj.targetId || !obj.targetName) return { valid: false, error: 'Each objective needs id, targetId, targetName' };
       if (!Object.values(QuestType).includes(obj.type)) return { valid: false, error: `Invalid objective type: ${obj.type}` };
       if (typeof obj.requiredCount !== 'number' || obj.requiredCount < 1) return { valid: false, error: 'objective.requiredCount must be >= 1' };
+      if (obj.cell !== undefined) {
+        if (typeof obj.cell !== 'string' || !isValidCellLabel(obj.cell)) {
+          return { valid: false, error: `objective.cell "${obj.cell}" is not a valid label (format: A1, B12, K10, ...)` };
+        }
+      }
+      if (obj.zoneId !== undefined && typeof obj.zoneId !== 'string') {
+        return { valid: false, error: 'objective.zoneId must be a string' };
+      }
     }
     if (!def.rewards || typeof def.rewards !== 'object') return { valid: false, error: 'Missing rewards' };
     if (typeof def.requiredLevel !== 'number' || def.requiredLevel < 1) return { valid: false, error: 'requiredLevel must be >= 1' };
@@ -296,7 +365,8 @@ export class QuestSystem {
     try {
       const objectives = typeof row.objectives === 'string' ? JSON.parse(row.objectives) : row.objectives;
       const rewards = typeof row.rewards === 'string' ? JSON.parse(row.rewards) : row.rewards;
-      return {
+      const rawDialog = row.dialog ? (typeof row.dialog === 'string' ? JSON.parse(row.dialog) : row.dialog) : {};
+      const def: QuestDefinition = {
         id: row.id,
         title: row.title,
         description: row.description || '',
@@ -307,6 +377,10 @@ export class QuestSystem {
         requiredQuest: row.required_quest || undefined,
         npcId: row.npc_id,
       };
+      if (Array.isArray(rawDialog.offer) && rawDialog.offer.length > 0) def.offerDialog = rawDialog.offer;
+      if (Array.isArray(rawDialog.inProgress) && rawDialog.inProgress.length > 0) def.inProgressDialog = rawDialog.inProgress;
+      if (Array.isArray(rawDialog.turnIn) && rawDialog.turnIn.length > 0) def.turnInDialog = rawDialog.turnIn;
+      return def;
     } catch {
       return null;
     }
@@ -316,13 +390,18 @@ export class QuestSystem {
     if (!this.db || !this.dbAvailable) return;
     for (const def of Object.values(QUEST_DATABASE)) {
       await this.db.postgres!.query(
-        `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (id) DO NOTHING`,
         [
           def.id, def.title, def.description || '', def.type,
           def.requiredLevel, def.requiredQuest || null, def.npcId,
           JSON.stringify(def.objectives), JSON.stringify(def.rewards),
+          JSON.stringify({
+            offer: def.offerDialog || [],
+            inProgress: def.inProgressDialog || [],
+            turnIn: def.turnInDialog || [],
+          }),
         ]
       );
     }

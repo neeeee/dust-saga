@@ -34,6 +34,8 @@ function handlePlayerMove(ctx: NetworkContext, socket: Socket, data: any): void 
   }
   ctx.updatePlayerSpatialPosition(characterId, { x: data.position.x, z: data.position.z });
 
+  ctx.checkQuestCellEntry(session);
+
   if (moved) {
     if (session.isResting) {
       ctx.cancelRest(session);

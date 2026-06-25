@@ -363,7 +363,7 @@ export class GameEngine {
     }
   }
 
-  async createPlayerEntity(entityId: string, position: V3, modelFile: string, name?: string): Promise<AbstractMesh | null> {
+  async createPlayerEntity(entityId: string, position: V3, modelFile: string, name?: string, role?: string): Promise<AbstractMesh | null> {
     if (!this.scene || !this.assetManager) return null;
 
     let mesh: AbstractMesh | null = null;
@@ -393,7 +393,7 @@ export class GameEngine {
     const group: EntityMeshGroup = { root: mesh };
 
     if (name) {
-      const namePlate = this.assetManager.createNamePlate(name, entityId);
+      const namePlate = this.assetManager.createNamePlate(name, entityId, { role });
       namePlate.position = position.add(new V3(0, 2.8, 0));
       group.namePlate = namePlate;
     }
@@ -791,6 +791,12 @@ export class GameEngine {
     ctx.strokeRect(0, 0, size, size);
   }
 
+  private minimapWaypoints: Array<{ x: number; z: number; label?: string }> = [];
+
+  setMinimapWaypoints(waypoints: Array<{ x: number; z: number; label?: string }>): void {
+    this.minimapWaypoints = waypoints.slice();
+  }
+
   updateMinimapPlayerDot(x: number, z: number, zoneSize: number): void {
     if (!this.minimapCanvas) return;
     const ctx = this.minimapCanvas.getContext('2d');
@@ -800,6 +806,22 @@ export class GameEngine {
 
     const size = this.minimapCanvas.width;
     const scale = size / zoneSize;
+
+    for (const wp of this.minimapWaypoints) {
+      const px = size / 2 + wp.x * scale;
+      const pz = size / 2 + wp.z * scale;
+      ctx.fillStyle = 'rgba(255, 209, 102, 0.35)';
+      ctx.beginPath();
+      ctx.arc(px, pz, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffd166';
+      ctx.beginPath();
+      ctx.arc(px, pz, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
 
     ctx.fillStyle = '#4488ff';
     ctx.beginPath();

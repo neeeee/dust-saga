@@ -72,6 +72,7 @@ export interface NetworkContext {
 
   handlePlayerDeath(session: PlayerSession): void;
   handleEnemyKill(enemyId: string, killerId: string): void;
+  checkQuestCellEntry(session: PlayerSession): void;
   handleRevivePlayerBySession(caster: PlayerSession, targetId: string): void;
   applyPlayerDamage(target: PlayerSession, damage: number, attackerId: string, damageType: string, isCritical: boolean, zoneId: string, attackerPosition?: { x: number; y: number; z: number }): { redirected: boolean; damageTaken: number };
   damageEnemy(enemy: EnemyInstance, damage: number, attackerId?: string): { died: boolean; actualDamage: number };

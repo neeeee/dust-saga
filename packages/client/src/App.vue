@@ -101,12 +101,14 @@
         :dialog="dialogData.dialog"
         :shop-items="dialogData.shopItems"
         :available-quests="dialogData.availableQuests"
+        :active-quests="dialogData.activeQuests"
         :npc-screen-pos="npcScreenPos"
         @close="closeDialog"
         @select-option="handleDialogOption"
         @progress="handleDialogProgress"
         @buy="handleBuyItem"
         @accept-quest="handleAcceptQuest"
+        @complete-quest="handleCompleteQuest"
       />
 
       <EnhancementWindow
@@ -304,7 +306,8 @@ const dialogData = ref<any>({
   npcName: '',
   dialog: null,
   shopItems: [],
-  availableQuests: []
+  availableQuests: [],
+  activeQuests: []
 });
 const currentNPCId = ref('');
 const npcScreenPos = ref<{ x: number; y: number } | null>(null);
@@ -1054,6 +1057,8 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
 
   if (e.code === 'F12') {
     e.preventDefault();
+    const role = gameClient?.getAccountRole();
+    if (role !== 'gm' && role !== 'admin') return;
     showGMPanel.value = !showGMPanel.value;
   } else if (e.code === 'KeyI') {
     showInventory.value = !showInventory.value;

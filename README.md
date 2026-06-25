@@ -160,11 +160,11 @@ npm run build
 - Enemy AI with volatile enmity/hate/aggro calculated from actions
 - Item drop tables
 - Item enhancement
+- Quest system (DB-driven, KILL/COLLECT/TALK/EXPLORE/ESCORT objectives, party kill-credit, multi-stage dialog, world-grid waypoints)
 
 ### Planned Features
 - Guild system
 - PvP arenas
-- Quest lines and rewards
 - Crafting
 - Gathering
 - Boss enemies
@@ -183,15 +183,87 @@ npm run build
 
 ## API Endpoints
 
-**WIP** !! Not working on the API until the game is worth playing.
-
-### Server
-- `GET /health` - Health check
-- `GET /api/players` - List players. Will have more to it when plugins can be made.
+### Public
+- `GET /health` — Health check (DB + Redis status)
+- `GET /api/classes` — Class definitions
+- `GET /api/players` — List players. Will have more to it when plugins can be made.
 
 ### WebSocket Events
-- `packet` - All game packets
+- `packet` — All game packets
 - Packet types defined in `packages/shared/src/types/packets.ts`
+
+### Quest Admin API
+
+CRUD over quest definitions stored in the `quests` table. Every route requires
+the `ADMIN_TOKEN` env var to be set on the server — requests are authenticated
+with either `Authorization: Bearer <token>` or `X-Admin-Token: <token>`. When
+the token is unset, all admin routes return `503`.
+
+| Method | Path                       | Description                                                        |
+|--------|----------------------------|--------------------------------------------------------------------|
+| GET    | `/api/admin/quests/schema` | Field reference for the quest definition body                      |
+| GET    | `/api/admin/quests`        | List quests. Filters: `?npc=&type=&minLevel=&maxLevel=`            |
+| GET    | `/api/admin/quests/:id`    | Get a single quest                                                 |
+| POST   | `/api/admin/quests`        | Create a quest (validates shape, rejects duplicates)               |
+| PUT    | `/api/admin/quests/:id`    | Upsert a quest by id (body id is ignored, path wins)               |
+| DELETE | `/api/admin/quests/:id`    | Delete a quest                                                     |
+| POST   | `/api/admin/quests/reload` | Reload the in-memory cache from the DB (needed on other shards)    |
+
+Created/updated quests are written through to the DB and the local cache live,
+so they are playable immediately on this shard without a restart. In a
+multi-shard deployment, hit `reload` on the others.
+
+**Example payload** (POST/PUT body):
+
+```json
+{
+  "id": "scout_meadow",
+  "title": "Scout the Meadow",
+  "description": "Elder Miriam wants a report on the slime cluster.",
+  "type": "explore",
+  "requiredLevel": 1,
+  "npcId": "elder_miriam",
+  "objectives": [
+    {
+      "id": "find_slime_cluster",
+      "type": "explore",
+      "targetId": "l12",
+      "targetName": "Slime Cluster",
+      "requiredCount": 1,
+      "cell": "L12",
+      "zoneId": "starter_zone"
+    }
+  ],
+  "rewards": { "experience": 30, "gold": 15, "items": [] },
+  "offerDialog":     [{ "speaker": "Elder Miriam", "text": "Head east to the slime cluster." }],
+  "inProgressDialog": [{ "text": "Follow the marker on your map." }],
+  "turnInDialog":    [{ "text": "Then you know what we face. Thank you." }]
+}
+```
+
+See `GET /api/admin/quests/schema` for the canonical field reference. Cell
+labels follow the world grid (per-zone 8-unit cells, columns A–Z × rows 1–N).
+
+## GM Roles
+
+Accounts are tiered via `players.role`: `player` (default), `gm`, or `admin`.
+Promote or demote from the server package:
+
+```bash
+cd packages/server
+npm run gm -- <username> <player|gm|admin>
+```
+
+The role is loaded fresh at character select (never trusts JWT staleness) and
+governs:
+
+- **Chat commands** — debug/cheat commands (`/setlevel`, `/spawn_dummy`,
+  `/killallenemies`, `/dummy_*`, etc.) require GM+. `/return` is available to
+  everyone.
+- **In-game indicator** — GM/Admin nameplates are prefixed `[GM]` / `[ADMIN]`
+  in role color, and chat messages from GM/Admin accounts are prefixed
+  likewise.
+- **GM panel** — F12 only opens the panel for GM+ accounts.
 
 ## Database Schema
 

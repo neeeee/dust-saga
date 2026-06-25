@@ -21,7 +21,52 @@ export const QUEST_DATABASE: Record<string, QuestDefinition> = {
       items: [{ itemId: 'health_potion', quantity: 3 }]
     },
     requiredLevel: 1,
-    npcId: 'elder_miriam'
+    npcId: 'elder_miriam',
+    offerDialog: [
+      { text: 'Welcome, young adventurer. The meadow east of here has been overrun by slimes.' },
+      { text: 'I would go myself, but my old bones cannot wield a blade any longer. Will you help us?' }
+    ],
+    inProgressDialog: [
+      { text: 'The slimes still multiply. Return to me when you have thinned their numbers.' }
+    ],
+    turnInDialog: [
+      { text: 'The meadow feels safer already. Thank you for your help.' },
+      { text: 'Please, take these potions. You may need them where you are going.' }
+    ]
+  },
+  'scout_meadow': {
+    id: 'scout_meadow',
+    title: 'Scout the Meadow',
+    description: 'Elder Miriam wants a report on the slime cluster in the eastern meadow.',
+    type: QuestType.EXPLORE,
+    objectives: [
+      {
+        id: 'find_slime_cluster',
+        type: QuestType.EXPLORE,
+        targetId: 'l12',
+        targetName: 'Slime Cluster',
+        requiredCount: 1,
+        cell: 'L12',
+        zoneId: 'starter_zone'
+      }
+    ],
+    rewards: {
+      experience: 30,
+      gold: 15,
+      items: []
+    },
+    requiredLevel: 1,
+    npcId: 'elder_miriam',
+    offerDialog: [
+      { text: 'Before you take up arms, I need to know how bad the infestation has grown.' },
+      { text: 'Head east to the slime cluster — open your map and look for the L12 marker. Get close enough to confirm what we are dealing with.' }
+    ],
+    inProgressDialog: [
+      { text: 'The cluster is east of here. Follow the marker on your map.' }
+    ],
+    turnInDialog: [
+      { text: 'You have seen them. Then you know what we are up against. Thank you for the report.' }
+    ]
   },
   'wolf_threat': {
     id: 'wolf_threat',

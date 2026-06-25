@@ -5,11 +5,39 @@ import {
   getDesignJobId, getExperienceToNextLevel, getStatPointsGainedAtLevel, getSkillPointsGainedAtLevel,
   MAX_LEVEL, getAdvancementOptions, JobId, BaseClass, NATION_ZONE_MAP,
   getZoneDefinition, getEnemyDefinition, ITEM_DATABASE, normalizeEquipment,
+  AccountRole, roleAtLeast,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
 export function registerHandlers(registry: Map<PacketType, PacketHandler>): void {
   registry.set(PacketType.CHAT_MESSAGE, handleChatMessage);
+}
+
+const COMMAND_MIN_ROLE: Record<string, AccountRole> = {
+  '/levelup': AccountRole.GM,
+  '/setlevel': AccountRole.GM,
+  '/resetstats': AccountRole.GM,
+  '/resetskills': AccountRole.GM,
+  '/advance': AccountRole.GM,
+  '/giveitem': AccountRole.GM,
+  '/killallenemies': AccountRole.GM,
+  '/dummy': AccountRole.GM,
+  '/spawn_dummy': AccountRole.GM,
+  '/despawn_dummy': AccountRole.GM,
+  '/kill_dummy': AccountRole.GM,
+  '/dummy_set': AccountRole.GM,
+  '/dummy_class': AccountRole.GM,
+  '/dummy_gear': AccountRole.GM,
+  '/dummy_pvp': AccountRole.GM,
+  '/dummy_walk': AccountRole.GM,
+  '/dummy_party': AccountRole.GM,
+  '/dummy_list': AccountRole.GM,
+};
+
+function chatSenderLabel(session: PlayerSession): string {
+  if (session.role === AccountRole.ADMIN) return `[ADMIN] ${session.characterName}`;
+  if (session.role === AccountRole.GM) return `[GM] ${session.characterName}`;
+  return session.characterName;
 }
 
 function handleChatMessage(ctx: NetworkContext, socket: Socket, data: any): void {
@@ -32,7 +60,7 @@ function handleChatMessage(ctx: NetworkContext, socket: Socket, data: any): void
     type: PacketType.CHAT_MESSAGE,
     timestamp: Date.now(),
     data: {
-      sender: session.characterName,
+      sender: chatSenderLabel(session),
       message,
       channel
     }
@@ -48,6 +76,16 @@ function handleChatMessage(ctx: NetworkContext, socket: Socket, data: any): void
 function handleChatCommand(ctx: NetworkContext, socket: Socket, session: PlayerSession, message: string): void {
   const parts = message.toLowerCase().trim().split(/\s+/);
   const cmd = parts[0];
+
+  const minRole = COMMAND_MIN_ROLE[cmd];
+  if (minRole && !roleAtLeast(session.role, minRole)) {
+    ctx.sendToPlayer(session.characterId, {
+      type: PacketType.CHAT_MESSAGE,
+      timestamp: Date.now(),
+      data: { sender: 'System', message: 'Command requires GM privileges.', channel: 'system' }
+    });
+    return;
+  }
 
   if (cmd === '/levelup') {
     handleLevelUp(ctx, session);
@@ -131,12 +169,6 @@ function handleChatCommand(ctx: NetworkContext, socket: Socket, session: PlayerS
     ctx.sendToPlayer(session.characterId, { type: PacketType.CHAT_MESSAGE, timestamp: Date.now(), data: { sender: 'GM', message: dummies.length > 0 ? dummies.join('\n') : 'No dummies spawned.', channel: 'system' } });
   } else if (cmd === '/return') {
     handleReturn(ctx, socket, session);
-  } else if (cmd === '/questlist') {
-    handleQuestList(ctx, session);
-  } else if (cmd === '/questreload') {
-    handleQuestReload(ctx, session);
-  } else if (cmd === '/questdelete') {
-    handleQuestDelete(ctx, session, parts);
   }
 }
 
@@ -509,37 +541,4 @@ function handleReturn(ctx: NetworkContext, socket: Socket, session: PlayerSessio
     timestamp: Date.now(),
     data: { sender: 'System', message: 'Returned to spawn.', channel: 'system' }
   });
-}
-
-function sysMsg(ctx: NetworkContext, session: PlayerSession, message: string): void {
-  ctx.sendToPlayer(session.characterId, {
-    type: PacketType.CHAT_MESSAGE,
-    timestamp: Date.now(),
-    data: { sender: 'System', message, channel: 'system' }
-  });
-}
-
-function handleQuestList(ctx: NetworkContext, session: PlayerSession): void {
-  const quests = ctx.questSys.getAllQuestDefinitions();
-  if (quests.length === 0) {
-    sysMsg(ctx, session, 'No quests defined.');
-    return;
-  }
-  const lines = quests.map(q => `[${q.id}] "${q.title}" (npc:${q.npcId}, lvl ${q.requiredLevel}, ${q.objectives.length} obj)`);
-  sysMsg(ctx, session, `${quests.length} quest(s):\n${lines.join('\n')}`);
-}
-
-async function handleQuestReload(ctx: NetworkContext, session: PlayerSession): Promise<void> {
-  await ctx.questSys.reload();
-  sysMsg(ctx, session, `Quests reloaded from DB. ${ctx.questSys.getAllQuestDefinitions().length} quest(s) active.`);
-}
-
-async function handleQuestDelete(ctx: NetworkContext, session: PlayerSession, parts: string[]): Promise<void> {
-  const questId = parts[1];
-  if (!questId) {
-    sysMsg(ctx, session, 'Usage: /questdelete <questId>');
-    return;
-  }
-  const result = await ctx.questSys.deleteQuest(questId);
-  sysMsg(ctx, session, result.success ? `Deleted quest "${questId}".` : `Failed: ${result.error}`);
 }

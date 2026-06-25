@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseManager } from '../database/DatabaseManager';
+import { AccountRole } from '@dust-saga/shared';
 import { createDefaultStatPoints, createDefaultSkillProficiencies, createDefaultSkillAdeptness, getDesignJobId, DEFAULT_EQUIPMENT } from '@dust-saga/shared';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dust-saga-secret-key-change-in-production';
@@ -44,6 +45,7 @@ export class AuthManager {
 
   private mockPlayers: Map<string, { id: string; username: string }> = new Map();
   private mockCharacters: Map<string, MockCharacter[]> = new Map();
+  private mockPlayerRoles: Map<string, AccountRole> = new Map();
 
   private constructor() {
     this.db = DatabaseManager.getInstance();
@@ -99,26 +101,29 @@ export class AuthManager {
     }
   }
 
-  async login(username: string, password: string): Promise<{ success: boolean; playerId?: string; username?: string; token?: string; level?: number; error?: string }> {
+  async login(username: string, password: string): Promise<{ success: boolean; playerId?: string; username?: string; token?: string; level?: number; role?: AccountRole; error?: string }> {
     if (!this.db.isPostgresConnected()) {
       let player = this.mockPlayers.get(username);
       if (!player) {
         player = { id: uuidv4(), username };
         this.mockPlayers.set(username, player);
         this.mockCharacters.set(player.id, []);
+        this.mockPlayerRoles.set(player.id, AccountRole.PLAYER);
       }
+      const role = this.mockPlayerRoles.get(player.id) || AccountRole.PLAYER;
       return {
         success: true,
         playerId: player.id,
         username,
         token: this.generateToken(player.id, username),
-        level: 1
+        level: 1,
+        role
       };
     }
 
     try {
       const result = await this.db.postgres!.query(
-        'SELECT id, username, password_hash, level FROM players WHERE username = $1',
+        'SELECT id, username, password_hash, level, role FROM players WHERE username = $1',
         [username]
       );
 
@@ -138,17 +143,72 @@ export class AuthManager {
         [player.id]
       );
 
+      const role = this.normalizeRole(player.role);
+
       return {
         success: true,
         playerId: player.id,
         username: player.username,
         token: this.generateToken(player.id, player.username),
-        level: player.level
+        level: player.level,
+        role
       };
     } catch (error) {
       console.error('Login error:', error);
       return { success: false, error: 'Login failed' };
     }
+  }
+
+  async getAccountRole(playerId: string): Promise<AccountRole> {
+    if (!this.db.isPostgresConnected()) {
+      return this.mockPlayerRoles.get(playerId) || AccountRole.PLAYER;
+    }
+    try {
+      const result = await this.db.postgres!.query('SELECT role FROM players WHERE id = $1', [playerId]);
+      if (result.rows.length === 0) return AccountRole.PLAYER;
+      return this.normalizeRole(result.rows[0].role);
+    } catch (error) {
+      console.error('Get account role error:', error);
+      return AccountRole.PLAYER;
+    }
+  }
+
+  async setAccountRole(playerId: string, role: AccountRole): Promise<boolean> {
+    if (!this.db.isPostgresConnected()) {
+      this.mockPlayerRoles.set(playerId, role);
+      return true;
+    }
+    try {
+      const result = await this.db.postgres!.query(
+        'UPDATE players SET role = $1 WHERE id = $2',
+        [role, playerId]
+      );
+      return (result.rowCount ?? 0) > 0;
+    } catch (error) {
+      console.error('Set account role error:', error);
+      return false;
+    }
+  }
+
+  async getAccountIdByUsername(username: string): Promise<string | null> {
+    if (!this.db.isPostgresConnected()) {
+      for (const player of this.mockPlayers.values()) {
+        if (player.username.toLowerCase() === username.toLowerCase()) return player.id;
+      }
+      return null;
+    }
+    try {
+      const result = await this.db.postgres!.query('SELECT id FROM players WHERE username = $1', [username]);
+      return result.rows.length > 0 ? result.rows[0].id : null;
+    } catch (error) {
+      console.error('Get account id error:', error);
+      return null;
+    }
+  }
+
+  private normalizeRole(raw: unknown): AccountRole {
+    if (typeof raw !== 'string') return AccountRole.PLAYER;
+    return (Object.values(AccountRole) as string[]).includes(raw) ? (raw as AccountRole) : AccountRole.PLAYER;
   }
 
   verifyToken(token: string): AuthToken | null {

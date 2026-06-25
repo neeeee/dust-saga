@@ -45,4 +45,15 @@ export * from './utils/enhancement';
 export { safeFormulaEval } from './utils/safeFormula';
 export { SpatialHash } from './utils/spatialHash';
 export type { SpatialEntry } from './utils/spatialHash';
+export {
+  GRID_CELL_SIZE,
+  GRID_MAX_COLUMNS,
+  getZoneGridInfo,
+  worldToCell,
+  cellCenter,
+  cellLabel,
+  parseCellLabel,
+  isValidCellLabel,
+} from './utils/worldGrid';
+export type { GridCell, ZoneGridInfo } from './utils/worldGrid';
 export * from './constants/aura';

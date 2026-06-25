@@ -61,6 +61,8 @@ export class GameClient {
   private playerMesh: any = null;
   private spawnPosition: { x: number; y: number; z: number } | null = null;
   private characterName: string | null = null;
+
+  private accountRole: string = 'player';
   private callbacks: Partial<GameCallbacks> = {};
   private stats: PlayerStats | null = null;
   private statPoints: StatPoints | null = null;
@@ -72,6 +74,7 @@ export class GameClient {
   private currentJobId: string = 'warrior';
   private currentBaseClass: string = 'warrior';
   private currentZoneId: string | null = null;
+  private activeQuests: any[] = [];
   private targetId: string | null = null;
   private lastMoveSend: number = 0;
   private autoAttacking: boolean = false;
@@ -337,6 +340,8 @@ export class GameClient {
         this.callbacks.onSkillProficienciesUpdate?.(data.skillProficiencies, data.skillAdeptness);
       }
       if (data.statBreakdown) this.statBreakdown = data.statBreakdown;
+      this.accountRole = data.role || 'player';
+      this.setActiveQuests(data.quests);
       this.callbacks.onStatsUpdate?.(data.stats);
       this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints, this.statBreakdown);
       this.callbacks.onInventoryUpdate?.(data.inventory, data.equipment);
@@ -353,6 +358,7 @@ export class GameClient {
       await this.engine.loadZone(zoneDef as ZoneDefinition);
       this.engine.clearPlayerMesh();
       this.callbacks.onZoneChange?.(zoneId, (zoneDef as ZoneDefinition).name);
+      this.refreshQuestWaypoints();
 
       for (const npc of npcs) {
         await this.engine.createNPCEntity(
@@ -386,7 +392,8 @@ export class GameClient {
           player.id,
           new BabylonVector3(player.position.x, player.position.y, player.position.z),
           player.data.modelFile,
-          player.data.name
+          player.data.name,
+          player.data?.role
         );
         this.knownEntities.set(player.id, { type: 'player', data: player.data });
         this.entityManager.createEntity(player.id);
@@ -425,7 +432,8 @@ export class GameClient {
           this.playerId,
           new BabylonVector3(pos?.x ?? 0, pos?.y ?? 0, pos?.z ?? 0),
           (JOB_DEFINITIONS as any)[this.currentJobId]?.modelFile || 'Player.glb',
-          this.characterName || 'Player'
+          this.characterName || 'Player',
+          this.accountRole
         );
         this.entityManager.createEntity(this.playerId);
         this.engine.setPlayerMesh(this.playerId);
@@ -784,17 +792,17 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.QUEST_ACCEPT, (packet: any) => {
-      if (Array.isArray(packet.data.quests)) this.callbacks.onQuestUpdate?.(packet.data.quests);
+      if (Array.isArray(packet.data.quests)) this.setActiveQuests(packet.data.quests);
       this.callbacks.onNotification?.(`Quest accepted!`, 'success');
     });
 
     this.network.onPacket(PacketType.QUEST_PROGRESS, (packet: any) => {
-      if (Array.isArray(packet.data.quests)) this.callbacks.onQuestUpdate?.(packet.data.quests);
+      if (Array.isArray(packet.data.quests)) this.setActiveQuests(packet.data.quests);
       if (packet.data.message) this.callbacks.onNotification?.(packet.data.message, 'info');
     });
 
     this.network.onPacket(PacketType.QUEST_COMPLETE, (packet: any) => {
-      if (Array.isArray(packet.data.quests)) this.callbacks.onQuestUpdate?.(packet.data.quests);
+      if (Array.isArray(packet.data.quests)) this.setActiveQuests(packet.data.quests);
       const rewards = packet.data.rewards;
       this.callbacks.onNotification?.(
         `Quest completed! +${rewards.experience} XP, +${rewards.gold} gold`,
@@ -803,7 +811,7 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.QUEST_ABANDON, (packet: any) => {
-      if (Array.isArray(packet.data.quests)) this.callbacks.onQuestUpdate?.(packet.data.quests);
+      if (Array.isArray(packet.data.quests)) this.setActiveQuests(packet.data.quests);
     });
 
     this.network.onPacket(PacketType.ENHANCEMENT_RESULT, (packet: any) => {
@@ -931,7 +939,7 @@ export class GameClient {
     this.entityManager.createEntity(id);
 
     if (type === 'player') {
-      await this.engine.createPlayerEntity(id, pos, data.modelFile, data.name);
+      await this.engine.createPlayerEntity(id, pos, data.modelFile, data.name, data?.role);
     } else if (type === 'enemy') {
       await this.engine.createEnemyEntity(id, pos, data.modelFile, data.health, data.maxHealth, data.name);
       this.enemies.set(id, data);
@@ -1289,6 +1297,33 @@ export class GameClient {
 
   getBaseClass(): string {
     return this.currentBaseClass;
+  }
+
+  getAccountRole(): string {
+    return this.accountRole;
+  }
+
+  private setActiveQuests(quests: any): void {
+    this.activeQuests = Array.isArray(quests) ? quests : [];
+    this.callbacks.onQuestUpdate?.(this.activeQuests);
+    this.refreshQuestWaypoints();
+  }
+
+  private refreshQuestWaypoints(): void {
+    if (!this.engine) return;
+    const zoneId = this.currentZoneId;
+    const waypoints: Array<{ x: number; z: number; label?: string }> = [];
+    for (const quest of this.activeQuests) {
+      if (!quest || quest.status !== 'in_progress') continue;
+      for (const obj of quest.objectives || []) {
+        if (obj.type !== 'explore' && obj.type !== 'escort') continue;
+        if (!obj.waypoint) continue;
+        if (obj.currentCount >= obj.requiredCount) continue;
+        if (obj.zoneId && zoneId && obj.zoneId !== zoneId) continue;
+        waypoints.push({ x: obj.waypoint.x, z: obj.waypoint.z, label: obj.cell });
+      }
+    }
+    this.engine.setMinimapWaypoints(waypoints);
   }
 
   allocateStatPoint(stat: string): void {

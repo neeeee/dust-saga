@@ -29,6 +29,8 @@ import {
   SUMMON_STATS, BANISH_RADIUS,
   getGloomRecoilRate,
   isZonePvpEnabled,
+  QuestStatus, QuestType,
+  worldToCell, cellLabel,
 } from '@dust-saga/shared';
 import { AuthManager } from '../auth/AuthManager';
 import { CombatSystem } from '../ecs/systems/CombatSystem';
@@ -583,26 +585,57 @@ export class NetworkServer implements NetworkContext {
       const progress = this.questSys.onEnemyKill(recipient, enemyType);
       if (progress.progressed.length === 0 && progress.completed.length === 0) continue;
 
+      const message = progress.completed.map(qid => {
+        const def = this.questSys.getQuestDefinition(qid);
+        return `Quest "${def?.title || qid}" completed! Return to the NPC.`;
+      }).join('\n');
+
       this.sendToPlayer(recipient.characterId, {
         type: PacketType.QUEST_PROGRESS,
         timestamp: Date.now(),
-        data: { quests: recipient.quests }
-      });
-
-      progress.completed.forEach(questId => {
-        const def = this.questSys.getQuestDefinition(questId);
-        this.sendToPlayer(recipient.characterId, {
-          type: PacketType.QUEST_PROGRESS,
-          timestamp: Date.now(),
-          data: {
-            questId,
-            status: 'completed',
-            quests: recipient.quests,
-            message: `Quest "${def?.title || questId}" completed! Return to the NPC.`
-          }
-        });
+        data: {
+          quests: recipient.quests,
+          completed: progress.completed,
+          ...(message ? { message } : {}),
+        }
       });
     }
+  }
+
+  checkQuestCellEntry(session: PlayerSession): void {
+    const hasExploreObjective = session.quests.some(
+      q => q.status === QuestStatus.IN_PROGRESS && q.objectives.some(
+        o => (o.type === QuestType.EXPLORE || o.type === QuestType.ESCORT) && o.cell && o.currentCount < o.requiredCount
+      )
+    );
+    if (!hasExploreObjective) return;
+
+    const zoneDef = getZoneDefinition(session.zoneId);
+    if (!zoneDef) return;
+
+    const cell = worldToCell(session.position.x, session.position.z, zoneDef.size);
+    if (!cell) return;
+    const label = cellLabel(cell);
+    if (session.lastQuestCell === label) return;
+    session.lastQuestCell = label;
+
+    const progress = this.questSys.onCellEnter(session, label, session.zoneId);
+    if (progress.progressed.length === 0 && progress.completed.length === 0) return;
+
+    const message = progress.completed.map(qid => {
+      const def = this.questSys.getQuestDefinition(qid);
+      return `Quest "${def?.title || qid}" completed! Return to the NPC.`;
+    }).join('\n');
+
+    this.sendToPlayer(session.characterId, {
+      type: PacketType.QUEST_PROGRESS,
+      timestamp: Date.now(),
+      data: {
+        quests: session.quests,
+        completed: progress.completed,
+        ...(message ? { message } : {}),
+      }
+    });
   }
 
   handleEnemyKill(enemyId: string, killerId: string): void {
@@ -1766,7 +1799,7 @@ export class NetworkServer implements NetworkContext {
         type: 'player',
         position: player.position,
         rotation: player.rotation,
-        data: { name: player.characterName, class: player.jobId, race: player.race, jobId: player.jobId, level: player.stats.level, health: player.stats.health, maxHealth: player.stats.maxHealth, modelFile: JOB_DEFINITIONS[player.jobId]?.modelFile, invisible: player.statusEffects?.some(e => e.type === StatusEffectType.INVISIBLE) || false, isResting: player.isResting }
+        data: { name: player.characterName, class: player.jobId, race: player.race, jobId: player.jobId, level: player.stats.level, health: player.stats.health, maxHealth: player.stats.maxHealth, modelFile: JOB_DEFINITIONS[player.jobId]?.modelFile, invisible: player.statusEffects?.some(e => e.type === StatusEffectType.INVISIBLE) || false, isResting: player.isResting, role: player.role }
       });
     });
 

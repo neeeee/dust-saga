@@ -49,8 +49,44 @@ function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void
       return def?.npcId === data.npcId || staticQuestIds.includes(qid);
     })
     .map(qid => {
-      const def = ctx.questSys.getQuestDefinition(qid);
-      return { id: qid, title: def?.title || qid, description: def?.description || '' };
+      const def = ctx.questSys.getQuestDefinition(qid)!;
+      return {
+        id: qid,
+        title: def.title,
+        description: def.description || '',
+        offerDialog: def.offerDialog,
+        rewards: def.rewards,
+        requiredLevel: def.requiredLevel,
+      };
+    });
+
+  const activeQuests = session.quests
+    .filter(sq => {
+      const def = ctx.questSys.getQuestDefinition(sq.questId);
+      if (!def) return false;
+      return def.npcId === data.npcId || staticQuestIds.includes(sq.questId);
+    })
+    .map(sq => {
+      const def = ctx.questSys.getQuestDefinition(sq.questId)!;
+      return {
+        id: sq.questId,
+        title: sq.title || def.title,
+        description: sq.description || def.description,
+        status: sq.status,
+        objectives: sq.objectives.map(o => ({
+          id: o.id,
+          type: o.type,
+          targetName: o.targetName,
+          requiredCount: o.requiredCount,
+          currentCount: o.currentCount,
+          cell: o.cell,
+          waypoint: o.waypoint,
+        })),
+        inProgressDialog: def.inProgressDialog,
+        turnInDialog: def.turnInDialog,
+        rewards: def.rewards,
+        turnInReady: sq.status === 'completed',
+      };
     });
 
   ctx.sendToPlayer(characterId, {
@@ -61,7 +97,8 @@ function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void
       npcName: npc.name,
       dialog,
       shopItems: npc.type === 'merchant' || npc.type === 'blacksmith' ? (npc.shopItems || []).map(id => getItem(id)).filter(Boolean) : undefined,
-      availableQuests
+      availableQuests,
+      activeQuests
     }
   });
 

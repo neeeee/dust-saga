@@ -2,7 +2,7 @@ import {
   Packet, PacketType, PlayerSession,
   JOB_DEFINITIONS, createDefaultSkillProficiencies, createDefaultSkillAdeptness,
   getDesignJobId, getBaseClassForJob, normalizeEquipment,
-  JobId, BaseClass, MAX_LEVEL,
+  JobId, BaseClass, MAX_LEVEL, AccountRole,
   PartyVisibility, LootRule,
   ITEM_DATABASE,
 } from '@dust-saga/shared';
@@ -102,6 +102,7 @@ export class DummyManager {
       gold: 0,
       equipment: normalizeEquipment(null),
       quests: [],
+      role: AccountRole.PLAYER,
     };
 
     this.deps.getPlayers().set(dummyId, dummySession);

@@ -1,5 +1,5 @@
 import { EntityManager, System } from '../EntityManager';
-import { PlayerSession, JobId, BaseClass, StatType, InventoryItem } from '@dust-saga/shared';
+import { PlayerSession, JobId, BaseClass, StatType, InventoryItem, AccountRole } from '@dust-saga/shared';
 import {
   calculateDerivedStats,
   getExperienceToNextLevel,
@@ -197,9 +197,10 @@ export class PlayerSystem extends System {
         earring_2: null,
         necklace: null,
         belt: null,
-        ring_1: null,
-        ring_2: null,
+      ring_1: null,
+      ring_2: null,
       },
+      role: AccountRole.PLAYER,
       quests: []
     };
   }
