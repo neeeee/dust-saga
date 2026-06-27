@@ -35,7 +35,7 @@ import {
 import { AuthManager } from '../auth/AuthManager';
 import { CombatSystem } from '../ecs/systems/CombatSystem';
 import { AISystem } from '../ecs/systems/AISystem';
-import { LootSystem } from '../ecs/systems/LootSystem';
+import { LootSystem, LootInstance } from '../ecs/systems/LootSystem';
 import { PlayerSystem } from '../ecs/systems/PlayerSystem';
 import { SkillSystem } from '../ecs/systems/SkillSystem';
 import { PartySystem } from '../ecs/systems/PartySystem';
@@ -53,6 +53,7 @@ import { SummonCombatDeps } from '../world/SummonManager';
 import { MovementThrottle } from '../world/MovementThrottle';
 import { ZoneRegistry } from '../world/ZoneInstance';
 import { QuestSystem } from '../../systems/QuestSystem';
+import { CraftSystem } from '../../systems/CraftSystem';
 import { PresenceService } from '../presence/PresenceService';
 import { PacketRelay } from '../presence/PacketRelay';
 import { ZoneOwnership } from '../presence/ZoneOwnership';
@@ -79,6 +80,7 @@ export class NetworkServer implements NetworkContext {
   readonly spawnMgr: SpawnManager;
   readonly summonMgr: SummonManager;
   readonly questSys: QuestSystem;
+  readonly craftSys: CraftSystem;
   readonly state: ServerGameState;
   private tickRate: number = 30;
   private handlers: Map<PacketType, PacketHandler>;
@@ -155,6 +157,7 @@ export class NetworkServer implements NetworkContext {
     this.spawnMgr = new SpawnManager();
     this.summonMgr = new SummonManager();
     this.questSys = new QuestSystem();
+    this.craftSys = new CraftSystem();
     this.partySys = new PartySystem({
       redis: presenceOpts.redis,
       isConnected: presenceOpts.isRedisConnected,
@@ -509,7 +512,7 @@ export class NetworkServer implements NetworkContext {
     const partyData = this.partySys.getPartyData(partyId);
     if (!partyData) return;
 
-    const pool = this.partySys.getLootPool(partyId);
+    const pool = this.loot.listPartyPool(partyId);
     for (const member of partyData.members) {
       this.sendToPlayer(member.characterId, {
         type: PacketType.PARTY_UPDATE,
@@ -638,6 +641,143 @@ export class NetworkServer implements NetworkContext {
     });
   }
 
+  /**
+   * Unified loot distribution for an enemy kill. Replaces the four duplicated
+   * paths that used to inline this (handleEnemyKill, combat.onDeath,
+   * executeConeSkillInternal, applyAOEDamageToTargets). Honors the active
+   * party's loot rule (FFA / ROUND_ROBIN / NEED_GREED / POOL) so AOE and cone
+   * kills no longer bypass party distribution.
+   */
+  handleEnemyLoot(
+    killer: PlayerSession,
+    enemyType: string,
+    enemyPosition: { x: number; y: number; z: number }
+  ): void {
+    const enemyDef = getEnemyDefinition(enemyType);
+    if (!enemyDef) return;
+    const drops = this.loot.rollLootTable(enemyDef.lootTable);
+    if (drops.length === 0) return;
+
+    const sourceName = enemyDef.name || enemyType;
+    const party = this.partySys.getPartyForMember(killer.characterId);
+
+    // Solo: simple FFA bag (only the killer is around, but the bag broadcasts
+    // to the zone so anyone passing by could grab it).
+    if (!party || party.members.length <= 1) {
+      const bag = this.loot.spawnFFA(drops, enemyPosition, killer.zoneId, sourceName);
+      if (bag) this.broadcastLootSpawn(bag);
+      return;
+    }
+
+    const rule = this.loot.ruleOf(party.settings.lootRule);
+
+    switch (rule) {
+      case LootRule.FFA: {
+        const bag = this.loot.spawnFFA(drops, enemyPosition, killer.zoneId, sourceName, party.partyId, rule);
+        if (bag) this.broadcastLootSpawn(bag);
+        break;
+      }
+      case LootRule.ROUND_ROBIN: {
+        const member = this.loot.pickRoundRobin(party);
+        const bag = this.loot.spawnAssigned(drops, enemyPosition, killer.zoneId, sourceName, member.characterId, party.partyId, rule);
+        if (bag) this.broadcastLootSpawn(bag);
+        break;
+      }
+      case LootRule.POOL: {
+        for (const d of drops) {
+          const entry = this.loot.addToPartyPool(party.partyId, d);
+          if (!entry) continue;
+          for (const m of party.members) {
+            this.sendToPlayer(m.characterId, {
+              type: PacketType.PARTY_LOOT_ROLL,
+              timestamp: Date.now(),
+              data: { lootId: entry.lootId, itemId: entry.itemId, itemName: entry.itemName, quantity: entry.quantity, mode: 'pool' }
+            });
+          }
+        }
+        this.sendPartyUpdate(party.partyId);
+        break;
+      }
+      case LootRule.NEED_GREED: {
+        for (const d of drops) {
+          const entry = this.loot.startNeedGreedRoll(party.partyId, party.members, d);
+          if (!entry) continue;
+          for (const m of party.members) {
+            this.sendToPlayer(m.characterId, {
+              type: PacketType.PARTY_LOOT_ROLL,
+              timestamp: Date.now(),
+              data: { lootId: entry.lootId, itemId: entry.itemId, itemName: entry.itemName, quantity: entry.quantity, mode: 'need_greed' }
+            });
+          }
+        }
+        break;
+      }
+      default: {
+        const bag = this.loot.spawnFFA(drops, enemyPosition, killer.zoneId, sourceName);
+        if (bag) this.broadcastLootSpawn(bag);
+      }
+    }
+  }
+
+  private broadcastLootSpawn(bag: LootInstance): void {
+    this.broadcastInZone(bag.zoneId, {
+      type: PacketType.LOOT_SPAWN,
+      timestamp: Date.now(),
+      data: {
+        lootId: bag.id,
+        position: bag.position,
+        sourceName: bag.sourceName,
+        itemCount: bag.items.length,
+        items: bag.items.map(i => ({ id: i.id, itemId: i.itemId, quantity: i.quantity, rarity: i.rarity })),
+        assignedTo: bag.assignedTo,
+        assignmentExpiresAt: bag.assignmentExpiresAt,
+      }
+    });
+  }
+
+  /** Tick loot bag expiry + need/greed roll timeouts. Broadcasts LOOT_DESPAWN. */
+  tickLootExpiry(): void {
+    const expiredBags = this.loot.tickExpiry();
+    for (const bag of expiredBags) {
+      this.broadcastInZone(bag.zoneId, {
+        type: PacketType.LOOT_DESPAWN,
+        timestamp: Date.now(),
+        data: { lootId: bag.id }
+      });
+    }
+    const expiredRolls = this.loot.expiredRolls();
+    for (const r of expiredRolls) {
+      const result = this.loot.resolveRoll(r.partyId, r.lootId);
+      if (!result) continue;
+      const party = this.partySys.getPartyData(r.partyId);
+      if (!party) continue;
+      for (const m of party.members) {
+        this.sendToPlayer(m.characterId, {
+          type: PacketType.PARTY_LOOT_RESULT,
+          timestamp: Date.now(),
+          data: {
+            lootId: r.lootId,
+            itemId: result.entry.itemId,
+            itemName: result.entry.itemName,
+            quantity: result.entry.quantity,
+            winnerId: result.winnerId,
+          }
+        });
+      }
+      if (result.winnerId) {
+        const ws = this.state.players.get(result.winnerId);
+        if (ws) {
+          this.playerSys.addItemToInventory(ws, result.entry.itemId, result.entry.quantity);
+          this.sendToPlayer(result.winnerId, {
+            type: PacketType.INVENTORY_UPDATE,
+            timestamp: Date.now(),
+            data: { inventory: ws.inventory, equipment: ws.equipment }
+          });
+        }
+      }
+    }
+  }
+
   handleEnemyKill(enemyId: string, killerId: string): void {
     const enemy = this.spawnMgr.getEnemy(enemyId);
     if (!enemy) return;
@@ -660,61 +800,7 @@ export class NetworkServer implements NetworkContext {
 
       this.grantQuestKillCredit(killer, enemy.enemyType, killer.zoneId);
 
-      const lootItems = this.loot.generateLoot(enemyDef.lootTable, enemy.position, killerId);
-      const party = this.partySys.getPartyForMember(killerId);
-      if (party) {
-        lootItems.forEach(loot => {
-          if (party.settings.lootRule === LootRule.POOL) {
-            const pool = this.partySys.getLootPool(party.partyId);
-            if (pool.length < MAX_LOOT_POOL) {
-              const itemName = getItem(loot.itemId)?.name || loot.itemId;
-              this.partySys.addLootToPool(party.partyId, loot.id, loot.itemId, itemName, loot.quantity);
-              for (const m of party.members) {
-                this.sendToPlayer(m.characterId, {
-                  type: PacketType.PARTY_LOOT_ROLL,
-                  timestamp: Date.now(),
-                  data: { lootId: loot.id, itemId: loot.itemId, itemName, quantity: loot.quantity }
-                });
-              }
-              this.sendPartyUpdate(party.partyId);
-            } else {
-              const winnerId = this.partySys.distributeLootRandom(party.partyId, loot.itemId, getItem(loot.itemId)?.name || loot.itemId, loot.quantity);
-              if (winnerId) {
-                const ws = this.state.players.get(winnerId);
-                if (ws) {
-                  this.playerSys.addItemToInventory(ws, loot.itemId, loot.quantity);
-                  this.sendToPlayer(winnerId, {
-                    type: PacketType.INVENTORY_UPDATE,
-                    timestamp: Date.now(),
-                    data: { inventory: ws.inventory, equipment: ws.equipment }
-                  });
-                }
-              }
-            }
-          } else {
-            const winnerId = this.partySys.distributeLootRandom(party.partyId, loot.itemId, getItem(loot.itemId)?.name || loot.itemId, loot.quantity);
-            if (winnerId) {
-              const ws = this.state.players.get(winnerId);
-              if (ws) {
-                this.playerSys.addItemToInventory(ws, loot.itemId, loot.quantity);
-                this.sendToPlayer(winnerId, {
-                  type: PacketType.INVENTORY_UPDATE,
-                  timestamp: Date.now(),
-                  data: { inventory: ws.inventory, equipment: ws.equipment }
-                });
-              }
-            }
-          }
-        });
-      } else {
-        lootItems.forEach(loot => {
-          this.broadcastInZone(killer.zoneId, {
-            type: PacketType.LOOT_SPAWN,
-            timestamp: Date.now(),
-            data: loot
-          });
-        });
-      }
+      this.handleEnemyLoot(killer, enemy.enemyType, enemy.position);
     }
 
     enemy.state = 'dead';
@@ -1414,61 +1500,7 @@ export class NetworkServer implements NetworkContext {
 
         this.grantQuestKillCredit(killer, enemy.enemyType, killer.zoneId);
 
-        const lootItems = this.loot.generateLoot(enemyDef.lootTable, enemy.position, killerId);
-        const party = this.partySys.getPartyForMember(killerId);
-        if (party) {
-          lootItems.forEach(loot => {
-            if (party.settings.lootRule === LootRule.POOL) {
-              const pool = this.partySys.getLootPool(party.partyId);
-              if (pool.length < MAX_LOOT_POOL) {
-                const itemName = getItem(loot.itemId)?.name || loot.itemId;
-                this.partySys.addLootToPool(party.partyId, loot.id, loot.itemId, itemName, loot.quantity);
-                for (const m of party.members) {
-                  this.sendToPlayer(m.characterId, {
-                    type: PacketType.PARTY_LOOT_ROLL,
-                    timestamp: Date.now(),
-                    data: { lootId: loot.id, itemId: loot.itemId, itemName, quantity: loot.quantity }
-                  });
-                }
-                this.sendPartyUpdate(party.partyId);
-              } else {
-                const winnerId = this.partySys.distributeLootRandom(party.partyId, loot.itemId, getItem(loot.itemId)?.name || loot.itemId, loot.quantity);
-                if (winnerId) {
-                  const ws = this.state.players.get(winnerId);
-                  if (ws) {
-                    this.playerSys.addItemToInventory(ws, loot.itemId, loot.quantity);
-                    this.sendToPlayer(winnerId, {
-                      type: PacketType.INVENTORY_UPDATE,
-                      timestamp: Date.now(),
-                      data: { inventory: ws.inventory, equipment: ws.equipment }
-                    });
-                  }
-                }
-              }
-            } else {
-              const winnerId = this.partySys.distributeLootRandom(party.partyId, loot.itemId, getItem(loot.itemId)?.name || loot.itemId, loot.quantity);
-              if (winnerId) {
-                const ws = this.state.players.get(winnerId);
-                if (ws) {
-                  this.playerSys.addItemToInventory(ws, loot.itemId, loot.quantity);
-                  this.sendToPlayer(winnerId, {
-                    type: PacketType.INVENTORY_UPDATE,
-                    timestamp: Date.now(),
-                    data: { inventory: ws.inventory, equipment: ws.equipment }
-                  });
-                }
-              }
-            }
-          });
-        } else {
-          lootItems.forEach(loot => {
-            this.broadcastInZone(killer.zoneId, {
-              type: PacketType.LOOT_SPAWN,
-              timestamp: Date.now(),
-              data: loot
-            });
-          });
-        }
+        this.handleEnemyLoot(killer, enemy.enemyType, enemy.position);
       }
 
       enemy.state = 'dead';
@@ -1700,6 +1732,8 @@ export class NetworkServer implements NetworkContext {
           inventory: session.inventory,
           equipment: session.equipment,
           gold: session.gold,
+          quests: session.quests,
+          recipes: session.learnedRecipes,
         }).catch(err => console.error('Failed to save character on disconnect:', err));
 
         this.aoeZoneMgr.cleanupOwner(characterId);
@@ -2140,10 +2174,7 @@ export class NetworkServer implements NetworkContext {
               timestamp: Date.now(),
               data: { experience: enemyDef.experience, totalExperience: session.stats.experience, level: session.stats.level }
             });
-            const lootItems = this.loot.generateLoot(enemyDef.lootTable, enemy.position, characterId);
-            lootItems.forEach(loot => {
-              this.broadcastInZone(session.zoneId, { type: PacketType.LOOT_SPAWN, timestamp: Date.now(), data: loot });
-            });
+            this.handleEnemyLoot(session, enemy.enemyType, enemy.position);
           }
           this.broadcastInZone(session.zoneId, { type: PacketType.DEATH, timestamp: Date.now(), data: { entityId: entry.id, killerId: characterId } });
           this.broadcastInZone(session.zoneId, { type: PacketType.ENTITY_DESPAWN, timestamp: Date.now(), data: { entityId: entry.id } });
@@ -2351,13 +2382,7 @@ export class NetworkServer implements NetworkContext {
               timestamp: Date.now(),
               data: { characterId, stats: session.stats }
             });
-            const lootItems = this.loot.generateLoot(enemyDef.lootTable, enemy.position, characterId);
-            lootItems.forEach(loot => {
-              batchEvents.push({
-                type: PacketType.LOOT_SPAWN,
-                data: loot
-              });
-            });
+            this.handleEnemyLoot(session, enemy.enemyType, enemy.position);
           }
           batchEvents.push({
             type: PacketType.DEATH,
@@ -2862,6 +2887,7 @@ export class NetworkServer implements NetworkContext {
     this.tickKnockback();
     this.updateEnemySpatialHash();
     this.broadcastEntityStates();
+    this.tickLootExpiry();
   }
 
   private tickPlayerUpdates(now: number): void {

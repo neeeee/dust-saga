@@ -108,6 +108,7 @@ async function handleLogout(ctx: NetworkContext, socket: Socket, _data: any): Pr
         equipment: session.equipment,
         gold: session.gold,
         quests: session.quests,
+        recipes: session.learnedRecipes,
       }).catch(err => console.error('Failed to save character on logout:', err));
 
       ctx.cleanupPlayerZoneResources(session);
@@ -200,6 +201,10 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
       const parsed = typeof char.character_quests === 'string' ? JSON.parse(char.character_quests) : char.character_quests;
       if (Array.isArray(parsed)) session.quests = parsed;
     }
+    if (char.character_recipes) {
+      const parsed = typeof char.character_recipes === 'string' ? JSON.parse(char.character_recipes) : char.character_recipes;
+      if (Array.isArray(parsed)) session.learnedRecipes = parsed;
+    }
 
     ctx.playerSys.recalcStats(session);
 
@@ -242,7 +247,8 @@ async function handleCharacterSelect(ctx: NetworkContext, socket: Socket, data: 
       skillAdeptness: session.skillAdeptness,
       statBreakdown: session.statBreakdown,
       racialPassive: session.racialPassive,
-      role: session.role
+      role: session.role,
+      learnedRecipes: session.learnedRecipes || []
     }
   });
 
@@ -295,6 +301,7 @@ async function handleReturnToCharacterSelect(ctx: NetworkContext, socket: Socket
       equipment: session.equipment,
       gold: session.gold,
       quests: session.quests,
+      recipes: session.learnedRecipes,
     }).catch(err => console.error('Failed to save character on logout:', err));
 
     ctx.cleanupPlayerZoneResources(session);

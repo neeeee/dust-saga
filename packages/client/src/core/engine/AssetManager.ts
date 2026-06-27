@@ -10,7 +10,8 @@ import {
   MeshBuilder,
   DynamicTexture,
   AssetContainer,
-  Mesh
+  Mesh,
+  TransformNode
 } from '@babylonjs/core';
 
 export class AssetManager {
@@ -259,29 +260,81 @@ export class AssetManager {
     });
   }
 
+  /**
+   * Spawn a visible loot beacon at a ground position. Old version was a
+   * 10cm flat disc that was basically invisible — this version is a tall
+   * glowing pillar with a bobbing gem on top so it can be spotted from
+   * across the zone.
+   */
   createLootBeacon(position: Vector3): AbstractMesh {
-    const beacon = MeshBuilder.CreateCylinder(`loot_beacon_${Date.now()}`, {
-      height: 0.1,
-      diameter: 0.5,
+    const id = Date.now();
+
+    // Root transform that we return — disposing it cascades to children.
+    const root = new TransformNode(`loot_root_${id}`, this.scene);
+    root.position = new Vector3(position.x, position.y, position.z);
+
+    // Tall thin pillar of light — visible from far away.
+    const pillar = MeshBuilder.CreateCylinder(`loot_pillar_${id}`, {
+      height: 3,
+      diameterTop: 0.05,
+      diameterBottom: 0.4,
       tessellation: 8
     }, this.scene);
+    pillar.parent = root;
+    pillar.position.y = 1.5;
 
-    const mat = new StandardMaterial(`loot_mat_${Date.now()}`, this.scene);
-    mat.diffuseColor = new Color3(1, 0.85, 0);
-    mat.emissiveColor = new Color3(0.8, 0.65, 0);
-    mat.alpha = 0.7;
-    beacon.material = mat;
+    const pillarMat = new StandardMaterial(`loot_pillar_mat_${id}`, this.scene);
+    pillarMat.diffuseColor = new Color3(1, 0.85, 0);
+    pillarMat.emissiveColor = new Color3(1, 0.8, 0.2);
+    pillarMat.alpha = 0.45;
+    pillarMat.disableLighting = true;
+    pillar.material = pillarMat;
 
-    beacon.position = position;
+    // Small glowing gem bobbing at the top — the "treasure" indicator.
+    const gem = MeshBuilder.CreateIcoSphere(`loot_gem_${id}`, {
+      radius: 0.25,
+      subdivisions: 1
+    }, this.scene);
+    gem.parent = root;
 
+    const gemMat = new StandardMaterial(`loot_gem_mat_${id}`, this.scene);
+    gemMat.diffuseColor = new Color3(1, 0.85, 0);
+    gemMat.emissiveColor = new Color3(1, 0.9, 0.4);
+    gemMat.disableLighting = true;
+    gem.material = gemMat;
+
+    // Flat ring on the ground so the beacon is anchored visually.
+    const ring = MeshBuilder.CreateTorus(`loot_ring_${id}`, {
+      diameter: 1.2,
+      thickness: 0.08,
+      tessellation: 16
+    }, this.scene);
+    ring.parent = root;
+    ring.position.y = 0.04;
+    const ringMat = new StandardMaterial(`loot_ring_mat_${id}`, this.scene);
+    ringMat.diffuseColor = new Color3(0.9, 0.7, 0);
+    ringMat.emissiveColor = new Color3(0.6, 0.45, 0);
+    ringMat.disableLighting = true;
+    ring.material = ringMat;
+
+    // Animate the gem (bob + spin) — pillar stays static.
     let elapsed = 0;
-    this.scene.onBeforeRenderObservable.add(() => {
+    const observer = this.scene.onBeforeRenderObservable.add(() => {
       elapsed += this.scene.getEngine().getDeltaTime() / 1000;
-      beacon.position.y = position.y + 0.3 + Math.sin(elapsed * 3) * 0.2;
-      beacon.rotation.y += 0.03;
+      gem.position.y = 3 + Math.sin(elapsed * 3) * 0.25;
+      gem.rotation.y += 0.04;
+      gem.rotation.x = elapsed * 0.7;
     });
 
-    return beacon;
+    // Stash observer so we can clean it up on dispose.
+    (root as any).__lootObserver = observer;
+    const baseDispose = root.dispose.bind(root);
+    root.dispose = (doNotRecurse?: boolean, disposeMaterialAndTextures?: boolean) => {
+      this.scene.onBeforeRenderObservable.remove(observer);
+      baseDispose(doNotRecurse, disposeMaterialAndTextures);
+    };
+
+    return root as unknown as AbstractMesh;
   }
 
   createHealthBar(entityId: string): { bg: AbstractMesh; fg: AbstractMesh } {

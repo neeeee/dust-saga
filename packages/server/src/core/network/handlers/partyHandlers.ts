@@ -10,7 +10,6 @@ export function registerHandlers(registry: Map<PacketType, PacketHandler>): void
   registry.set(PacketType.PARTY_JOIN_REQUEST, handlePartyJoinRequest);
   registry.set(PacketType.PARTY_LEAVE, handlePartyLeave);
   registry.set(PacketType.PARTY_KICK, handlePartyKick);
-  registry.set(PacketType.PARTY_LOOT_ROLL, handlePartyLootRoll);
   registry.set(PacketType.PARTY_PROMOTE, handlePartyPromote);
 }
 
@@ -267,52 +266,7 @@ function handlePartyPromote(ctx: NetworkContext, socket: Socket, data: any): voi
   }
 }
 
-function handlePartyLootRoll(ctx: NetworkContext, socket: Socket, data: any): void {
-  const characterId = ctx.findCharacterBySocket(socket.id);
-  if (!characterId) return;
-
-  const partyId = ctx.partySys.getPartyForMember(characterId)?.partyId;
-  if (!partyId) return;
-
-  const roll = data.roll || Math.floor(Math.random() * 100) + 1;
-  const item = ctx.partySys.rollOnLoot(partyId, data.lootId, characterId, roll);
-  if (!item) return;
-
-  const party = ctx.partySys.getPartyForMember(characterId);
-  if (!party) return;
-
-  const allRolled = party.members.every(m => item.rolls[m.characterId] !== undefined);
-  if (!allRolled) {
-    ctx.sendPartyUpdate(partyId);
-    return;
-  }
-
-  const result = ctx.partySys.resolveLootRoll(partyId, data.lootId);
-  if (!result) return;
-
-  for (const m of party.members) {
-    ctx.sendToPlayer(m.characterId, {
-      type: PacketType.PARTY_LOOT_RESULT,
-      timestamp: Date.now(),
-      data: {
-        lootId: data.lootId,
-        itemName: result.item.itemName,
-        winnerId: result.winnerId,
-        winnerName: ctx.state.players.get(result.winnerId)?.characterName || 'Player',
-        rolls: result.item.rolls
-      }
-    });
-  }
-
-  const winnerSession = ctx.state.players.get(result.winnerId);
-  if (winnerSession) {
-    ctx.playerSys.addItemToInventory(winnerSession, result.item.itemId, result.item.quantity);
-    ctx.sendToPlayer(result.winnerId, {
-      type: PacketType.INVENTORY_UPDATE,
-      timestamp: Date.now(),
-      data: { inventory: winnerSession.inventory, equipment: winnerSession.equipment }
-    });
-  }
-
-  ctx.sendPartyUpdate(partyId);
+function handlePartyLootRoll(_ctx: NetworkContext, _socket: Socket, _data: any): void {
+  // Deprecated: loot rolls are now submitted via PARTY_LOOT_ROLL_SUBMIT and
+  // resolved by LootSystem. PARTY_LOOT_ROLL is server→client only.
 }

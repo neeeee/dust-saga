@@ -107,6 +107,7 @@ export interface PlayerSession {
   statsDirty?: boolean;
   resistCache?: Map<string, number>;
   lastQuestCell?: string | null;
+  learnedRecipes?: string[];
 }
 
 export interface EnmityEntry {

@@ -52,7 +52,9 @@ export const ENEMY_DATABASE: Record<string, EnemyDefinition> = {
       rolls: 1,
       drops: [
         { itemId: 'health_potion', quantity: 1, chance: 0.3 },
-        { itemId: 'wolf_pelt', quantity: 1, chance: 0.2 }
+        { itemId: 'wolf_pelt', quantity: 1, chance: 0.2 },
+        { itemId: 'recipe_health_potion', quantity: 1, chance: 0.04 },
+        { itemId: 'recipe_leather_armor', quantity: 1, chance: 0.03 }
       ]
     }
   },
@@ -76,7 +78,9 @@ export const ENEMY_DATABASE: Record<string, EnemyDefinition> = {
       drops: [
         { itemId: 'wolf_pelt', quantity: 1, chance: 0.5 },
         { itemId: 'health_potion', quantity: 1, chance: 0.2 },
-        { itemId: 'leather_boots', quantity: 1, chance: 0.05 }
+        { itemId: 'leather_boots', quantity: 1, chance: 0.05 },
+        { itemId: 'recipe_leather_boots', quantity: 1, chance: 0.04 },
+        { itemId: 'recipe_leather_armor', quantity: 1, chance: 0.03 }
       ]
     }
   },
@@ -101,7 +105,10 @@ export const ENEMY_DATABASE: Record<string, EnemyDefinition> = {
         { itemId: 'goblin_ear', quantity: 1, chance: 0.6 },
         { itemId: 'iron_sword', quantity: 1, chance: 0.03 },
         { itemId: 'health_potion', quantity: 1, chance: 0.3 },
-        { itemId: 'mana_potion', quantity: 1, chance: 0.2 }
+        { itemId: 'mana_potion', quantity: 1, chance: 0.2 },
+        { itemId: 'recipe_iron_sword', quantity: 1, chance: 0.05 },
+        { itemId: 'recipe_hunter_crossbow', quantity: 1, chance: 0.04 },
+        { itemId: 'recipe_mana_potion', quantity: 1, chance: 0.04 }
       ]
     }
   },
@@ -126,7 +133,10 @@ export const ENEMY_DATABASE: Record<string, EnemyDefinition> = {
         { itemId: 'chainmail', quantity: 1, chance: 0.05 },
         { itemId: 'steel_blade', quantity: 1, chance: 0.03 },
         { itemId: 'health_potion', quantity: 2, chance: 0.4 },
-        { itemId: 'ancient_scroll', quantity: 1, chance: 0.1 }
+        { itemId: 'ancient_scroll', quantity: 1, chance: 0.1 },
+        { itemId: 'recipe_chainmail', quantity: 1, chance: 0.05 },
+        { itemId: 'recipe_steel_blade', quantity: 1, chance: 0.04 },
+        { itemId: 'recipe_fire_magic_gem', quantity: 1, chance: 0.03 }
       ]
     }
   },
@@ -152,7 +162,12 @@ export const ENEMY_DATABASE: Record<string, EnemyDefinition> = {
         { itemId: 'swift_boots', quantity: 1, chance: 0.03 },
         { itemId: 'ancient_scroll', quantity: 1, chance: 0.2 },
         { itemId: 'health_potion', quantity: 3, chance: 0.5 },
-        { itemId: 'mana_potion', quantity: 2, chance: 0.4 }
+        { itemId: 'mana_potion', quantity: 2, chance: 0.4 },
+        { itemId: 'recipe_plate_armor', quantity: 1, chance: 0.05 },
+        { itemId: 'recipe_thunder_helm', quantity: 1, chance: 0.03 },
+        { itemId: 'recipe_dark_magic_gem', quantity: 1, chance: 0.05 },
+        { itemId: 'recipe_mysterious_potion', quantity: 1, chance: 0.03 },
+        { itemId: 'recipe_flame_amulet', quantity: 1, chance: 0.02 }
       ]
     }
   },

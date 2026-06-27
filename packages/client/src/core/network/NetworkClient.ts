@@ -250,11 +250,35 @@ export class NetworkClient {
     });
   }
 
-  pickupLoot(lootId: string): void {
+  pickupLoot(lootId: string, itemId?: string, takeAll: boolean = false): void {
     this.sendPacket({
       type: PacketType.LOOT_PICKUP,
       timestamp: Date.now(),
+      data: itemId ? { lootId, itemId } : { lootId, takeAll }
+    });
+  }
+
+  takePartyLoot(lootId: string): void {
+    this.sendPacket({
+      type: PacketType.LOOT_TAKE,
+      timestamp: Date.now(),
       data: { lootId }
+    });
+  }
+
+  setPartyLootRule(rule: string): void {
+    this.sendPacket({
+      type: PacketType.PARTY_LOOT_RULE_CHANGE,
+      timestamp: Date.now(),
+      data: { rule }
+    });
+  }
+
+  submitLootRoll(lootId: string, kind: 'need' | 'greed' | 'pass'): void {
+    this.sendPacket({
+      type: PacketType.PARTY_LOOT_ROLL_SUBMIT,
+      timestamp: Date.now(),
+      data: { lootId, kind }
     });
   }
 

@@ -98,7 +98,8 @@ function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void
       dialog,
       shopItems: npc.type === 'merchant' || npc.type === 'blacksmith' ? (npc.shopItems || []).map(id => getItem(id)).filter(Boolean) : undefined,
       availableQuests,
-      activeQuests
+      activeQuests,
+      craftProfession: npc.craftProfession,
     }
   });
 

@@ -690,9 +690,37 @@ export class GameEngine {
     this.assetManager.createDamageNumber(damage, group.root.position, isCritical, element, miss);
   }
 
-  createLootBeacon(position: V3): void {
-    if (!this.assetManager) return;
-    this.assetManager.createLootBeacon(position);
+  private lootBeacons: Map<string, AbstractMesh> = new Map();
+
+  createLootBeacon(lootId: string, position: V3): AbstractMesh | null {
+    if (!this.assetManager) return null;
+    const existing = this.lootBeacons.get(lootId);
+    if (existing) return existing;
+    const mesh = this.assetManager.createLootBeacon(new V3(position.x, position.y, position.z));
+    this.lootBeacons.set(lootId, mesh);
+    return mesh;
+  }
+
+  removeLootBeacon(lootId: string): void {
+    const mesh = this.lootBeacons.get(lootId);
+    if (mesh) {
+      mesh.dispose();
+      this.lootBeacons.delete(lootId);
+    }
+  }
+
+  clearLootBeacons(): void {
+    for (const mesh of this.lootBeacons.values()) mesh.dispose();
+    this.lootBeacons.clear();
+  }
+
+  /** Snapshot of current loot beacon ids → world positions, for nearest-loot lookup. */
+  getLootBeaconPositions(): Array<{ lootId: string; x: number; y: number; z: number }> {
+    const out: Array<{ lootId: string; x: number; y: number; z: number }> = [];
+    for (const [lootId, mesh] of this.lootBeacons) {
+      out.push({ lootId, x: mesh.position.x, y: mesh.position.y, z: mesh.position.z });
+    }
+    return out;
   }
 
   removeEntity(entityId: string): void {

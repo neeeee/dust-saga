@@ -1,9 +1,12 @@
+import { CraftProfession } from './recipes';
+
 export enum NPCType {
   MERCHANT = 'merchant',
   QUEST_GIVER = 'quest_giver',
   BLACKSMITH = 'blacksmith',
   HEALER = 'healer',
   BANKER = 'banker',
+  CRAFTSMAN = 'craftsman',
   GENERIC = 'generic'
 }
 
@@ -29,4 +32,6 @@ export interface NPCDefinition {
   dialogs: NPCDialog[];
   shopItems?: string[];
   quests?: string[];
+  /** For CRAFTSMAN NPCs: which profession this NPC crafts for. */
+  craftProfession?: CraftProfession;
 }

@@ -111,6 +111,27 @@
         @complete-quest="handleCompleteQuest"
       />
 
+      <LootWindow
+        :visible="showLootWindow"
+        :loot-id="lootWindowState.lootId"
+        :source-name="lootWindowState.sourceName"
+        :items="lootWindowState.items"
+        @close="showLootWindow = false"
+        @take-item="handleTakeLootItem"
+        @take-all="handleTakeAllLoot"
+      />
+
+      <CraftWindow
+        :visible="showCraftWindow"
+        :npc-name="craftWindowState.npcName"
+        :profession="craftWindowState.profession"
+        :recipes="craftableRecipes"
+        :inventory="inventory"
+        :player-level="playerStats?.level || 1"
+        @close="showCraftWindow = false"
+        @craft="handleCraftRequest"
+      />
+
       <EnhancementWindow
         :visible="showEnhancement"
         :inventory="inventory"
@@ -157,7 +178,9 @@
         @leave-party="handlePartyLeave"
         @kick-member="handlePartyKick"
         @promote-member="handlePartyPromote"
-        @roll-loot="handlePartyLootRoll"
+        @change-loot-rule="handleChangeLootRule"
+        @submit-roll="handleSubmitLootRoll"
+        @take-loot="handleTakePartyLoot"
         @target-member="handlePartyTarget"
       />
 
@@ -242,9 +265,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import { GameClient } from './core/GameClient';
-import { PacketType, PlayerStats, StatPoints, PartyData, PartyLootItem, StatusEffectType } from '@dust-saga/shared';
+import { PacketType, PlayerStats, StatPoints, PartyData, PartyLootItem, StatusEffectType, getRecipe } from '@dust-saga/shared';
 import type { TradeState } from '@dust-saga/shared';
 import CharacterSelect from './ui/CharacterSelect.vue';
 import GameHUD from './ui/GameHUD.vue';
@@ -252,6 +275,8 @@ import ChatPanel from './ui/ChatPanel.vue';
 import InventoryUI from './ui/InventoryUI.vue';
 import QuestLog from './ui/QuestLog.vue';
 import DialogBox from './ui/DialogBox.vue';
+import LootWindow from './ui/LootWindow.vue';
+import CraftWindow from './ui/CraftWindow.vue';
 import NotificationPopup from './ui/NotificationPopup.vue';
 import StatAllocationPanel from './ui/StatAllocationPanel.vue';
 import SkillWindow from './ui/SkillWindow.vue';
@@ -286,6 +311,10 @@ const chatPanelRef = ref<any>(null);
 const showInventory = ref(false);
 const showQuests = ref(false);
 const showDialog = ref(false);
+const showLootWindow = ref(false);
+const lootWindowState = ref<{ lootId: string; sourceName: string; items: any[] }>({ lootId: '', sourceName: '', items: [] });
+const showCraftWindow = ref(false);
+const craftWindowState = ref<{ npcId: string; npcName: string; profession: any }>({ npcId: '', npcName: '', profession: undefined });
 const inventory = ref<any[]>([]);
 const equipment = ref<any>({});
 const quests = ref<any[]>([]);
@@ -473,6 +502,8 @@ function handleDialogOption(option: any) {
   } else if (option.action === 'open_enhancement') {
     closeDialog();
     showEnhancement.value = true;
+  } else if (option.action === 'craft') {
+    openCraftWindow();
   } else if (option.nextDialogId) {
     gameClient.interactNPC(currentDialogNPCId, option.nextDialogId);
   }
@@ -647,9 +678,21 @@ function handlePartyPromote(targetId: string) {
   gameClient.sendPartyPromote(targetId);
 }
 
-function handlePartyLootRoll(lootId: string) {
-  if (!gameClient) return;
-  gameClient.sendPartyLootRoll(lootId);
+function handlePartyLootRoll(_lootId: string) {
+  // deprecated — replaced by handleSubmitLootRoll with explicit kind.
+  // Kept as a no-op so legacy callers don't break.
+}
+
+function handleChangeLootRule(rule: string) {
+  gameClient?.setPartyLootRule(rule);
+}
+
+function handleSubmitLootRoll(lootId: string, kind: 'need' | 'greed' | 'pass') {
+  gameClient?.submitLootRoll(lootId, kind);
+}
+
+function handleTakePartyLoot(lootId: string) {
+  gameClient?.takePartyLoot(lootId);
 }
 
 function handleTradeAddItem(slot: number, quantity: number) {
@@ -709,6 +752,70 @@ function handleAcceptQuest(questId: string) {
   gameClient.acceptQuest(questId);
   closeDialog();
 }
+
+function handleOpenNearestLoot(): void {
+  if (!gameClient) return;
+  const nearest = gameClient.nearestLootBeacon(4);
+  if (!nearest) {
+    showLootWindow.value = false;
+    return;
+  }
+  const bag = (gameClient as any).lootBeacons.get(nearest.lootId);
+  if (!bag) return;
+  lootWindowState.value = {
+    lootId: nearest.lootId,
+    sourceName: bag.sourceName || 'Loot',
+    items: bag.items || [],
+  };
+  showLootWindow.value = true;
+}
+
+function handleTakeLootItem(lootId: string, itemId: string): void {
+  gameClient?.pickupLoot(lootId, itemId);
+  const bag = (gameClient as any).lootBeacons.get(lootId);
+  if (!bag || !bag.items || bag.items.length <= 1) {
+    showLootWindow.value = false;
+  } else {
+    lootWindowState.value = {
+      lootId,
+      sourceName: bag.sourceName || 'Loot',
+      items: bag.items.filter((i: any) => i.id !== itemId),
+    };
+  }
+}
+
+function handleTakeAllLoot(lootId: string): void {
+  gameClient?.pickupLoot(lootId, undefined, true);
+  showLootWindow.value = false;
+}
+
+function openCraftWindow(): void {
+  if (!gameClient) return;
+  const npcId = gameClient.currentNpcId;
+  const data = gameClient.getLastNpcDialog();
+  if (!npcId || !data) return;
+  craftWindowState.value = {
+    npcId,
+    npcName: data.npcName || 'Craftsman',
+    profession: data.craftProfession,
+  };
+  showCraftWindow.value = true;
+  closeDialog();
+}
+
+function handleCraftRequest(recipeId: string): void {
+  if (!gameClient) return;
+  gameClient.craft(recipeId, craftWindowState.value.npcId);
+}
+
+const craftableRecipes = computed(() => {
+  if (!craftWindowState.value.profession) return [];
+  const known = gameClient?.getLearnedRecipes() || [];
+  const profession = craftWindowState.value.profession;
+  return known
+    .map(id => getRecipe(id))
+    .filter((r): r is NonNullable<typeof r> => !!r && r.profession === profession);
+});
 
 function showNotification(message: string, type: string) {
   notification.value = { message, type, visible: true };
@@ -1070,6 +1177,9 @@ function handleGlobalKeyDown(e: KeyboardEvent) {
     showSkillWindow.value = !showSkillWindow.value;
   } else if (e.code === 'KeyR') {
     gameClient?.toggleRest();
+  } else if (e.code === 'KeyL') {
+    e.preventDefault();
+    handleOpenNearestLoot();
   } else if (e.code === 'Tab') {
     e.preventDefault();
     gameClient?.cycleTarget(e.shiftKey ? -1 : 1);

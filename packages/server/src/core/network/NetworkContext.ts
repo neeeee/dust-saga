@@ -19,6 +19,7 @@ import { SpawnManager } from '../world/SpawnManager';
 import { SummonManager } from '../world/SummonManager';
 import { DummyMeta } from '../world/DummyManager';
 import { QuestSystem } from '../../systems/QuestSystem';
+import { CraftSystem } from '../../systems/CraftSystem';
 import { PresenceService } from '../presence/PresenceService';
 import { ZoneOwnership } from '../presence/ZoneOwnership';
 
@@ -44,6 +45,7 @@ export interface NetworkContext {
   readonly spawnMgr: SpawnManager;
   readonly summonMgr: SummonManager;
   readonly questSys: QuestSystem;
+  readonly craftSys: CraftSystem;
   readonly presence: PresenceService;
   readonly zoneOwnership: ZoneOwnership;
 

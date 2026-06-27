@@ -23,6 +23,11 @@ export interface GameCallbacks {
   onSkillProficienciesUpdate: (skillProficiencies: any, skillAdeptness?: any) => void;
   onInventoryUpdate: (inventory: any, equipment: any) => void;
   onQuestUpdate: (quests: any) => void;
+  onLootBeaconsUpdate: (beacons: any[]) => void;
+  onLootRollPrompt: (data: any) => void;
+  onLootRollResult: (data: any) => void;
+  onRecipeLearn: (data: any) => void;
+  onCraftResult: (data: any) => void;
   onChatMessage: (sender: string, message: string, channel?: string) => void;
   onNotification: (message: string, type: string) => void;
   onStatusEffects: (effects: any[]) => void;
@@ -341,6 +346,7 @@ export class GameClient {
       }
       if (data.statBreakdown) this.statBreakdown = data.statBreakdown;
       this.accountRole = data.role || 'player';
+      this.learnedRecipes = Array.isArray(data.learnedRecipes) ? data.learnedRecipes.slice() : [];
       this.setActiveQuests(data.quests);
       this.callbacks.onStatsUpdate?.(data.stats);
       this.callbacks.onStatPointsUpdate?.(this.statPoints, this.unspentStatPoints, this.unspentSkillPoints, this.statBreakdown);
@@ -783,12 +789,42 @@ export class GameClient {
 
     this.network.onPacket(PacketType.LOOT_SPAWN, (packet: any) => {
       const loot = packet.data;
-      this.engine.createLootBeacon(new BabylonVector3(loot.position.x, loot.position.y, loot.position.z));
-      this.lootBeacons.set(loot.id, loot);
+      this.engine.createLootBeacon(loot.lootId, new BabylonVector3(loot.position.x, loot.position.y, loot.position.z));
+      this.lootBeacons.set(loot.lootId, loot);
+      this.callbacks.onLootBeaconsUpdate?.(this.getLootBeaconList());
     });
 
     this.network.onPacket(PacketType.LOOT_PICKUP, (packet: any) => {
-      this.lootBeacons.delete(packet.data.lootId);
+      const lootId = packet.data.lootId;
+      // Remove the beacon if the bag is now empty. For partial pickups the
+      // bag stays until empty.
+      const bag = this.lootBeacons.get(lootId);
+      if (bag) {
+        bag.itemCount = Math.max(0, (bag.itemCount || 0) - (packet.data.taken?.length || 0));
+        if (bag.itemCount === 0) {
+          this.engine.removeLootBeacon(lootId);
+          this.lootBeacons.delete(lootId);
+        }
+      }
+      this.callbacks.onLootBeaconsUpdate?.(this.getLootBeaconList());
+    });
+
+    this.network.onPacket(PacketType.LOOT_DESPAWN, (packet: any) => {
+      const lootId = packet.data.lootId;
+      this.engine.removeLootBeacon(lootId);
+      this.lootBeacons.delete(lootId);
+      this.callbacks.onLootBeaconsUpdate?.(this.getLootBeaconList());
+    });
+
+    this.network.onPacket(PacketType.PARTY_LOOT_ROLL, (packet: any) => {
+      this.callbacks.onLootRollPrompt?.(packet.data);
+    });
+
+    this.network.onPacket(PacketType.PARTY_LOOT_RESULT, (packet: any) => {
+      this.callbacks.onLootRollResult?.(packet.data);
+      if (packet.data.winnerId === this.playerId && packet.data.itemId) {
+        this.callbacks.onNotification?.(`Won: ${packet.data.itemName || packet.data.itemId}`, 'success');
+      }
     });
 
     this.network.onPacket(PacketType.QUEST_ACCEPT, (packet: any) => {
@@ -814,6 +850,22 @@ export class GameClient {
       if (Array.isArray(packet.data.quests)) this.setActiveQuests(packet.data.quests);
     });
 
+    this.network.onPacket(PacketType.RECIPE_LEARN, (packet: any) => {
+      if (Array.isArray(packet.data.learnedRecipes)) {
+        this.learnedRecipes = packet.data.learnedRecipes.slice();
+      }
+      this.callbacks.onRecipeLearn?.(packet.data);
+    });
+
+    this.network.onPacket(PacketType.CRAFT_RESULT, (packet: any) => {
+      this.callbacks.onCraftResult?.(packet.data);
+      if (packet.data.success) {
+        this.callbacks.onNotification?.(`Crafted: ${packet.data.producedItemId}`, 'success');
+      } else if (packet.data.error) {
+        this.callbacks.onNotification?.(packet.data.error, 'error');
+      }
+    });
+
     this.network.onPacket(PacketType.ENHANCEMENT_RESULT, (packet: any) => {
       if (packet.data.success) {
         this.callbacks.onNotification?.(`Enhancement successful! +${packet.data.enhancementLevel}`, 'success');
@@ -829,6 +881,8 @@ export class GameClient {
     });
 
     this.network.onPacket(PacketType.NPC_DIALOG, (packet: any) => {
+      this.lastNpcDialog = packet.data;
+      this.currentNpcId = packet.data?.npcId || this.currentNpcId;
       this.callbacks.onNPCDialog?.(packet.data);
     });
 
@@ -1197,6 +1251,57 @@ export class GameClient {
     this.network.abandonQuest(questId);
   }
 
+  pickupLoot(lootId: string, itemId?: string, takeAll: boolean = false): void {
+    this.network.pickupLoot(lootId, itemId, takeAll);
+  }
+
+  takePartyLoot(lootId: string): void {
+    this.network.takePartyLoot(lootId);
+  }
+
+  setPartyLootRule(rule: string): void {
+    this.network.setPartyLootRule(rule);
+  }
+
+  submitLootRoll(lootId: string, kind: 'need' | 'greed' | 'pass'): void {
+    this.network.submitLootRoll(lootId, kind);
+  }
+
+  /** Returns beacons sorted by distance to the player (nearest first). */
+  getLootBeaconList(): any[] {
+    const out: any[] = [];
+    if (!this.playerMesh) {
+      for (const [lootId, bag] of this.lootBeacons) out.push({ lootId, ...bag });
+      return out;
+    }
+    const px = this.playerMesh.position.x;
+    const pz = this.playerMesh.position.z;
+    const tmp: Array<{ dist: number; data: any }> = [];
+    for (const [lootId, bag] of this.lootBeacons) {
+      const dx = (bag.position?.x ?? 0) - px;
+      const dz = (bag.position?.z ?? 0) - pz;
+      tmp.push({ dist: dx * dx + dz * dz, data: { lootId, ...bag } });
+    }
+    tmp.sort((a, b) => a.dist - b.dist);
+    return tmp.map(t => t.data);
+  }
+
+  /** Nearest loot beacon within range, or null. */
+  nearestLootBeacon(maxRange: number = 4): { lootId: string; dist: number } | null {
+    if (!this.playerMesh) return null;
+    const px = this.playerMesh.position.x;
+    const pz = this.playerMesh.position.z;
+    let best: { lootId: string; dist: number } | null = null;
+    for (const [lootId, bag] of this.lootBeacons) {
+      const dx = (bag.position?.x ?? 0) - px;
+      const dz = (bag.position?.z ?? 0) - pz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > maxRange * maxRange) continue;
+      if (!best || d2 < best.dist) best = { lootId, dist: d2 };
+    }
+    return best;
+  }
+
   interactNPC(npcId: string, dialogId?: string): void {
     this.network.interactNPC(npcId, dialogId);
   }
@@ -1301,6 +1406,24 @@ export class GameClient {
 
   getAccountRole(): string {
     return this.accountRole;
+  }
+
+  private learnedRecipes: string[] = [];
+  private lastNpcDialog: any = null;
+  currentNpcId: string | null = null;
+
+  getLastNpcDialog(): any { return this.lastNpcDialog; }
+
+  getLearnedRecipes(): string[] {
+    return this.learnedRecipes.slice();
+  }
+
+  craft(recipeId: string, npcId: string): void {
+    this.network.sendPacket({
+      type: PacketType.CRAFT_REQUEST,
+      timestamp: Date.now(),
+      data: { recipeId, npcId }
+    });
   }
 
   private setActiveQuests(quests: any): void {

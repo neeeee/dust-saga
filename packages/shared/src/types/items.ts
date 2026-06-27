@@ -13,6 +13,7 @@ export enum ItemType {
   ACCESSORY = 'accessory',
   CONSUMABLE = 'consumable',
   MATERIAL = 'material',
+  RECIPE = 'recipe',
   QUEST = 'quest'
 }
 
@@ -141,6 +142,8 @@ export interface ItemDefinition {
   weaponType?: WeaponType;
   onHitProcs?: OnHitProc[];
   innateProcs?: OnHitProc[];
+  /** For RECIPE items: the recipe id this item teaches when consumed. */
+  teachesRecipe?: string;
 }
 
 export interface InventoryItem {

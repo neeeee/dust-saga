@@ -196,6 +196,7 @@ export class DatabaseManager {
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS gold INTEGER DEFAULT 100`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS racial_passive VARCHAR(50)`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS character_quests JSONB DEFAULT '[]'`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS character_recipes JSONB DEFAULT '[]'`,
       `ALTER TABLE players ADD COLUMN IF NOT EXISTS role VARCHAR(16) NOT NULL DEFAULT 'player'`,
       `ALTER TABLE quests ADD COLUMN IF NOT EXISTS dialog JSONB DEFAULT '{}'`,
     ];

@@ -7,7 +7,19 @@
     </div>
     <div class="party-settings">
       <span class="setting-badge">{{ party.settings.visibility }}</span>
-      <span class="setting-badge">{{ party.settings.lootRule }} loot</span>
+      <select
+        v-if="isLeader"
+        class="loot-rule-select"
+        :value="party.settings.lootRule"
+        @change="$emit('change-loot-rule', ($event.target as HTMLSelectElement).value)"
+        title="Loot rule (leader only)"
+      >
+        <option value="ffa">FFA loot</option>
+        <option value="round_robin">Round-robin</option>
+        <option value="need_greed">Need / Greed</option>
+        <option value="pool">Pool</option>
+      </select>
+      <span v-else class="setting-badge">{{ ruleLabel(party.settings.lootRule) }}</span>
     </div>
     <div class="party-members">
       <div
@@ -43,13 +55,14 @@
     <div class="loot-pool" v-if="lootPool.length > 0">
       <div class="loot-header">Loot Pool ({{ lootPool.length }}/16)</div>
       <div v-for="item in lootPool" :key="item.lootId" class="loot-item">
-        <span>{{ item.itemName }} x{{ item.quantity }}</span>
-        <button
-          v-if="!hasRolled(item)"
-          class="roll-btn"
-          @click="$emit('roll-loot', item.lootId)"
-        >Roll</button>
-        <span v-else class="rolled-label">Rolled</span>
+        <span>{{ item.itemName }} ×{{ item.quantity }}</span>
+        <span v-if="item.rolls && item.rolls[myId]" class="rolled-label">{{ item.rolls[myId] }}</span>
+        <div v-else class="loot-actions-row">
+          <button class="roll-btn need" @click="$emit('submit-roll', item.lootId, 'need')">Need</button>
+          <button class="roll-btn greed" @click="$emit('submit-roll', item.lootId, 'greed')">Greed</button>
+          <button class="roll-btn pass" @click="$emit('submit-roll', item.lootId, 'pass')">Pass</button>
+          <button class="take-btn" @click="$emit('take-loot', item.lootId)" title="Take immediately (Pool rule)">Take</button>
+        </div>
       </div>
     </div>
   </div>
@@ -92,19 +105,29 @@ defineEmits<{
   'leave-party': [];
   'kick-member': [characterId: string];
   'promote-member': [characterId: string];
-  'roll-loot': [lootId: string];
+  'change-loot-rule': [rule: string];
+  'submit-roll': [lootId: string, kind: 'need' | 'greed' | 'pass'];
+  'take-loot': [lootId: string];
   'target-member': [characterId: string];
 }>();
 
 const isLeader = (() => props.party?.leaderId === props.myId)();
 
+const RULE_LABELS: Record<string, string> = {
+  ffa: 'FFA loot',
+  round_robin: 'Round-robin',
+  need_greed: 'Need/Greed',
+  pool: 'Pool',
+  random: 'FFA loot',
+};
+
+function ruleLabel(rule: string): string {
+  return RULE_LABELS[rule] || rule;
+}
+
 function hpPercent(m: { health: number; maxHealth: number }): number {
   if (m.maxHealth <= 0) return 0;
   return (m.health / m.maxHealth) * 100;
-}
-
-function hasRolled(item: PartyLootItem): boolean {
-  return item.rolls[props.myId] !== undefined;
 }
 
 function getMemberEffects(characterId: string): any[] {
@@ -282,11 +305,34 @@ onUnmounted(() => {
   background: #263;
   border: 1px solid #4a5;
   color: #8f8;
-  padding: 1px 8px;
+  padding: 1px 6px;
   border-radius: 3px;
   cursor: pointer;
   font-size: 10px;
 }
-.roll-btn:hover { background: #374; }
+.roll-btn.need   { background: #633; border-color: #955; color: #faa; }
+.roll-btn.greed  { background: #34326a; border-color: #66e; color: #aaf; }
+.roll-btn.pass   { background: #444; border-color: #666; color: #aaa; }
+.roll-btn:hover { filter: brightness(1.2); }
+.take-btn {
+  background: #463;
+  border: 1px solid #794;
+  color: #df8;
+  padding: 1px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  margin-left: 2px;
+}
+.take-btn:hover { filter: brightness(1.2); }
+.loot-actions-row { display: flex; gap: 2px; }
+.loot-rule-select {
+  background: rgba(0,0,0,0.4);
+  color: #ddd;
+  border: 1px solid #555;
+  border-radius: 3px;
+  font-size: 10px;
+  padding: 1px 3px;
+}
 .rolled-label { color: #888; font-size: 10px; }
 </style>

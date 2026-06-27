@@ -337,87 +337,18 @@ export class PartySystem {
     return party.members.map(m => m.characterId);
   }
 
-  getLootPool(partyId: string): PartyLootItem[] {
-    return this.lootPool.get(partyId) || [];
-  }
-
-  distributeLootRandom(
-    partyId: string,
-    itemId: string,
-    itemName: string,
-    quantity: number
-  ): string | null {
-    const party = this.parties.get(partyId);
-    if (!party || party.members.length === 0) return null;
-
-    const idx = Math.floor(Math.random() * party.members.length);
-    return party.members[idx].characterId;
-  }
-
   getMaxPartySize(): number {
     return MAX_PARTY_SIZE;
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Loot (local-only — per-shard ephemeral state)
+  // Loot pool management moved to LootSystem (partyPools map).
+  // PartySystem no longer owns loot state — it just broadcasts updates.
   // ──────────────────────────────────────────────────────────────────────────
 
-  addLootToPool(
-    partyId: string,
-    lootId: string,
-    itemId: string,
-    itemName: string,
-    quantity: number
-  ): PartyLootItem | null {
-    const pool = this.lootPool.get(partyId);
-    if (!pool) return null;
-
-    if (pool.length >= MAX_LOOT_POOL) return null;
-
-    const item: PartyLootItem = { lootId, itemId, itemName, quantity, rolls: {} };
-    pool.push(item);
-    return item;
-  }
-
-  rollOnLoot(partyId: string, lootId: string, characterId: string, roll: number): PartyLootItem | null {
-    const pool = this.lootPool.get(partyId);
-    if (!pool) return null;
-
-    const item = pool.find(i => i.lootId === lootId);
-    if (!item) return null;
-
-    item.rolls[characterId] = roll;
-    return item;
-  }
-
-  resolveLootRoll(partyId: string, lootId: string): { winnerId: string; item: PartyLootItem } | null {
-    const pool = this.lootPool.get(partyId);
-    if (!pool) return null;
-
-    const idx = pool.findIndex(i => i.lootId === lootId);
-    if (idx === -1) return null;
-
-    const item = pool[idx];
-    const party = this.parties.get(partyId);
-    if (!party) return null;
-
-    const rollEntries = Object.entries(item.rolls);
-    if (rollEntries.length === 0) {
-      pool.splice(idx, 1);
-      return null;
-    }
-
-    let winnerId = rollEntries[0][0];
-    let highestRoll = rollEntries[0][1];
-    for (let i = 1; i < rollEntries.length; i++) {
-      if (rollEntries[i][1] > highestRoll) {
-        winnerId = rollEntries[i][0];
-        highestRoll = rollEntries[i][1];
-      }
-    }
-
-    pool.splice(idx, 1);
-    return { winnerId, item };
+  /** Clear party-owned loot state when the party disbands. */
+  clearLootState(partyId: string): void {
+    // delegate handled by LootSystem.clearParty via NetworkServer
   }
 
   // ──────────────────────────────────────────────────────────────────────────

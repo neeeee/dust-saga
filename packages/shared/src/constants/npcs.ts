@@ -1,4 +1,5 @@
 import { NPCDefinition, NPCType } from '../types/npc';
+import { CraftProfession } from '../types/recipes';
 
 export const NPC_DATABASE: Record<string, NPCDefinition> = {
   'elder_miriam': {
@@ -201,7 +202,57 @@ export const NPC_DATABASE: Record<string, NPCDefinition> = {
       }
     ]
   },
+
+  // ── Crafting NPCs (3 specialists per nation capital) ────────────────────
+  // Each nation has a BLACKSMITH (weapons/armor), ALCHEMIST (potions), and
+  // ENCHANTER (gems/accessories). Players must visit the nation's capital to
+  // craft; recipes must match the NPC's craftProfession.
+  'varik_blacksmith': craftNpc('varik_blacksmith', 'Borin Ironhand', 'varik_confederation', CraftProfession.BLACKSMITH, { x: -10, y: 0, z: 5 }),
+  'varik_alchemist': craftNpc('varik_alchemist', 'Maven Frostbloom', 'varik_confederation', CraftProfession.ALCHEMIST, { x: 10, y: 0, z: 5 }),
+  'varik_enchanter': craftNpc('varik_enchanter', 'Aldric rune-Hand', 'varik_confederation', CraftProfession.ENCHANTER, { x: 0, y: 0, z: 15 }),
+
+  'pfelstein_blacksmith': craftNpc('pfelstein_blacksmith', 'Sir Roland the Smith', 'kingdom_pfelstein', CraftProfession.BLACKSMITH, { x: -10, y: 0, z: 5 }),
+  'pfelstein_alchemist': craftNpc('pfelstein_alchemist', 'Sister Beatrix', 'kingdom_pfelstein', CraftProfession.ALCHEMIST, { x: 10, y: 0, z: 5 }),
+  'pfelstein_enchanter': craftNpc('pfelstein_enchanter', 'Father Cassian', 'kingdom_pfelstein', CraftProfession.ENCHANTER, { x: 0, y: 0, z: 15 }),
+
+  'latugan_blacksmith': craftNpc('latugan_blacksmith', 'Hassan Scorpionsbane', 'latugan_empire', CraftProfession.BLACKSMITH, { x: -10, y: 0, z: 5 }),
+  'latugan_alchemist': craftNpc('latugan_alchemist', 'Zahra the Herbalist', 'latugan_empire', CraftProfession.ALCHEMIST, { x: 10, y: 0, z: 5 }),
+  'latugan_enchanter': craftNpc('latugan_enchanter', 'Khalid gem-Etcher', 'latugan_empire', CraftProfession.ENCHANTER, { x: 0, y: 0, z: 15 }),
 };
+
+function craftNpc(
+  id: string,
+  name: string,
+  zoneId: string,
+  profession: CraftProfession,
+  position: { x: number; y: number; z: number }
+): NPCDefinition {
+  const professionLabel = profession === CraftProfession.BLACKSMITH
+    ? 'weapons and armor'
+    : profession === CraftProfession.ALCHEMIST
+      ? 'potions and brews'
+      : 'gems and enchantments';
+  return {
+    id,
+    name,
+    type: NPCType.CRAFTSMAN,
+    modelFile: 'Casual Character.glb',
+    position,
+    rotation: 0,
+    zoneId,
+    craftProfession: profession,
+    dialogs: [
+      {
+        id: 'greeting',
+        text: `Welcome. I work ${professionLabel}. Show me what recipes you know and I'll craft for you — for the cost of the materials, of course.`,
+        options: [
+          { text: 'Let me see what I can craft.', action: 'craft' },
+          { text: 'Maybe later.', action: 'close' }
+        ]
+      }
+    ]
+  };
+}
 
 export function getNPC(id: string): NPCDefinition | undefined {
   return NPC_DATABASE[id];

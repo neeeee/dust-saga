@@ -76,11 +76,11 @@
           <h4>Available Quests</h4>
           <button
             v-for="q in availableQuests"
-            :key="q.id || q"
+            :key="q.id"
             class="quest-offer-btn"
             @click.stop="openOffer(q)"
           >
-            <span class="quest-offer-title">{{ q.title || getQuestTitle(q.id || q) }}</span>
+            <span class="quest-offer-title">{{ q.title || q.id }}</span>
             <span v-if="q.description" class="quest-offer-desc">{{ q.description }}</span>
             <span v-if="q.requiredLevel" class="quest-offer-level">Requires level {{ q.requiredLevel }}</span>
           </button>
@@ -108,7 +108,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { QUEST_DATABASE } from '@dust-saga/shared';
 
 type AvailableQuest = {
   id: string;
@@ -136,7 +135,7 @@ const props = defineProps<{
   npcName: string;
   dialog: any;
   shopItems: any[];
-  availableQuests: Array<string | AvailableQuest>;
+  availableQuests: AvailableQuest[];
   activeQuests?: ActiveQuest[];
   npcScreenPos: { x: number; y: number } | null;
 }>();
@@ -247,10 +246,6 @@ function completeQuest() {
 function summarizeObjectives(objs: Array<{ targetName: string; requiredCount: number; currentCount: number; cell?: string }> | undefined): string {
   if (!objs || objs.length === 0) return '';
   return objs.map(o => `${o.targetName}: ${o.currentCount}/${o.requiredCount}${o.cell ? ` (at ${o.cell})` : ''}`).join(' · ');
-}
-
-function getQuestTitle(questId: string): string {
-  return QUEST_DATABASE[questId]?.title || questId;
 }
 
 function formatStats(stats: any): string {
