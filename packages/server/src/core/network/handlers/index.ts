@@ -17,6 +17,7 @@ import { registerHandlers as registerEnhancement } from './enhancementHandlers';
 import { registerHandlers as registerTrade } from './tradeHandlers';
 import { registerHandlers as registerRest } from './restHandlers';
 import { registerHandlers as registerCraft } from './craftHandlers';
+import { registerHandlers as registerCutscene } from './cutsceneHandlers';
 
 export function registerAllHandlers(): Map<PacketType, PacketHandler> {
   const registry = new Map<PacketType, PacketHandler>();
@@ -38,6 +39,7 @@ export function registerAllHandlers(): Map<PacketType, PacketHandler> {
   registerTrade(registry);
   registerRest(registry);
   registerCraft(registry);
+  registerCutscene(registry);
 
   return registry;
 }

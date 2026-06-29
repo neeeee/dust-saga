@@ -54,6 +54,7 @@ import { MovementThrottle } from '../world/MovementThrottle';
 import { ZoneRegistry } from '../world/ZoneInstance';
 import { QuestSystem } from '../../systems/QuestSystem';
 import { CraftSystem } from '../../systems/CraftSystem';
+import { CutsceneSystem } from '../../systems/CutsceneSystem';
 import { PresenceService } from '../presence/PresenceService';
 import { PacketRelay } from '../presence/PacketRelay';
 import { ZoneOwnership } from '../presence/ZoneOwnership';
@@ -81,6 +82,7 @@ export class NetworkServer implements NetworkContext {
   readonly summonMgr: SummonManager;
   readonly questSys: QuestSystem;
   readonly craftSys: CraftSystem;
+  readonly cutsceneSys: CutsceneSystem;
   readonly state: ServerGameState;
   private tickRate: number = 30;
   private handlers: Map<PacketType, PacketHandler>;
@@ -158,6 +160,7 @@ export class NetworkServer implements NetworkContext {
     this.summonMgr = new SummonManager();
     this.questSys = new QuestSystem();
     this.craftSys = new CraftSystem();
+    this.cutsceneSys = new CutsceneSystem();
     this.partySys = new PartySystem({
       redis: presenceOpts.redis,
       isConnected: presenceOpts.isRedisConnected,
@@ -637,6 +640,49 @@ export class NetworkServer implements NetworkContext {
         quests: session.quests,
         completed: progress.completed,
         ...(message ? { message } : {}),
+      }
+    });
+  }
+
+  startCutscene(session: PlayerSession, cutsceneId: string): boolean {
+    const cs = this.cutsceneSys.getCutscene(cutsceneId);
+    if (!cs) return false;
+    if (session.inCutscene) return false;
+
+    session.inCutscene = true;
+    session.cutsceneReturnPosition = { ...session.position };
+    session.cutsceneReturnRotation = { ...session.rotation };
+    session.currentNpcId = 'cutscene';
+
+    this.sendToPlayer(session.characterId, {
+      type: PacketType.CUTSCENE_START,
+      timestamp: Date.now(),
+      data: { cutsceneId, steps: cs.steps }
+    });
+    return true;
+  }
+
+  completeCutscene(session: PlayerSession): void {
+    if (!session.inCutscene) return;
+
+    session.inCutscene = false;
+    session.currentNpcId = null;
+
+    if (session.cutsceneReturnPosition) {
+      session.position = { ...session.cutsceneReturnPosition };
+      session.cutsceneReturnPosition = undefined;
+    }
+    if (session.cutsceneReturnRotation) {
+      session.rotation = { ...session.cutsceneReturnRotation };
+      session.cutsceneReturnRotation = undefined;
+    }
+
+    this.sendToPlayer(session.characterId, {
+      type: PacketType.CUTSCENE_END,
+      timestamp: Date.now(),
+      data: {
+        position: session.position,
+        rotation: session.rotation,
       }
     });
   }
@@ -1734,6 +1780,7 @@ export class NetworkServer implements NetworkContext {
           gold: session.gold,
           quests: session.quests,
           recipes: session.learnedRecipes,
+          unlockedZones: session.unlockedZones,
         }).catch(err => console.error('Failed to save character on disconnect:', err));
 
         this.aoeZoneMgr.cleanupOwner(characterId);
@@ -3925,6 +3972,8 @@ export class NetworkServer implements NetworkContext {
             equipment: session.equipment,
             gold: session.gold,
             quests: session.quests,
+            recipes: session.learnedRecipes,
+            unlockedZones: session.unlockedZones,
         }).catch(err => console.error(`Failed to save ${session.characterId}:`, err))
       ));
     }

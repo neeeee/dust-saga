@@ -110,6 +110,10 @@ export interface PlayerSession {
   resistCache?: Map<string, number>;
   lastQuestCell?: string | null;
   learnedRecipes?: string[];
+  unlockedZones?: string[];
+  inCutscene?: boolean;
+  cutsceneReturnPosition?: { x: number; y: number; z: number };
+  cutsceneReturnRotation?: { x: number; y: number; z: number; w: number };
 }
 
 export interface EnmityEntry {

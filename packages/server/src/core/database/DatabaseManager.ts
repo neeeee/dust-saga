@@ -199,10 +199,18 @@ export class DatabaseManager {
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS racial_passive VARCHAR(50)`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS character_quests JSONB DEFAULT '[]'`,
       `ALTER TABLE characters ADD COLUMN IF NOT EXISTS character_recipes JSONB DEFAULT '[]'`,
+      `ALTER TABLE characters ADD COLUMN IF NOT EXISTS character_unlocked_zones JSONB DEFAULT '[]'`,
       `ALTER TABLE players ADD COLUMN IF NOT EXISTS role VARCHAR(16) NOT NULL DEFAULT 'player'`,
       `ALTER TABLE quests ADD COLUMN IF NOT EXISTS dialog JSONB DEFAULT '{}'`,
       `ALTER TABLE quests ADD COLUMN IF NOT EXISTS repeatable VARCHAR(20)`,
       `ALTER TABLE quests ADD COLUMN IF NOT EXISTS max_completions INTEGER`,
+
+      `CREATE TABLE IF NOT EXISTS cutscenes (
+        id VARCHAR(80) PRIMARY KEY,
+        zone_id VARCHAR(80) NOT NULL,
+        script JSONB NOT NULL DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT NOW()
+      )`,
     ];
 
     for (const sql of migrations) {

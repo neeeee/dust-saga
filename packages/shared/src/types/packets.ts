@@ -118,6 +118,10 @@ export enum PacketType {
   RECIPE_LEARN = 183,
   CRAFT_REQUEST = 184,
   CRAFT_RESULT = 185,
+
+  CUTSCENE_START = 186,
+  CUTSCENE_COMPLETE = 187,
+  CUTSCENE_END = 188,
 }
 
 export interface Packet {

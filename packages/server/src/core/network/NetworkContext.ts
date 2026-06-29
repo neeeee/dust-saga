@@ -20,6 +20,7 @@ import { SummonManager } from '../world/SummonManager';
 import { DummyMeta } from '../world/DummyManager';
 import { QuestSystem } from '../../systems/QuestSystem';
 import { CraftSystem } from '../../systems/CraftSystem';
+import { CutsceneSystem } from '../../systems/CutsceneSystem';
 import { PresenceService } from '../presence/PresenceService';
 import { ZoneOwnership } from '../presence/ZoneOwnership';
 
@@ -46,6 +47,7 @@ export interface NetworkContext {
   readonly summonMgr: SummonManager;
   readonly questSys: QuestSystem;
   readonly craftSys: CraftSystem;
+  readonly cutsceneSys: CutsceneSystem;
   readonly presence: PresenceService;
   readonly zoneOwnership: ZoneOwnership;
 
@@ -75,6 +77,8 @@ export interface NetworkContext {
   handlePlayerDeath(session: PlayerSession): void;
   handleEnemyKill(enemyId: string, killerId: string): void;
   checkQuestCellEntry(session: PlayerSession): void;
+  startCutscene(session: PlayerSession, cutsceneId: string): boolean;
+  completeCutscene(session: PlayerSession): void;
   handleRevivePlayerBySession(caster: PlayerSession, targetId: string): void;
   applyPlayerDamage(target: PlayerSession, damage: number, attackerId: string, damageType: string, isCritical: boolean, zoneId: string, attackerPosition?: { x: number; y: number; z: number }): { redirected: boolean; damageTaken: number };
   damageEnemy(enemy: EnemyInstance, damage: number, attackerId?: string): { died: boolean; actualDamage: number };

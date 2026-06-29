@@ -61,6 +61,7 @@ async function startServer() {
     });
 
     await networkServer.questSys.initialize(db);
+    await networkServer.cutsceneSys.initialize(db);
 
     // ── Quest admin API ────────────────────────────────────────────────────
     // CRUD over quest definitions in the DB. Secured by ADMIN_TOKEN (required,
@@ -158,6 +159,32 @@ async function startServer() {
       if (!adminGuard(req, res)) return;
       await networkServer.questSys.reload();
       res.json({ success: true, count: networkServer.questSys.getAllQuestDefinitions().length });
+    });
+
+    // ── Cutscene admin API ─────────────────────────────────────────────────
+    app.get('/api/admin/cutscenes', (req, res) => {
+      if (!adminGuard(req, res)) return;
+      res.json({ count: networkServer.cutsceneSys.getAllCutscenes().length, cutscenes: networkServer.cutsceneSys.getAllCutscenes() });
+    });
+
+    app.post('/api/admin/cutscenes', async (req, res) => {
+      if (!adminGuard(req, res)) return;
+      const result = await networkServer.cutsceneSys.createCutscene(req.body);
+      if (!result.success) { res.status(400).json({ error: result.error }); return; }
+      res.status(201).json({ success: true, id: req.body.id });
+    });
+
+    app.delete('/api/admin/cutscenes/:id', async (req, res) => {
+      if (!adminGuard(req, res)) return;
+      const result = await networkServer.cutsceneSys.deleteCutscene(req.params.id);
+      if (!result.success) { res.status(404).json({ error: result.error }); return; }
+      res.json({ success: true });
+    });
+
+    app.post('/api/admin/cutscenes/reload', async (req, res) => {
+      if (!adminGuard(req, res)) return;
+      await networkServer.cutsceneSys.reload();
+      res.json({ success: true, count: networkServer.cutsceneSys.getAllCutscenes().length });
     });
 
     // B2: attach the Socket.IO Redis adapter when Redis is available so zone-room

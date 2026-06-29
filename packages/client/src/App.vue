@@ -132,6 +132,13 @@
         @craft="handleCraftRequest"
       />
 
+      <CutsceneOverlay
+        :visible="cutsceneState.active"
+        :speaker="cutsceneState.speaker"
+        :text="cutsceneState.text"
+        @advance="gameClient?.advanceCutsceneText()"
+      />
+
       <EnhancementWindow
         :visible="showEnhancement"
         :inventory="inventory"
@@ -269,6 +276,7 @@ import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import { GameClient } from './core/GameClient';
 import { PacketType, PlayerStats, StatPoints, PartyData, PartyLootItem, StatusEffectType, getRecipe } from '@dust-saga/shared';
 import type { TradeState } from '@dust-saga/shared';
+import { getCutscene } from '@dust-saga/shared';
 import CharacterSelect from './ui/CharacterSelect.vue';
 import GameHUD from './ui/GameHUD.vue';
 import ChatPanel from './ui/ChatPanel.vue';
@@ -277,6 +285,7 @@ import QuestLog from './ui/QuestLog.vue';
 import DialogBox from './ui/DialogBox.vue';
 import LootWindow from './ui/LootWindow.vue';
 import CraftWindow from './ui/CraftWindow.vue';
+import CutsceneOverlay from './ui/CutsceneOverlay.vue';
 import NotificationPopup from './ui/NotificationPopup.vue';
 import StatAllocationPanel from './ui/StatAllocationPanel.vue';
 import SkillWindow from './ui/SkillWindow.vue';
@@ -315,6 +324,7 @@ const showLootWindow = ref(false);
 const lootWindowState = ref<{ lootId: string; sourceName: string; items: any[] }>({ lootId: '', sourceName: '', items: [] });
 const showCraftWindow = ref(false);
 const craftWindowState = ref<{ npcId: string; npcName: string; profession: any }>({ npcId: '', npcName: '', profession: undefined });
+const cutsceneState = ref<{ active: boolean; speaker?: string; text: string }>({ active: false, text: '' });
 const inventory = ref<any[]>([]);
 const equipment = ref<any>({});
 const quests = ref<any[]>([]);
@@ -873,6 +883,9 @@ onMounted(async () => {
     },
     onNotification: (message, type) => {
       showNotification(message, type);
+    },
+    onCutsceneUpdate: (data) => {
+      cutsceneState.value = { active: data.active, speaker: data.speaker, text: data.text };
     },
     onEnhancementResult: (data) => {
       handleEnhancementResult(data);

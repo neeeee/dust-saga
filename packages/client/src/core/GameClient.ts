@@ -28,6 +28,7 @@ export interface GameCallbacks {
   onLootRollResult: (data: any) => void;
   onRecipeLearn: (data: any) => void;
   onCraftResult: (data: any) => void;
+  onCutsceneUpdate: (data: { active: boolean; speaker?: string; text: string }) => void;
   onChatMessage: (sender: string, message: string, channel?: string) => void;
   onNotification: (message: string, type: string) => void;
   onStatusEffects: (effects: any[]) => void;
@@ -80,6 +81,8 @@ export class GameClient {
   private currentBaseClass: string = 'warrior';
   private currentZoneId: string | null = null;
   private activeQuests: any[] = [];
+  private cutsceneActive: boolean = false;
+  private cutsceneAdvanceResolver: (() => void) | null = null;
   private targetId: string | null = null;
   private lastMoveSend: number = 0;
   private autoAttacking: boolean = false;
@@ -866,6 +869,31 @@ export class GameClient {
       }
     });
 
+    this.network.onPacket(PacketType.CUTSCENE_START, async (packet: any) => {
+      const { steps } = packet.data;
+      this.cutsceneActive = true;
+      this.setDialogActive(true);
+      this.callbacks.onCutsceneUpdate?.({ active: true, text: '' });
+      await this.playCutsceneSteps(steps);
+      this.cutsceneActive = false;
+      this.callbacks.onCutsceneUpdate?.({ active: false, text: '' });
+      this.setDialogActive(false);
+      this.network.sendPacket({
+        type: PacketType.CUTSCENE_COMPLETE,
+        timestamp: Date.now(),
+        data: {}
+      });
+    });
+
+    this.network.onPacket(PacketType.CUTSCENE_END, (packet: any) => {
+      if (this.playerMesh && packet.data.position) {
+        this.playerMesh.position.set(packet.data.position.x, packet.data.position.y, packet.data.position.z);
+        if (packet.data.rotation) {
+          this.playerMesh.rotation.y = packet.data.rotation.y || 0;
+        }
+      }
+    });
+
     this.network.onPacket(PacketType.ENHANCEMENT_RESULT, (packet: any) => {
       if (packet.data.success) {
         this.callbacks.onNotification?.(`Enhancement successful! +${packet.data.enhancementLevel}`, 'success');
@@ -1416,6 +1444,112 @@ export class GameClient {
 
   getLearnedRecipes(): string[] {
     return this.learnedRecipes.slice();
+  }
+
+  // ── Cutscene sequencer ─────────────────────────────────────────────────
+  advanceCutsceneText(): void {
+    if (this.cutsceneAdvanceResolver) {
+      this.cutsceneAdvanceResolver();
+      this.cutsceneAdvanceResolver = null;
+    }
+  }
+
+  private async playCutsceneSteps(steps: any[]): Promise<void> {
+    for (const step of steps) {
+      if (!this.cutsceneActive) break;
+      switch (step.type) {
+        case 'text':
+          await this.cutsceneTextStep(step);
+          break;
+        case 'move':
+          await this.cutsceneMoveStep(step);
+          break;
+        case 'turn':
+          this.cutsceneTurnStep(step);
+          break;
+        case 'emote':
+          await this.cutsceneEmoteStep(step);
+          break;
+        case 'wait':
+          await this.cutsceneWait(step.duration);
+          break;
+      }
+    }
+  }
+
+  private async cutsceneTextStep(step: any): Promise<void> {
+    this.callbacks.onCutsceneUpdate?.({
+      active: true,
+      speaker: step.speaker,
+      text: step.text,
+    });
+    await new Promise<void>(resolve => { this.cutsceneAdvanceResolver = resolve; });
+    this.callbacks.onCutsceneUpdate?.({ active: true, text: '' });
+  }
+
+  private async cutsceneMoveStep(step: any): Promise<void> {
+    const actorId = step.actor === 'player' ? this.playerId : step.actor;
+    if (!actorId) return;
+    const from = this.engine.getEntityPosition(actorId);
+    if (!from) return;
+    const to = step.to;
+    const speed = step.speed || 5;
+    const dist = Math.sqrt((to.x - from.x) ** 2 + (to.z - from.z) ** 2);
+    const duration = (dist / speed) * 1000;
+    const start = performance.now();
+    await new Promise<void>(resolve => {
+      const tick = () => {
+        if (!this.cutsceneActive) { resolve(); return; }
+        const elapsed = performance.now() - start;
+        const t = Math.min(1, elapsed / duration);
+        const x = from.x + (to.x - from.x) * t;
+        const z = from.z + (to.z - from.z) * t;
+        const y = (from.y || 0) + ((to.y || 0) - (from.y || 0)) * t;
+        this.engine.setEntityPosition(actorId, { x, y, z });
+        // face direction of movement
+        const dyaw = Math.atan2(to.x - from.x, to.z - from.z);
+        this.engine.setEntityRotationY(actorId, dyaw);
+        if (t >= 1) { resolve(); return; }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  private cutsceneTurnStep(step: any): void {
+    const actorId = step.actor === 'player' ? this.playerId : step.actor;
+    if (!actorId) return;
+    let yaw = 0;
+    if (step.face === 'player') {
+      const playerPos = this.engine.getEntityPosition(this.playerId!);
+      const actorPos = this.engine.getEntityPosition(actorId);
+      if (playerPos && actorPos) yaw = Math.atan2(playerPos.x - actorPos.x, playerPos.z - actorPos.z);
+    } else if (typeof step.face === 'string') {
+      // face another entity
+      const targetPos = this.engine.getEntityPosition(step.face);
+      const actorPos = this.engine.getEntityPosition(actorId);
+      if (targetPos && actorPos) yaw = Math.atan2(targetPos.x - actorPos.x, targetPos.z - actorPos.z);
+    } else if (step.face.x !== undefined) {
+      const actorPos = this.engine.getEntityPosition(actorId);
+      if (actorPos) yaw = Math.atan2(step.face.x - actorPos.x, step.face.z - actorPos.z);
+    }
+    this.engine.setEntityRotationY(actorId, yaw);
+  }
+
+  private async cutsceneEmoteStep(step: any): Promise<void> {
+    const actorId = step.actor === 'player' ? this.playerId : step.actor;
+    if (!actorId) return;
+    this.engine.startAnimationOnce(actorId, step.animation);
+    if (step.duration) {
+      await this.cutsceneWait(step.duration);
+    } else {
+      await this.cutsceneWait(2000);
+    }
+    this.engine.startAnimation(actorId, 'Idle');
+  }
+
+  private cutsceneWait(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   craft(recipeId: string, npcId: string): void {

@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import {
-  PacketType,
+  PacketType, getZoneDefinition,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -36,6 +36,11 @@ function handleQuestAccept(ctx: NetworkContext, socket: Socket, data: any): void
       timestamp: Date.now(),
       data: { questId, quest: session.quests.find(q => q.questId === questId), quests: session.quests }
     });
+    // Accept cutscene
+    const def = ctx.questSys.getQuestDefinition(questId);
+    if (def?.acceptCutsceneId) {
+      ctx.startCutscene(session, def.acceptCutsceneId);
+    }
   } else {
     ctx.sendToPlayer(characterId, { type: PacketType.ERROR, timestamp: Date.now(), data: { message: 'Cannot accept that quest.' } });
   }
@@ -92,6 +97,27 @@ function handleQuestComplete(ctx: NetworkContext, socket: Socket, data: any): vo
     timestamp: Date.now(),
     data: { characterId, stats: session.stats }
   });
+
+  // Zone unlocks from the quest definition
+  const questDef = ctx.questSys.getQuestDefinition(questId);
+  if (questDef?.unlocksZones) {
+    if (!session.unlockedZones) session.unlockedZones = [];
+    for (const z of questDef.unlocksZones) {
+      if (!session.unlockedZones.includes(z)) {
+        session.unlockedZones.push(z);
+        ctx.sendToPlayer(characterId, {
+          type: PacketType.NOTIFICATION,
+          timestamp: Date.now(),
+          data: { message: `New area unlocked: ${getZoneDefinition(z)?.name || z}!`, type: 'success' }
+        });
+      }
+    }
+  }
+
+  // Turn-in cutscene
+  if (questDef?.turnInCutsceneId) {
+    ctx.startCutscene(session, questDef.turnInCutsceneId);
+  }
 }
 
 function handleQuestAbandon(ctx: NetworkContext, socket: Socket, data: any): void {

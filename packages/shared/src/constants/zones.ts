@@ -34,6 +34,8 @@ export interface ZoneDefinition {
   nation?: 'varik' | 'pfelstein' | 'latugan';
   isPvpEnabled: boolean;
   musicTrack?: string;
+  /** If false, the zone requires unlocking via a quest's `unlocksZones` field. */
+  unlockedByDefault?: boolean;
 }
 
 export const ZONE_DATABASE: Record<string, ZoneDefinition> = {

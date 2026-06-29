@@ -642,6 +642,27 @@ export class GameEngine {
     }
   }
 
+  /** Cutscene helpers — direct mesh access for position/rotation. */
+  getEntityPosition(entityId: string): { x: number; y: number; z: number } | null {
+    const group = this.meshes.get(entityId);
+    if (!group?.root) return null;
+    return { x: group.root.position.x, y: group.root.position.y, z: group.root.position.z };
+  }
+
+  setEntityPosition(entityId: string, pos: { x: number; y: number; z: number }): void {
+    const group = this.meshes.get(entityId);
+    if (group?.root) {
+      group.root.position.x = pos.x;
+      group.root.position.y = pos.y;
+      group.root.position.z = pos.z;
+    }
+  }
+
+  setEntityRotationY(entityId: string, yaw: number): void {
+    const group = this.meshes.get(entityId);
+    if (group?.root) group.root.rotation.y = yaw;
+  }
+
   updateEntityHealth(entityId: string, current: number, max: number): void {
     const group = this.meshes.get(entityId);
     if (!group?.healthBarFg || !group?.healthBarBg || max <= 0) return;

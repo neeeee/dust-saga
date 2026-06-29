@@ -18,6 +18,19 @@ async function handleEnterZone(ctx: NetworkContext, socket: Socket, data: any): 
   const targetZone = getZoneDefinition(data.zoneId);
   if (!targetZone) return;
 
+  // Zone access check: zones default to unlocked unless explicitly locked
+  if (targetZone.unlockedByDefault === false) {
+    const unlocked = session.unlockedZones || [];
+    if (!unlocked.includes(data.zoneId)) {
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: 'This area is locked. Complete the main scenario to gain access.', type: 'error' }
+      });
+      return;
+    }
+  }
+
   const oldZoneId = session.zoneId;
 
   // ── Cross-shard handoff check ────────────────────────────────────────────

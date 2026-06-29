@@ -73,6 +73,12 @@ export interface QuestDefinition {
   repeatable?: QuestRepeatInterval;
   /** Hard cap on total completions. Once reached, the quest is permanently done. */
   maxCompletions?: number;
+  /** Zones to unlock for the character on first turn-in. */
+  unlocksZones?: string[];
+  /** Cutscene to play when this quest is accepted. */
+  acceptCutsceneId?: string;
+  /** Cutscene to play when this quest is turned in. */
+  turnInCutsceneId?: string;
   offerDialog?: DialogPage[];
   inProgressDialog?: DialogPage[];
   turnInDialog?: DialogPage[];
