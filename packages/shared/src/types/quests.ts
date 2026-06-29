@@ -13,6 +13,18 @@ export enum QuestStatus {
   TURNED_IN = 'turned_in'
 }
 
+export enum QuestRepeatInterval {
+  UNLIMITED = 'unlimited',
+  DAILY = 'daily',
+  WEEKLY = 'weekly',
+}
+
+export const QUEST_COOLDOWN_MS: Record<QuestRepeatInterval, number> = {
+  [QuestRepeatInterval.UNLIMITED]: 0,
+  [QuestRepeatInterval.DAILY]: 24 * 60 * 60 * 1000,
+  [QuestRepeatInterval.WEEKLY]: 7 * 24 * 60 * 60 * 1000,
+};
+
 export interface DialogPage {
   speaker?: string;
   text: string;
@@ -58,6 +70,7 @@ export interface QuestDefinition {
   requiredLevel: number;
   requiredQuest?: string;
   npcId: string;
+  repeatable?: QuestRepeatInterval;
   offerDialog?: DialogPage[];
   inProgressDialog?: DialogPage[];
   turnInDialog?: DialogPage[];
@@ -70,4 +83,6 @@ export interface ActiveQuest {
   startedAt: number;
   title?: string;
   description?: string;
+  lastTurnedInAt?: number;
+  completionCount?: number;
 }

@@ -103,6 +103,8 @@ export interface PlayerSession {
     startedAt: number;
     title?: string;
     description?: string;
+    lastTurnedInAt?: number;
+    completionCount?: number;
   }>;
   statsDirty?: boolean;
   resistCache?: Map<string, number>;

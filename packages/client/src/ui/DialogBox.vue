@@ -10,9 +10,12 @@
       <template v-if="questDetail">
         <div class="quest-detail-header">
           <span class="quest-detail-title">{{ questDetail.quest.title }}</span>
-          <span v-if="questDetail.kind === 'offer'" class="quest-detail-tag offer">Available</span>
-          <span v-else-if="questDetail.kind === 'turnin'" class="quest-detail-tag turnin">Ready</span>
-          <span v-else class="quest-detail-tag progress">In Progress</span>
+          <div class="quest-detail-tags">
+            <span v-if="questDetail.kind === 'offer' && questDetail.quest.repeatable" class="repeat-badge small" :class="questDetail.quest.repeatable">{{ repeatLabel(questDetail.quest.repeatable) }}</span>
+            <span v-if="questDetail.kind === 'offer'" class="quest-detail-tag offer">Available</span>
+            <span v-else-if="questDetail.kind === 'turnin'" class="quest-detail-tag turnin">Ready</span>
+            <span v-else class="quest-detail-tag progress">In Progress</span>
+          </div>
         </div>
 
         <div v-if="currentPages.length > 0" class="dialog-text">
@@ -78,10 +81,15 @@
             v-for="q in availableQuests"
             :key="q.id"
             class="quest-offer-btn"
+            :class="{ repeatable: !!q.repeatable }"
             @click.stop="openOffer(q)"
           >
-            <span class="quest-offer-title">{{ q.title || q.id }}</span>
+            <div class="quest-offer-head">
+              <span class="quest-offer-title">{{ q.title || q.id }}</span>
+              <span v-if="q.repeatable" class="repeat-badge" :class="q.repeatable">{{ repeatLabel(q.repeatable) }}</span>
+            </div>
             <span v-if="q.description" class="quest-offer-desc">{{ q.description }}</span>
+            <span v-if="q.completionCount && q.completionCount > 0" class="quest-offer-completed">Completed ×{{ q.completionCount }}</span>
             <span v-if="q.requiredLevel" class="quest-offer-level">Requires level {{ q.requiredLevel }}</span>
           </button>
         </div>
@@ -116,6 +124,9 @@ type AvailableQuest = {
   offerDialog?: Array<{ speaker?: string; text: string; emote?: string }>;
   rewards?: { experience: number; gold: number; items: Array<{ itemId: string; quantity: number }> };
   requiredLevel?: number;
+  repeatable?: string;
+  completionCount?: number;
+  nextAvailableAt?: number | null;
 };
 
 type ActiveQuest = {
@@ -241,6 +252,13 @@ function completeQuest() {
   const id = questDetail.value.quest.id;
   questDetail.value = null;
   emit('complete-quest', id);
+}
+
+function repeatLabel(interval: string): string {
+  if (interval === 'daily') return 'Daily';
+  if (interval === 'weekly') return 'Weekly';
+  if (interval === 'unlimited') return 'Repeatable';
+  return '';
 }
 
 function summarizeObjectives(objs: Array<{ targetName: string; requiredCount: number; currentCount: number; cell?: string }> | undefined): string {
@@ -527,4 +545,48 @@ onUnmounted(() => {
 .objective-name { color: #ddd; }
 .objective-count { color: #aaa; }
 .objective-cell { color: #ffd166; font-size: 0.72rem; }
+
+.quest-detail-tags {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.quest-offer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+
+.quest-offer-completed {
+  display: block;
+  font-size: 0.66rem;
+  color: #888;
+  margin-top: 2px;
+  font-weight: normal;
+}
+
+.repeat-badge {
+  font-size: 0.62rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.repeat-badge.small {
+  font-size: 0.58rem;
+  padding: 1px 4px;
+}
+
+.repeat-badge.daily { background: rgba(102, 153, 255, 0.25); color: #88aaff; }
+.repeat-badge.weekly { background: rgba(179, 102, 255, 0.25); color: #b366ff; }
+.repeat-badge.unlimited { background: rgba(76, 175, 80, 0.25); color: #6ee06e; }
+
+.quest-offer-btn.repeatable {
+  border-color: rgba(102, 153, 255, 0.25);
+}
 </style>

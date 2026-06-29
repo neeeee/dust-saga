@@ -6,11 +6,11 @@
       <button class="close-btn" @click="$emit('close')">x</button>
     </div>
     <div class="quest-list">
-      <div v-if="quests.length === 0" class="no-quests">
+      <div v-if="visibleQuests.length === 0" class="no-quests">
         No active quests
       </div>
       <div
-        v-for="quest in quests"
+        v-for="quest in visibleQuests"
         :key="quest.questId"
         class="quest-entry"
         :class="quest.status"
@@ -43,14 +43,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { QUEST_DATABASE } from '@dust-saga/shared';
 import { useDraggable } from '../composables/useDraggable';
 
 const { posX, posY, attach, detach } = useDraggable('[data-drag-handle]', 'panel-questlog', { x: 500, y: 120 });
 const panelRef = ref<HTMLElement | null>(null);
 
-defineProps<{
+const props = defineProps<{
   visible: boolean;
   quests: Array<{
     questId: string;
@@ -67,6 +67,10 @@ defineProps<{
     }>;
   }>;
 }>();
+
+// Hide turned-in quests from the journal — they stay in session.quests as
+// prereq records but shouldn't clutter the active log.
+const visibleQuests = computed(() => props.quests.filter(q => q.status !== 'turned_in'));
 
 defineEmits<{
   'close': [];

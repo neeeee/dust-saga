@@ -50,6 +50,8 @@ function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void
     })
     .map(qid => {
       const def = ctx.questSys.getQuestDefinition(qid)!;
+      const existing = session.quests.find(sq => sq.questId === qid);
+      const nextAvailableAt = existing ? ctx.questSys.repeatAvailableAt(def, existing) : null;
       return {
         id: qid,
         title: def.title,
@@ -57,11 +59,15 @@ function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void
         offerDialog: def.offerDialog,
         rewards: def.rewards,
         requiredLevel: def.requiredLevel,
+        repeatable: def.repeatable,
+        completionCount: existing?.completionCount || 0,
+        nextAvailableAt,
       };
     });
 
   const activeQuests = session.quests
     .filter(sq => {
+      if (sq.status === 'turned_in') return false;
       const def = ctx.questSys.getQuestDefinition(sq.questId);
       if (!def) return false;
       return def.npcId === data.npcId || staticQuestIds.includes(sq.questId);

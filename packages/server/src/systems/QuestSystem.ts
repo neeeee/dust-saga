@@ -1,4 +1,4 @@
-import { PlayerSession, QuestDefinition, QuestStatus, QuestType } from '@dust-saga/shared';
+import { PlayerSession, QuestDefinition, QuestStatus, QuestType, QuestRepeatInterval, QUEST_COOLDOWN_MS } from '@dust-saga/shared';
 import { QUEST_DATABASE } from '@dust-saga/shared';
 import {
   getZoneDefinition, parseCellLabel, cellCenter, isValidCellLabel,
@@ -40,7 +40,7 @@ export class QuestSystem {
     if (this.db && this.dbAvailable) {
       try {
         const result = await this.db.postgres!.query(
-          'SELECT id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog FROM quests'
+          'SELECT id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog, repeatable FROM quests'
         );
         for (const row of result.rows) {
           const def = this.rowToDefinition(row);
@@ -82,10 +82,32 @@ export class QuestSystem {
           );
           if (!prereqMet) return false;
         }
-        const active = session.quests.find(sq => sq.questId === q.id);
-        return !active;
+        const existing = session.quests.find(sq => sq.questId === q.id);
+        if (!existing) return true;
+        // Quest record exists — only re-available if repeatable + off cooldown
+        return this.canRepeat(q, existing);
       })
       .map(q => q.id);
+  }
+
+  /** Returns true if a turned-in quest can be accepted again. */
+  canRepeat(def: QuestDefinition, record: PlayerSession['quests'][0]): boolean {
+    if (record.status !== QuestStatus.TURNED_IN) return false;
+    if (!def.repeatable) return false;
+    if (!record.lastTurnedInAt) return true;
+    const cooldown = QUEST_COOLDOWN_MS[def.repeatable] ?? 0;
+    if (cooldown === 0) return true;
+    return Date.now() >= record.lastTurnedInAt + cooldown;
+  }
+
+  /** Returns the timestamp when a repeatable quest becomes available again, or null if currently available. */
+  repeatAvailableAt(def: QuestDefinition, record: PlayerSession['quests'][0]): number | null {
+    if (!def.repeatable || record.status !== QuestStatus.TURNED_IN) return null;
+    if (!record.lastTurnedInAt) return null;
+    const cooldown = QUEST_COOLDOWN_MS[def.repeatable] ?? 0;
+    if (cooldown === 0) return null;
+    const ready = record.lastTurnedInAt + cooldown;
+    return Date.now() >= ready ? null : ready;
   }
 
   acceptQuest(session: PlayerSession, questId: string): boolean {
@@ -101,7 +123,14 @@ export class QuestSystem {
     }
 
     const existing = session.quests.find(q => q.questId === questId);
-    if (existing) return false;
+    if (existing) {
+      // Re-accepting a repeatable quest: reset objectives + status
+      if (!this.canRepeat(questDef, existing)) return false;
+      existing.objectives = this.buildRuntimeObjectives(questDef, session);
+      existing.status = QuestStatus.IN_PROGRESS;
+      existing.startedAt = Date.now();
+      return true;
+    }
 
     const npcZoneId = this.resolveQuestZoneId(questDef);
 
@@ -110,34 +139,44 @@ export class QuestSystem {
       status: QuestStatus.IN_PROGRESS,
       title: questDef.title,
       description: questDef.description,
-      objectives: questDef.objectives.map(obj => {
-        const runtimeObj: PlayerSession['quests'][0]['objectives'][0] = {
-          id: obj.id,
-          type: obj.type,
-          targetId: obj.targetId,
-          targetName: obj.targetName,
-          requiredCount: obj.requiredCount,
-          currentCount: 0,
-        };
-        if (obj.cell) {
-          runtimeObj.cell = obj.cell;
-          runtimeObj.zoneId = obj.zoneId || npcZoneId;
-          const cell = parseCellLabel(obj.cell);
-          const zoneIdForGrid = runtimeObj.zoneId || session.zoneId;
-          const zoneDef = getZoneDefinition(zoneIdForGrid);
-          if (cell && zoneDef) {
-            const center = cellCenter(cell, zoneDef.size);
-            runtimeObj.waypoint = { x: center.x, z: center.z };
-          }
-        } else if (obj.zoneId) {
-          runtimeObj.zoneId = obj.zoneId;
-        }
-        return runtimeObj;
-      }),
-      startedAt: Date.now()
+      objectives: this.buildRuntimeObjectives(questDef, session),
+      startedAt: Date.now(),
+      completionCount: 0,
     });
 
     return true;
+  }
+
+  /** Build the runtime objective array (with currentCount=0, waypoints, etc.) from a definition. */
+  private buildRuntimeObjectives(
+    questDef: QuestDefinition,
+    session: PlayerSession
+  ): PlayerSession['quests'][0]['objectives'] {
+    const npcZoneId = this.resolveQuestZoneId(questDef);
+    return questDef.objectives.map(obj => {
+      const runtimeObj: PlayerSession['quests'][0]['objectives'][0] = {
+        id: obj.id,
+        type: obj.type,
+        targetId: obj.targetId,
+        targetName: obj.targetName,
+        requiredCount: obj.requiredCount,
+        currentCount: 0,
+      };
+      if (obj.cell) {
+        runtimeObj.cell = obj.cell;
+        runtimeObj.zoneId = obj.zoneId || npcZoneId;
+        const cell = parseCellLabel(obj.cell);
+        const zoneIdForGrid = runtimeObj.zoneId || session.zoneId;
+        const zoneDef = getZoneDefinition(zoneIdForGrid);
+        if (cell && zoneDef) {
+          const center = cellCenter(cell, zoneDef.size);
+          runtimeObj.waypoint = { x: center.x, z: center.z };
+        }
+      } else if (obj.zoneId) {
+        runtimeObj.zoneId = obj.zoneId;
+      }
+      return runtimeObj;
+    });
   }
 
   private resolveQuestZoneId(questDef: QuestDefinition): string | undefined {
@@ -260,6 +299,8 @@ export class QuestSystem {
     }
 
     quest.status = QuestStatus.TURNED_IN;
+    quest.lastTurnedInAt = Date.now();
+    quest.completionCount = (quest.completionCount || 0) + 1;
 
     return {
       experience: questDef.rewards.experience,
@@ -288,8 +329,8 @@ export class QuestSystem {
     if (this.db && this.dbAvailable) {
       try {
         await this.db.postgres!.query(
-          `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog, repeatable)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            ON CONFLICT (id) DO UPDATE SET
              title = EXCLUDED.title,
              description = EXCLUDED.description,
@@ -299,7 +340,8 @@ export class QuestSystem {
              npc_id = EXCLUDED.npc_id,
              objectives = EXCLUDED.objectives,
              rewards = EXCLUDED.rewards,
-             dialog = EXCLUDED.dialog`,
+             dialog = EXCLUDED.dialog,
+             repeatable = EXCLUDED.repeatable`,
           [
             def.id, def.title, def.description || '', def.type,
             def.requiredLevel, def.requiredQuest || null, def.npcId,
@@ -309,6 +351,7 @@ export class QuestSystem {
               inProgress: def.inProgressDialog || [],
               turnIn: def.turnInDialog || [],
             }),
+            def.repeatable || null,
           ]
         );
       } catch (error) {
@@ -357,7 +400,41 @@ export class QuestSystem {
       }
     }
     if (!def.rewards || typeof def.rewards !== 'object') return { valid: false, error: 'Missing rewards' };
+    if (typeof def.rewards.experience !== 'number' || def.rewards.experience < 0) return { valid: false, error: 'rewards.experience must be a non-negative number' };
+    if (typeof def.rewards.gold !== 'number' || def.rewards.gold < 0) return { valid: false, error: 'rewards.gold must be a non-negative number' };
+    if (!Array.isArray(def.rewards.items)) return { valid: false, error: 'rewards.items must be an array' };
+    for (const it of def.rewards.items) {
+      if (!it || typeof it.itemId !== 'string' || !it.itemId) {
+        return { valid: false, error: `rewards.items[] entries must have a non-empty itemId string (got: ${JSON.stringify(it)})` };
+      }
+      if (typeof it.quantity !== 'number' || it.quantity < 1) {
+        return { valid: false, error: `rewards.items[] entry "${it.itemId}" must have quantity >= 1 (got: ${it.quantity})` };
+      }
+    }
+    if (def.offerDialog !== undefined) {
+      if (!Array.isArray(def.offerDialog)) return { valid: false, error: 'offerDialog must be an array' };
+      for (const p of def.offerDialog) {
+        if (!p || typeof p.text !== 'string' || !p.text) return { valid: false, error: 'offerDialog[] entries must have a non-empty text string' };
+      }
+    }
+    if (def.inProgressDialog !== undefined) {
+      if (!Array.isArray(def.inProgressDialog)) return { valid: false, error: 'inProgressDialog must be an array' };
+      for (const p of def.inProgressDialog) {
+        if (!p || typeof p.text !== 'string' || !p.text) return { valid: false, error: 'inProgressDialog[] entries must have a non-empty text string' };
+      }
+    }
+    if (def.turnInDialog !== undefined) {
+      if (!Array.isArray(def.turnInDialog)) return { valid: false, error: 'turnInDialog must be an array' };
+      for (const p of def.turnInDialog) {
+        if (!p || typeof p.text !== 'string' || !p.text) return { valid: false, error: 'turnInDialog[] entries must have a non-empty text string' };
+      }
+    }
     if (typeof def.requiredLevel !== 'number' || def.requiredLevel < 1) return { valid: false, error: 'requiredLevel must be >= 1' };
+    if (def.repeatable !== undefined) {
+      if (!Object.values(QuestRepeatInterval).includes(def.repeatable)) {
+        return { valid: false, error: `Invalid repeatable value (must be one of: ${Object.values(QuestRepeatInterval).join(', ')})` };
+      }
+    }
     return { valid: true };
   }
 
@@ -380,6 +457,9 @@ export class QuestSystem {
       if (Array.isArray(rawDialog.offer) && rawDialog.offer.length > 0) def.offerDialog = rawDialog.offer;
       if (Array.isArray(rawDialog.inProgress) && rawDialog.inProgress.length > 0) def.inProgressDialog = rawDialog.inProgress;
       if (Array.isArray(rawDialog.turnIn) && rawDialog.turnIn.length > 0) def.turnInDialog = rawDialog.turnIn;
+      if (row.repeatable && Object.values(QuestRepeatInterval).includes(row.repeatable)) {
+        def.repeatable = row.repeatable as QuestRepeatInterval;
+      }
       return def;
     } catch {
       return null;
@@ -390,8 +470,8 @@ export class QuestSystem {
     if (!this.db || !this.dbAvailable) return;
     for (const def of Object.values(QUEST_DATABASE)) {
       await this.db.postgres!.query(
-        `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog, repeatable)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          ON CONFLICT (id) DO NOTHING`,
         [
           def.id, def.title, def.description || '', def.type,
@@ -402,6 +482,7 @@ export class QuestSystem {
             inProgress: def.inProgressDialog || [],
             turnIn: def.turnInDialog || [],
           }),
+          def.repeatable || null,
         ]
       );
     }
