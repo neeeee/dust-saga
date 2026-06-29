@@ -71,6 +71,8 @@ export interface QuestDefinition {
   requiredQuest?: string;
   npcId: string;
   repeatable?: QuestRepeatInterval;
+  /** Hard cap on total completions. Once reached, the quest is permanently done. */
+  maxCompletions?: number;
   offerDialog?: DialogPage[];
   inProgressDialog?: DialogPage[];
   turnInDialog?: DialogPage[];

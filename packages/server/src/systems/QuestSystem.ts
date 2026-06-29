@@ -40,7 +40,7 @@ export class QuestSystem {
     if (this.db && this.dbAvailable) {
       try {
         const result = await this.db.postgres!.query(
-          'SELECT id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog, repeatable FROM quests'
+          'SELECT id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog, repeatable, max_completions FROM quests'
         );
         for (const row of result.rows) {
           const def = this.rowToDefinition(row);
@@ -94,6 +94,7 @@ export class QuestSystem {
   canRepeat(def: QuestDefinition, record: PlayerSession['quests'][0]): boolean {
     if (record.status !== QuestStatus.TURNED_IN) return false;
     if (!def.repeatable) return false;
+    if (def.maxCompletions && (record.completionCount || 0) >= def.maxCompletions) return false;
     if (!record.lastTurnedInAt) return true;
     const cooldown = QUEST_COOLDOWN_MS[def.repeatable] ?? 0;
     if (cooldown === 0) return true;
@@ -329,8 +330,8 @@ export class QuestSystem {
     if (this.db && this.dbAvailable) {
       try {
         await this.db.postgres!.query(
-          `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog, repeatable)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog, repeatable, max_completions)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
            ON CONFLICT (id) DO UPDATE SET
              title = EXCLUDED.title,
              description = EXCLUDED.description,
@@ -341,7 +342,8 @@ export class QuestSystem {
              objectives = EXCLUDED.objectives,
              rewards = EXCLUDED.rewards,
              dialog = EXCLUDED.dialog,
-             repeatable = EXCLUDED.repeatable`,
+             repeatable = EXCLUDED.repeatable,
+             max_completions = EXCLUDED.max_completions`,
           [
             def.id, def.title, def.description || '', def.type,
             def.requiredLevel, def.requiredQuest || null, def.npcId,
@@ -352,6 +354,7 @@ export class QuestSystem {
               turnIn: def.turnInDialog || [],
             }),
             def.repeatable || null,
+            def.maxCompletions ?? null,
           ]
         );
       } catch (error) {
@@ -435,6 +438,14 @@ export class QuestSystem {
         return { valid: false, error: `Invalid repeatable value (must be one of: ${Object.values(QuestRepeatInterval).join(', ')})` };
       }
     }
+    if (def.maxCompletions !== undefined) {
+      if (typeof def.maxCompletions !== 'number' || def.maxCompletions < 1) {
+        return { valid: false, error: 'maxCompletions must be a positive integer' };
+      }
+      if (!def.repeatable) {
+        return { valid: false, error: 'maxCompletions requires repeatable to be set' };
+      }
+    }
     return { valid: true };
   }
 
@@ -460,6 +471,9 @@ export class QuestSystem {
       if (row.repeatable && Object.values(QuestRepeatInterval).includes(row.repeatable)) {
         def.repeatable = row.repeatable as QuestRepeatInterval;
       }
+      if (row.max_completions != null && typeof row.max_completions === 'number') {
+        def.maxCompletions = row.max_completions;
+      }
       return def;
     } catch {
       return null;
@@ -470,8 +484,8 @@ export class QuestSystem {
     if (!this.db || !this.dbAvailable) return;
     for (const def of Object.values(QUEST_DATABASE)) {
       await this.db.postgres!.query(
-        `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog, repeatable)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `INSERT INTO quests (id, title, description, type, required_level, required_quest, npc_id, objectives, rewards, dialog, repeatable, max_completions)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (id) DO NOTHING`,
         [
           def.id, def.title, def.description || '', def.type,
@@ -483,6 +497,7 @@ export class QuestSystem {
             turnIn: def.turnInDialog || [],
           }),
           def.repeatable || null,
+          def.maxCompletions ?? null,
         ]
       );
     }
