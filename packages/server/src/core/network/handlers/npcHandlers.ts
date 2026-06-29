@@ -26,6 +26,13 @@ function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void
 
   session.currentNpcId = data.npcId;
 
+  // Cutscene trigger: client sends dialogId = "cutscene:<id>"
+  if (typeof data.dialogId === 'string' && data.dialogId.startsWith('cutscene:')) {
+    const cutsceneId = data.dialogId.slice('cutscene:'.length);
+    ctx.startCutscene(session, cutsceneId);
+    return;
+  }
+
   const talkProgress = ctx.questSys.onTalk(session, data.npcId);
   if (talkProgress.progressed.length > 0) {
     const msgs = talkProgress.completed.map(qid => {

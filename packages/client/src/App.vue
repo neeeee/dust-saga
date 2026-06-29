@@ -514,6 +514,9 @@ function handleDialogOption(option: any) {
     showEnhancement.value = true;
   } else if (option.action === 'craft') {
     openCraftWindow();
+  } else if (option.action === 'play_cutscene') {
+    gameClient.interactNPC(currentDialogNPCId, `cutscene:${option.actionData.cutsceneId}`);
+    closeDialog();
   } else if (option.nextDialogId) {
     gameClient.interactNPC(currentDialogNPCId, option.nextDialogId);
   }
