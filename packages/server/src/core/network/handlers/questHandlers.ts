@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import {
-  PacketType, getZoneDefinition,
+  PacketType, getZoneDefinition, JobId,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -38,6 +38,24 @@ function handleQuestAccept(ctx: NetworkContext, socket: Socket, data: any): void
     });
     // Accept cutscene
     const def = ctx.questSys.getQuestDefinition(questId);
+    if (def?.stripsGearForTrial) {
+      ctx.playerSys.stripEquipmentForTrial(session);
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.INVENTORY_UPDATE,
+        timestamp: Date.now(),
+        data: { inventory: session.inventory, equipment: session.equipment }
+      });
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown }
+      });
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: 'Your equipment has been stored. Complete the trial to retrieve it.', type: 'info' }
+      });
+    }
     if (def?.acceptCutsceneId) {
       ctx.startCutscene(session, def.acceptCutsceneId);
     }
@@ -118,6 +136,76 @@ function handleQuestComplete(ctx: NetworkContext, socket: Socket, data: any): vo
   if (questDef?.turnInCutsceneId) {
     ctx.startCutscene(session, questDef.turnInCutsceneId);
   }
+
+  // Restore gear stripped for trial
+  if (questDef?.stripsGearForTrial && session.trialEquipmentBackup) {
+    ctx.playerSys.restoreEquipmentFromTrial(session);
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.INVENTORY_UPDATE,
+      timestamp: Date.now(),
+      data: { inventory: session.inventory, equipment: session.equipment }
+    });
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown }
+    });
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.NOTIFICATION,
+      timestamp: Date.now(),
+      data: { message: 'Your equipment has been restored.', type: 'success' }
+    });
+  }
+
+  // Class advancement
+  if (questDef?.advancesToJob) {
+    const advanced = ctx.playerSys.advanceJob(session, questDef.advancesToJob as JobId);
+    if (advanced) {
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: `Class advanced to ${questDef.advancesToJob}!`, type: 'success' }
+      });
+    }
+  }
+
+  // Stat point reset
+  if (questDef?.grantsStatReset) {
+    ctx.playerSys.resetStatPoints(session);
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.NOTIFICATION,
+      timestamp: Date.now(),
+      data: { message: 'Stat points have been reset. Reallocate them now.', type: 'info' }
+    });
+  }
+
+  // Skill point reset
+  if (questDef?.grantsSkillReset) {
+    ctx.playerSys.resetSkillPoints(session);
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.NOTIFICATION,
+      timestamp: Date.now(),
+      data: { message: 'Skill points have been reset. Reallocate them now.', type: 'info' }
+    });
+  }
+
+  // Send updated stats after all modifications
+  ctx.sendToPlayer(characterId, {
+    type: PacketType.STATS_UPDATE,
+    timestamp: Date.now(),
+    data: {
+      characterId,
+      stats: session.stats,
+      statPoints: session.statPoints,
+      unspentStatPoints: session.unspentStatPoints,
+      unspentSkillPoints: session.unspentSkillPoints,
+      skillProficiencies: session.skillProficiencies,
+      skillAdeptness: session.skillAdeptness,
+      jobId: session.jobId,
+      baseClass: session.baseClass,
+      statBreakdown: session.statBreakdown,
+    }
+  });
 }
 
 function handleQuestAbandon(ctx: NetworkContext, socket: Socket, data: any): void {

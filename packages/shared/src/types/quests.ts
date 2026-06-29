@@ -79,6 +79,14 @@ export interface QuestDefinition {
   acceptCutsceneId?: string;
   /** Cutscene to play when this quest is turned in. */
   turnInCutsceneId?: string;
+  /** Job to advance to on turn-in (e.g. 'warrior' → 'knight'). */
+  advancesToJob?: string;
+  /** Refund all allocated stat points on turn-in. */
+  grantsStatReset?: boolean;
+  /** Refund all allocated skill points on turn-in. */
+  grantsSkillReset?: boolean;
+  /** Strip all equipment on accept (for trial quests); restored on turn-in. */
+  stripsGearForTrial?: boolean;
   offerDialog?: DialogPage[];
   inProgressDialog?: DialogPage[];
   turnInDialog?: DialogPage[];

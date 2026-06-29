@@ -1,5 +1,5 @@
 import { EntityManager, System } from '../EntityManager';
-import { PlayerSession, JobId, BaseClass, StatType, InventoryItem, AccountRole } from '@dust-saga/shared';
+import { PlayerSession, JobId, BaseClass, StatType, InventoryItem, AccountRole, DEFAULT_EQUIPMENT } from '@dust-saga/shared';
 import {
   calculateDerivedStats,
   getExperienceToNextLevel,
@@ -18,6 +18,7 @@ import {
   getMinAdeptness,
   createDefaultSkillProficiencies,
   createDefaultSkillAdeptness,
+  createDefaultStatPoints,
   getEffectiveStats,
   computeStatBreakdown,
   calculateDodge,
@@ -279,6 +280,41 @@ export class PlayerSystem extends System {
     session.baseClass = newJob.baseClass;
     this.recalcStats(session);
     return true;
+  }
+
+  /** Snapshot equipment and strip to empty (for trial quests). */
+  stripEquipmentForTrial(session: PlayerSession): void {
+    session.trialEquipmentBackup = JSON.parse(JSON.stringify(session.equipment));
+    session.equipment = { ...DEFAULT_EQUIPMENT };
+    this.recalcStats(session);
+  }
+
+  /** Restore equipment from trial backup. */
+  restoreEquipmentFromTrial(session: PlayerSession): boolean {
+    if (!session.trialEquipmentBackup) return false;
+    session.equipment = session.trialEquipmentBackup;
+    session.trialEquipmentBackup = undefined;
+    this.recalcStats(session);
+    return true;
+  }
+
+  /** Refund all allocated stat points. */
+  resetStatPoints(session: PlayerSession): void {
+    const spent = Object.values(session.statPoints).reduce((sum, v) => sum + v, 0);
+    session.statPoints = createDefaultStatPoints();
+    session.unspentStatPoints += spent;
+    this.recalcStats(session);
+  }
+
+  /** Refund all allocated skill proficiency points. */
+  resetSkillPoints(session: PlayerSession): void {
+    const categoryKeys = new Set(['melee', 'technique', 'prayer', 'magic', 'special']);
+    const spent = Object.entries(session.skillProficiencies)
+      .filter(([key]) => !categoryKeys.has(key))
+      .reduce((sum, [, v]) => sum + (typeof v === 'number' ? v : 0), 0);
+    session.skillProficiencies = createDefaultSkillProficiencies();
+    session.unspentSkillPoints += spent;
+    this.recalcStats(session);
   }
 
   private getEnhancementBonuses(session: PlayerSession) {

@@ -114,6 +114,7 @@ export interface PlayerSession {
   inCutscene?: boolean;
   cutsceneReturnPosition?: { x: number; y: number; z: number };
   cutsceneReturnRotation?: { x: number; y: number; z: number; w: number };
+  trialEquipmentBackup?: any;
 }
 
 export interface EnmityEntry {
