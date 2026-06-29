@@ -148,13 +148,16 @@ npm run build
 ### Current Features
 - Basic 3D rendering with Babylon.js
 - Player movement with WASD controls
+- Drag'n'drop skillbar configuration
+- Realtime stat changes
 - Basic map definition with JSON schema
+- Map teleportation points
 - WebSocket networking
 - Basic user/pass authentication system
 - Real-time position synchronization
 - Chat system
 - Interpolation for smooth movement
-    - No animations are forwarded to other clients yet. You will slide, not walk.
+- Animations are forwarded to other clients
 - Shop system
 - NPC interaction framework
 - Enemy AI with volatile enmity/hate/aggro calculated from actions
@@ -165,9 +168,9 @@ npm run build
 ### Planned Features
 - Guild system
 - PvP arenas
-- Crafting
 - Gathering
 - Boss enemies
+- Dungeons? Maybe
 
 ## Controls
 
@@ -182,11 +185,6 @@ npm run build
 - **J** - Quests (Journal)
 
 ## API Endpoints
-
-### Public
-- `GET /health` — Health check (DB + Redis status)
-- `GET /api/classes` — Class definitions
-- `GET /api/players` — List players. Will have more to it when plugins can be made.
 
 ### WebSocket Events
 - `packet` — All game packets
