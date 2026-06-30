@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { QuestSystem } from '../../systems/QuestSystem';
 import type { CutsceneSystem } from '../../systems/CutsceneSystem';
-import type { ItemSystem } from '../../systems/ItemSystem.ts';
+import type { ItemSystem } from '../../systems/ItemSystem';
 import { createAdminRouter } from './routes/admin';
 
 /**
@@ -21,7 +21,7 @@ export interface ApiServices {
 /**
  * Builds the entire `/api` router tree. Mount the result once:
  *
- *   app.use('/api', createApiRouter({ questSys, cutsceneSys }))
+ *   app.use('/api', createApiRouter({ questSys, cutsceneSys, itemSys }))
  */
 export function createApiRouter(services: ApiServices): Router {
   const api = Router();

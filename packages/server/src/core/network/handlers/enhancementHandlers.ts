@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import {
-  Packet, PacketType, getItem,
+  Packet, PacketType,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -29,7 +29,7 @@ function handleWeaponEnhance(ctx: NetworkContext, socket: Socket, data: any): vo
     return;
   }
 
-  const weaponDef = getItem(weaponItem.itemId);
+  const weaponDef = ctx.itemSys.getItemDefinition(weaponItem.itemId);
   if (!weaponDef) {
     ctx.sendToPlayer(characterId, { type: PacketType.NOTIFICATION, timestamp: Date.now(), data: { message: 'Invalid weapon.', type: 'error' } });
     return;
@@ -62,7 +62,7 @@ function handleWeaponEnhance(ctx: NetworkContext, socket: Socket, data: any): vo
     if (!mat?.slotIndex && mat?.slotIndex !== 0) continue;
     const matItem = session.inventory[mat.slotIndex];
     if (!matItem || matItem.quantity <= 0) continue;
-    const matDef = getItem(matItem.itemId);
+    const matDef = ctx.itemSys.getItemDefinition(matItem.itemId);
     if (!matDef) continue;
 
     const gemElement = GEM_ELEMENT_MAP[matItem.itemId];

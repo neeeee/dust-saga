@@ -1,5 +1,6 @@
 import { EntityManager, System } from '../EntityManager';
 import { PlayerSession, JobId, BaseClass, StatType, InventoryItem, AccountRole, DEFAULT_EQUIPMENT } from '@dust-saga/shared';
+import type { ItemSystem } from '../../../systems/ItemSystem';
 import {
   calculateDerivedStats,
   getExperienceToNextLevel,
@@ -7,7 +8,6 @@ import {
   getSkillPointsGainedAtLevel,
   getBaseClassForJob,
   JOB_DEFINITIONS,
-  ITEM_DATABASE,
   EquipmentSlot,
   GAME_CONFIG,
   MAX_LEVEL,
@@ -30,13 +30,14 @@ import {
 } from '@dust-saga/shared';
 
 export class PlayerSystem extends System {
+  itemSys!: ItemSystem;
   private levelUpCallbacks: Array<(playerId: string, newLevel: number) => void> = [];
 
   private getGearBonuses(session: PlayerSession) {
     const bonuses = { attack: 0, defense: 0, health: 0, mana: 0, speed: 0, STA: 0, STR: 0, AGI: 0, DEX: 0, SPI: 0, INT: 0, accuracy: 0, dodge: 0, attackSpeed: 0, castSpeed: 0, fireResist: 0, iceResist: 0, lightningResist: 0, poisonResist: 0, darkResist: 0, holyResist: 0, magicAttackPercent: 0, ailmentResist: 0, disorderResist: 0, criticalChance: 0, stunResist: 0, tripResist: 0, freezeResist: 0, burnResist: 0, curseResist: 0, bleedResist: 0, sleepResist: 0, weaknessResist: 0, weakenResist: 0, knockdownResist: 0, knockbackResist: 0, healPercent: 0 };
     for (const slot of Object.values(session.equipment)) {
       if (!slot) continue;
-      const def = ITEM_DATABASE[slot.itemId];
+      const def = this.itemSys.getItemDefinition(slot.itemId);
       if (!def) continue;
       const s = def.stats;
       if (s.attack) bonuses.attack += s.attack;
@@ -327,7 +328,7 @@ export class PlayerSystem extends System {
       if (!slot) continue;
       const level = slot.enhancementLevel || 0;
       if (level <= 0) continue;
-      const def = ITEM_DATABASE[slot.itemId];
+      const def = this.itemSys.getItemDefinition(slot.itemId);
       if (!def) continue;
       const eqSlot = def.equipmentSlot;
       if (eqSlot === EquipmentSlot.WEAPON) {
@@ -448,7 +449,7 @@ export class PlayerSystem extends System {
     if (session.inventory.length >= GAME_CONFIG.MAX_INVENTORY_SLOTS) return false;
 
     const existing = session.inventory.find(slot => slot.itemId === itemId);
-    const itemDef = ITEM_DATABASE[itemId];
+    const itemDef = this.itemSys.getItemDefinition(itemId);
 
     if (existing && itemDef && itemDef.maxStack > 1) {
       if (existing.quantity + quantity <= itemDef.maxStack) {
@@ -474,7 +475,7 @@ export class PlayerSystem extends System {
   addItemToInventoryWithMeta(session: PlayerSession, item: InventoryItem): boolean {
     if (session.inventory.length >= GAME_CONFIG.MAX_INVENTORY_SLOTS) return false;
 
-    const itemDef = ITEM_DATABASE[item.itemId];
+    const itemDef = this.itemSys.getItemDefinition(item.itemId);
     if (itemDef && itemDef.maxStack > 1 && !item.enhancementLevel) {
       const existing = session.inventory.find(s => s.itemId === item.itemId);
       if (existing && existing.quantity + item.quantity <= itemDef.maxStack) {
@@ -515,7 +516,7 @@ export class PlayerSystem extends System {
     const invSlot = session.inventory.find(s => s.itemId === itemId);
     if (!invSlot) return false;
 
-    const itemDef = ITEM_DATABASE[itemId];
+    const itemDef = this.itemSys.getItemDefinition(itemId);
     if (!itemDef || !itemDef.equipmentSlot) return false;
     if (session.stats.level < itemDef.requiredLevel) return false;
 

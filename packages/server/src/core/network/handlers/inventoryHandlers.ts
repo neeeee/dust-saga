@@ -1,7 +1,7 @@
 import { Socket } from 'socket.io';
 import {
   Packet, PacketType,
-  getItem, applyRacialPotionHealing,
+  applyRacialPotionHealing,
   LootRule, normalizeLootRule, LootRollKind, getRecipe,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
@@ -26,7 +26,7 @@ function handleItemUse(ctx: NetworkContext, socket: Socket, data: any): void {
 
   if (ctx.tradeSys.isInTrade(characterId)) return;
 
-  const itemDef = getItem(data.itemId);
+  const itemDef = ctx.itemSys.getItemDefinition(data.itemId);
   if (!itemDef) return;
 
   const invSlot = session.inventory.find(s => s.itemId === data.itemId);
@@ -362,7 +362,7 @@ function handleItemDrop(ctx: NetworkContext, socket: Socket, data: any): void {
 
   const removed = ctx.playerSys.removeItemFromInventory(session, itemId, quantity);
   if (removed) {
-    const itemDef = getItem(itemId);
+    const itemDef = ctx.itemSys.getItemDefinition(itemId);
     const name = itemDef?.name || itemId;
     ctx.sendToPlayer(characterId, {
       type: PacketType.INVENTORY_UPDATE,

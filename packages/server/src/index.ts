@@ -45,6 +45,7 @@ async function startServer() {
 
     await networkServer.questSys.initialize(db);
     await networkServer.cutsceneSys.initialize(db);
+    await networkServer.itemSys.initialize(db);
 
     // ── HTTP API ───────────────────────────────────────────────────────────
     // All gameplay/admin REST routes live under packages/server/src/core/api.
@@ -53,6 +54,7 @@ async function startServer() {
     app.use('/api', createApiRouter({
       questSys: networkServer.questSys,
       cutsceneSys: networkServer.cutsceneSys,
+      itemSys: networkServer.itemSys,
     }));
 
     // B2: attach the Socket.IO Redis adapter when Redis is available so zone-room

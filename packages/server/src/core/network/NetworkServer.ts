@@ -24,7 +24,7 @@ import {
   NATION_ZONE_MAP,
   ZoneType,
   normalizeEquipment,
-  getEnemyDefinition, getZoneDefinition, NPC_DATABASE, getNPCsInZone, getItem, ITEM_DATABASE,
+  getEnemyDefinition, getZoneDefinition, NPC_DATABASE, getNPCsInZone,
   SpatialEntry,
   SUMMON_STATS, BANISH_RADIUS,
   getGloomRecoilRate,
@@ -55,6 +55,7 @@ import { ZoneRegistry } from '../world/ZoneInstance';
 import { QuestSystem } from '../../systems/QuestSystem';
 import { CraftSystem } from '../../systems/CraftSystem';
 import { CutsceneSystem } from '../../systems/CutsceneSystem';
+import { ItemSystem } from '../../systems/ItemSystem';
 import { PresenceService } from '../presence/PresenceService';
 import { PacketRelay } from '../presence/PacketRelay';
 import { ZoneOwnership } from '../presence/ZoneOwnership';
@@ -83,6 +84,7 @@ export class NetworkServer implements NetworkContext {
   readonly questSys: QuestSystem;
   readonly craftSys: CraftSystem;
   readonly cutsceneSys: CutsceneSystem;
+  readonly itemSys: ItemSystem;
   readonly state: ServerGameState;
   private tickRate: number = 30;
   private handlers: Map<PacketType, PacketHandler>;
@@ -161,6 +163,16 @@ export class NetworkServer implements NetworkContext {
     this.questSys = new QuestSystem();
     this.craftSys = new CraftSystem();
     this.cutsceneSys = new CutsceneSystem();
+    this.itemSys = new ItemSystem();
+    // Wire item lookups into systems that consume ItemDefinition at runtime,
+    // so they read the ItemSystem cache (DB-backed, hot-reloadable) instead of
+    // the static ITEM_DATABASE import.
+    this.combat.itemSys = this.itemSys;
+    this.loot.itemSys = this.itemSys;
+    this.playerSys.itemSys = this.itemSys;
+    this.skillSys.itemSys = this.itemSys;
+    this.tradeSys.itemSys = this.itemSys;
+    this.craftSys.itemSys = this.itemSys;
     this.partySys = new PartySystem({
       redis: presenceOpts.redis,
       isConnected: presenceOpts.isRedisConnected,
@@ -195,6 +207,7 @@ export class NetworkServer implements NetworkContext {
       getPartySys: () => this.partySys,
       getPlayerSys: () => this.playerSys,
       getTickRate: () => this.tickRate,
+      getItemDef: (id: string) => this.itemSys.getItemDefinition(id),
     });
 
     this.spatialMgr = new SpatialIndexManager({
@@ -1400,7 +1413,7 @@ export class NetworkServer implements NetworkContext {
   processOnHitProcs(session: PlayerSession, targetId: string, damageDealt: number, isPhysical: boolean): void {
     if (!isPhysical || damageDealt <= 0) return;
 
-    const { procs, enhancementLevel, enhancementElement } = collectProcs(session);
+    const { procs, enhancementLevel, enhancementElement } = collectProcs(session, this.itemSys);
 
     for (const proc of procs) {
       if (proc.minLevel && enhancementLevel < proc.minLevel) continue;

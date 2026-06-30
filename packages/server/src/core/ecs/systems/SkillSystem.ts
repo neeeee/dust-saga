@@ -18,11 +18,11 @@ import {
   getEffectiveProficiencies,
   SkillType, OnHitEffect, HealingEffect, getSkillTargetType,
   AOETargetMode,
-  getItem,
 } from '@dust-saga/shared';
 import { CLASS_SKILL_DATA, CATEGORY_LEVEL_SKILLS, CATEGORY_ID_TO_KEY } from '@dust-saga/shared';
 import { CLASS_SPECIFIC_SKILLS, getClassSpecificSkillsForJob } from '@dust-saga/shared';
 import { findSkillDefinition as sharedFindSkillDefinition } from '@dust-saga/shared';
+import type { ItemSystem } from '../../../systems/ItemSystem';
 
 const CLASS_SKILL_LOOKUP: Map<string, SkillDefinition> = ((): Map<string, SkillDefinition> => {
   const lookup = new Map<string, SkillDefinition>();
@@ -154,6 +154,7 @@ export interface SkillUseResult {
 type DamageType = 'physical' | 'magical';
 
 export class SkillSystem {
+  itemSys!: ItemSystem;
   private gcd: number = 1000;
   private globalCooldowns: Map<string, number> = new Map();
   lastBuffDebug: string | undefined;
@@ -346,7 +347,7 @@ export class SkillSystem {
       if (!weapon) {
         return { canUse: false, error: 'wrong_weapon' };
       }
-      const weaponDef = getItem(weapon.itemId);
+      const weaponDef = this.itemSys.getItemDefinition(weapon.itemId);
       if (!weaponDef?.weaponType || !skill.requiredWeaponType.includes(weaponDef.weaponType)) {
         return { canUse: false, error: 'wrong_weapon' };
       }
@@ -902,8 +903,9 @@ export class SkillSystem {
           const elemPower = skill.elementalPower ?? skill.basePower ?? 1;
           allElemental.push(computeElementalDamageLine(elemPower, totalSPI, totalINT, session.stats.level, skillElement as string, targetResists));
         }
+        const skillWeaponDef = this.itemSys.getItemDefinition(session.equipment?.weapon?.itemId);
         const weaponElem = calculateWeaponElementalDamage(
-          session.equipment?.weapon?.itemId,
+          skillWeaponDef?.stats.weaponElement, skillWeaponDef?.stats.weaponElementPower,
           session.statusEffects || [],
           totalSPI,
           totalINT,

@@ -1,8 +1,9 @@
 import {
   PacketType, Packet, PlayerSession, InventoryItem,
   TradeOffer, TradeOfferItem, TradeState,
-  getItem, GAME_CONFIG,
+  GAME_CONFIG,
 } from '@dust-saga/shared';
+import type { ItemSystem } from '../../../systems/ItemSystem';
 
 interface TradeSession {
   id: string;
@@ -22,6 +23,7 @@ const TRADE_DISTANCE = 5;
 const MAX_OFFER_SLOTS = 12;
 
 export class TradeSystem {
+  itemSys!: ItemSystem;
   private tradeSessions = new Map<string, TradeSession>();
   private playerTrade = new Map<string, string>();
   private pendingInvites = new Map<string, string>();
@@ -414,7 +416,7 @@ export class TradeSystem {
     const usedSlots = new Set(clone.map(s => s.slot));
 
     for (const item of items) {
-      const itemDef = getItem(item.itemId);
+      const itemDef = this.itemSys.getItemDefinition(item.itemId);
       const isStackable = itemDef && itemDef.maxStack > 1 && !item.enhancementLevel;
 
       if (isStackable) {

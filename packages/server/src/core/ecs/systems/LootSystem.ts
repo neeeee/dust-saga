@@ -1,10 +1,11 @@
 import { EntityManager, System } from '../EntityManager';
 import {
-  LootRule, LootTable, ItemRarity, ITEM_DATABASE,
+  LootRule, LootTable, ItemRarity,
   LOOT_DESPAWN_MS, LOOT_ASSIGNMENT_DURATION_MS,
   PartyData, PartyLootItem, PartyMember, LootRollKind,
 } from '@dust-saga/shared';
 import { normalizeLootRule } from '@dust-saga/shared';
+import type { ItemSystem } from '../../../systems/ItemSystem';
 
 export interface LootItemEntry {
   id: string;
@@ -53,6 +54,7 @@ function nextItemId(): string {
  *      LOOT_DESPAWN to the zone.
  */
 export class LootSystem extends System {
+  itemSys!: ItemSystem;
   private activeLoot: Map<string, LootInstance> = new Map();
   /** Per-party need/greed pools, separate from ground bags. */
   private partyPools: Map<string, PartyLootItem[]> = new Map();
@@ -137,7 +139,7 @@ export class LootSystem extends System {
       id: nextItemId(),
       itemId: d.itemId,
       quantity: d.quantity,
-      rarity: ITEM_DATABASE[d.itemId]?.rarity,
+      rarity: this.itemSys.getItemDefinition(d.itemId)?.rarity,
     }));
     return {
       id: nextLootId(),
@@ -172,7 +174,7 @@ export class LootSystem extends System {
   ): PartyLootItem | null {
     if (members.length === 0) return null;
     const lootId = nextLootId();
-    const itemName = ITEM_DATABASE[drop.itemId]?.name || drop.itemId;
+    const itemName = this.itemSys.getItemDefinition(drop.itemId)?.name || drop.itemId;
     const entry: PartyLootItem = {
       lootId,
       itemId: drop.itemId,
@@ -265,7 +267,7 @@ export class LootSystem extends System {
     const entry: PartyLootItem = {
       lootId,
       itemId: drop.itemId,
-      itemName: ITEM_DATABASE[drop.itemId]?.name || drop.itemId,
+      itemName: this.itemSys.getItemDefinition(drop.itemId)?.name || drop.itemId,
       quantity: drop.quantity,
       rolls: {},
     };
@@ -361,7 +363,7 @@ export class LootSystem extends System {
   addItemToBag(lootId: string, itemId: string, quantity: number): boolean {
     const bag = this.activeLoot.get(lootId);
     if (!bag) return false;
-    bag.items.push({ id: nextItemId(), itemId, quantity, rarity: ITEM_DATABASE[itemId]?.rarity });
+    bag.items.push({ id: nextItemId(), itemId, quantity, rarity: this.itemSys.getItemDefinition(itemId)?.rarity });
     return true;
   }
 

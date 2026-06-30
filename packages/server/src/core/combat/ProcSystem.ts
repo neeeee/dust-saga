@@ -1,8 +1,8 @@
 import {
   PlayerSession, StatusEffect, StatusEffectType,
   OnHitProc, ProcEffectType, STATUS_EFFECT_DEFS,
-  getItem,
 } from '@dust-saga/shared';
+import type { ItemSystem } from '../../systems/ItemSystem';
 
 interface ProcMapping {
   statusType: StatusEffectType;
@@ -31,14 +31,14 @@ export interface CollectedProcs {
   enhancementElement?: string;
 }
 
-export function collectProcs(session: PlayerSession): CollectedProcs {
+export function collectProcs(session: PlayerSession, itemSys: ItemSystem): CollectedProcs {
   const procs: OnHitProc[] = [];
 
   const souls = session.socketedSouls;
   if (souls) {
     for (const soul of souls) {
       if (!soul) continue;
-      const def = getItem(soul.itemId);
+      const def = itemSys.getItemDefinition(soul.itemId);
       if (def?.onHitProcs) {
         procs.push(...def.onHitProcs);
       }
@@ -52,7 +52,7 @@ export function collectProcs(session: PlayerSession): CollectedProcs {
   if (weapon) {
     enhancementLevel = weapon.enhancementLevel || 0;
     enhancementElement = weapon.enhancementElement;
-    const weaponDef = getItem(weapon.itemId);
+    const weaponDef = itemSys.getItemDefinition(weapon.itemId);
     if (weaponDef?.innateProcs) {
       for (const proc of weaponDef.innateProcs) {
         if (proc.element && proc.element !== enhancementElement) continue;

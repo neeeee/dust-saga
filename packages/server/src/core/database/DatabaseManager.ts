@@ -211,6 +211,28 @@ export class DatabaseManager {
         script JSONB NOT NULL DEFAULT '[]',
         created_at TIMESTAMP DEFAULT NOW()
       )`,
+
+      `CREATE TABLE IF NOT EXISTS item_definitions (
+        id VARCHAR(80) PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        type VARCHAR(20) NOT NULL,
+        rarity VARCHAR(20) NOT NULL,
+        stats JSONB NOT NULL DEFAULT '{}',
+        icon VARCHAR(255),
+        max_stack INTEGER NOT NULL DEFAULT 1,
+        sell_price INTEGER NOT NULL DEFAULT 0,
+        required_level INTEGER NOT NULL DEFAULT 1,
+        equipment_slot VARCHAR(20),
+        weapon_type VARCHAR(20),
+        soul_slots INTEGER,
+        on_hit_procs JSONB,
+        innate_procs JSONB,
+        teaches_recipe VARCHAR(80),
+        created_at TIMESTAMP DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_item_definitions_type ON item_definitions(type)`,
+      `CREATE INDEX IF NOT EXISTS idx_item_definitions_rarity ON item_definitions(rarity)`,
     ];
 
     for (const sql of migrations) {

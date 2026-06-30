@@ -4,7 +4,7 @@ import {
   JOB_DEFINITIONS, RACE_DATA, createDefaultStatPoints, createDefaultSkillProficiencies, createDefaultSkillAdeptness,
   getDesignJobId, getExperienceToNextLevel, getStatPointsGainedAtLevel, getSkillPointsGainedAtLevel,
   MAX_LEVEL, getAdvancementOptions, JobId, BaseClass, NATION_ZONE_MAP,
-  getZoneDefinition, getEnemyDefinition, ITEM_DATABASE, normalizeEquipment,
+  getZoneDefinition, getEnemyDefinition, normalizeEquipment,
   AccountRole, roleAtLeast,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
@@ -444,8 +444,8 @@ function handleResetSkills(ctx: NetworkContext, session: PlayerSession): void {
 function handleGiveItem(ctx: NetworkContext, session: PlayerSession, parts: string[]): void {
   const itemId = parts[1];
   const quantity = parseInt(parts[2]) || 1;
-  if (!itemId || !ITEM_DATABASE[itemId]) {
-    const itemNames = Object.keys(ITEM_DATABASE).join(', ');
+  if (!itemId || !ctx.itemSys.getItemDefinition(itemId)) {
+    const itemNames = ctx.itemSys.getAllItemDefinitions().map(i => i.id).join(', ');
     ctx.sendToPlayer(session.characterId, {
       type: PacketType.CHAT_MESSAGE,
       timestamp: Date.now(),
@@ -455,11 +455,11 @@ function handleGiveItem(ctx: NetworkContext, session: PlayerSession, parts: stri
   }
   const added = ctx.playerSys.addItemToInventory(session, itemId, quantity);
   if (added) {
-    const itemDef = ITEM_DATABASE[itemId];
+    const itemDef = ctx.itemSys.getItemDefinition(itemId);
     ctx.sendToPlayer(session.characterId, {
       type: PacketType.CHAT_MESSAGE,
       timestamp: Date.now(),
-      data: { sender: 'System', message: `Received ${itemDef.name} x${quantity}.`, channel: 'system' }
+      data: { sender: 'System', message: `Received ${itemDef?.name ?? itemId} x${quantity}.`, channel: 'system' }
     });
     ctx.sendToPlayer(session.characterId, {
       type: PacketType.INVENTORY_UPDATE,

@@ -21,6 +21,7 @@ import { DummyMeta } from '../world/DummyManager';
 import { QuestSystem } from '../../systems/QuestSystem';
 import { CraftSystem } from '../../systems/CraftSystem';
 import { CutsceneSystem } from '../../systems/CutsceneSystem';
+import { ItemSystem } from '../../systems/ItemSystem';
 import { PresenceService } from '../presence/PresenceService';
 import { ZoneOwnership } from '../presence/ZoneOwnership';
 
@@ -48,6 +49,7 @@ export interface NetworkContext {
   readonly questSys: QuestSystem;
   readonly craftSys: CraftSystem;
   readonly cutsceneSys: CutsceneSystem;
+  readonly itemSys: ItemSystem;
   readonly presence: PresenceService;
   readonly zoneOwnership: ZoneOwnership;
 

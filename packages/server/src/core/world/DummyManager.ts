@@ -4,7 +4,7 @@ import {
   getDesignJobId, getBaseClassForJob, normalizeEquipment,
   JobId, BaseClass, MAX_LEVEL, AccountRole,
   PartyVisibility, LootRule,
-  ITEM_DATABASE,
+  ItemDefinition,
 } from '@dust-saga/shared';
 import { PartySystem } from '../ecs/systems/PartySystem';
 import { PlayerSystem } from '../ecs/systems/PlayerSystem';
@@ -31,6 +31,7 @@ export interface DummyManagerDeps {
   getPartySys(): PartySystem;
   getPlayerSys(): PlayerSystem;
   getTickRate(): number;
+  getItemDef(id: string): ItemDefinition | undefined;
 }
 
 export class DummyManager {
@@ -278,7 +279,7 @@ export class DummyManager {
     }
 
     for (const [slot, itemId] of Object.entries(gearPreset)) {
-      if (itemId && ITEM_DATABASE[itemId]) {
+      if (itemId && this.deps.getItemDef(itemId)) {
         (dummy.equipment as any)[slot] = { itemId, enhancementLevel: 0, enhancementElement: null, quantity: 1, slot: 0 };
       } else {
         (dummy.equipment as any)[slot] = null;

@@ -1,5 +1,6 @@
 import { EntityManager, System } from '../EntityManager';
-import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats, calculateWeaponElementalDamage, calculateAccuracy, calculateHitChance, StatusEffectType, getItem, RANGED_WEAPON_TYPES } from '@dust-saga/shared';
+import { GAME_CONFIG, COMBAT_CONFIG, PlayerSession, EnemyInstance, DamageInfo, getEnemyDefinition, applyRacialCritChance, processRacialOnDamage, getEffectiveStats, calculateWeaponElementalDamage, calculateAccuracy, calculateHitChance, StatusEffectType, RANGED_WEAPON_TYPES } from '@dust-saga/shared';
+import type { ItemSystem } from '../../../systems/ItemSystem';
 
 interface ConeTarget {
   id: string;
@@ -11,6 +12,7 @@ interface ConeTarget {
 }
 
 export class CombatSystem extends System {
+  itemSys!: ItemSystem;
   private damageCallbacks: Array<(info: DamageInfo) => void> = [];
   private deathCallbacks: Array<(entityId: string, killerId: string) => void> = [];
 
@@ -101,7 +103,7 @@ export class CombatSystem extends System {
   private isRangedWeapon(attacker: PlayerSession): boolean {
     const weapon = attacker.equipment?.weapon as any;
     if (!weapon) return false;
-    const def = getItem(weapon.itemId);
+    const def = this.itemSys.getItemDefinition(weapon.itemId);
     if (!def?.weaponType) return false;
     return RANGED_WEAPON_TYPES.has(def.weaponType);
   }
@@ -190,8 +192,10 @@ export class CombatSystem extends System {
       }
 
       const { damage, isCritical } = this.computePhysicalDamage(effective.attack, targetDefense, attacker.racialPassive);
+      const attackerWeaponDef = this.itemSys.getItemDefinition(attacker.equipment?.weapon?.itemId);
       const elementalDamage = calculateWeaponElementalDamage(
-        attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
+        attackerWeaponDef?.stats.weaponElement, attackerWeaponDef?.stats.weaponElementPower,
+        attacker.statusEffects || [],
         totalSPI, totalINT, attacker.stats.level, targetResists,
         (attacker.equipment?.weapon as any)?.enhancementElement,
         (attacker.equipment?.weapon as any)?.enhancementLevel,
@@ -309,8 +313,10 @@ export class CombatSystem extends System {
         const { damage: baseDamage, isCritical } = this.computePhysicalDamage(effective.attack, target.defense, attacker.racialPassive);
         const damage = Math.max(COMBAT_CONFIG.MIN_DAMAGE, Math.floor(baseDamage * falloff));
 
+        const attackerWeaponDef = this.itemSys.getItemDefinition(attacker.equipment?.weapon?.itemId);
         const elementalDamage = calculateWeaponElementalDamage(
-          attacker.equipment?.weapon?.itemId, attacker.statusEffects || [],
+          attackerWeaponDef?.stats.weaponElement, attackerWeaponDef?.stats.weaponElementPower,
+          attacker.statusEffects || [],
           totalSPI, totalINT, attacker.stats.level, targetResists,
           (attacker.equipment?.weapon as any)?.enhancementElement,
           (attacker.equipment?.weapon as any)?.enhancementLevel,

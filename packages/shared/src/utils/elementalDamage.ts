@@ -1,5 +1,4 @@
 import { StatusEffect, StatusEffectType } from '../types/status';
-import { ITEM_DATABASE } from '../constants/items';
 
 export interface ElementalDamageLine {
   element: string;
@@ -15,8 +14,14 @@ const ELEMENT_RESIST_KEYS: Record<string, string> = {
   poison: 'poisonResist',
 };
 
+/**
+ * Caller resolves the weapon's base element/power from the item definition
+ * (via ItemSystem) and passes it in directly, so this util stays free of any
+ * data-source dependency and works equally for static or DB-backed items.
+ */
 export function calculateWeaponElementalDamage(
-  weaponItemId: string | null | undefined,
+  weaponElement: string | null | undefined,
+  weaponElementPower: number | undefined,
   statusEffects: StatusEffect[],
   attackerSPI: number,
   attackerINT: number,
@@ -30,12 +35,11 @@ export function calculateWeaponElementalDamage(
 
   const resolvedElement = enhancementElement || null;
   const isMagicEnhancement = resolvedElement?.startsWith('magic_') || false;
-  const hasBaseElement = weaponItemId && ITEM_DATABASE[weaponItemId]?.stats.weaponElement && ITEM_DATABASE[weaponItemId]?.stats.weaponElementPower;
+  const hasBaseElement = weaponElement && weaponElementPower;
 
   if (hasBaseElement && !isMagicEnhancement) {
-    const weaponDef = ITEM_DATABASE[weaponItemId!];
-    const el = weaponDef.stats.weaponElement!;
-    const basePower = weaponDef.stats.weaponElementPower!;
+    const el = weaponElement!;
+    const basePower = weaponElementPower!;
     let damage = Math.floor(
       basePower * (attackerSPI * 0.3 + attackerINT * 0.2 + attackerLevel * 0.2)
     );

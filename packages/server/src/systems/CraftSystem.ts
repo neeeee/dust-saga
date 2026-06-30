@@ -1,5 +1,6 @@
-import { PlayerSession, RecipeDefinition, ITEM_DATABASE, CraftProfession } from '@dust-saga/shared';
+import { PlayerSession, RecipeDefinition, CraftProfession } from '@dust-saga/shared';
 import { getRecipe } from '@dust-saga/shared';
+import type { ItemSystem } from './ItemSystem';
 
 export interface CraftResult {
   success: boolean;
@@ -16,6 +17,7 @@ export interface CraftResult {
  * packets).
  */
 export class CraftSystem {
+  itemSys!: ItemSystem;
   /** Returns the recipe if the player knows it AND it matches the NPC's profession. */
   resolveCraftableRecipe(
     session: PlayerSession,
@@ -42,7 +44,7 @@ export class CraftSystem {
         .filter(inv => inv.itemId === mat.itemId)
         .reduce((sum, inv) => sum + inv.quantity, 0);
       if (have < mat.quantity) {
-        const name = ITEM_DATABASE[mat.itemId]?.name || mat.itemId;
+        const name = this.itemSys.getItemDefinition(mat.itemId)?.name || mat.itemId;
         return { success: false, error: `Need ${mat.quantity}× ${name} (have ${have})` };
       }
       consumed.push({ itemId: mat.itemId, quantity: mat.quantity });

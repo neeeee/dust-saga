@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import {
-  Packet, PacketType, NPC_DATABASE, getNPCsInZone, getItem, NATION_ZONE_MAP, getZoneDefinition, JobId,
+  Packet, PacketType, NPC_DATABASE, getNPCsInZone, NATION_ZONE_MAP, getZoneDefinition, JobId,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -115,7 +115,7 @@ function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void
       npcId: data.npcId,
       npcName: npc.name,
       dialog,
-      shopItems: npc.type === 'merchant' || npc.type === 'blacksmith' ? (npc.shopItems || []).map(id => getItem(id)).filter(Boolean) : undefined,
+      shopItems: npc.type === 'merchant' || npc.type === 'blacksmith' ? (npc.shopItems || []).map(id => ctx.itemSys.getItemDefinition(id)).filter(Boolean) : undefined,
       availableQuests,
       activeQuests,
       craftProfession: npc.craftProfession,
@@ -159,7 +159,7 @@ function handleShopBuy(ctx: NetworkContext, socket: Socket, data: any): void {
 
   if (ctx.tradeSys.isInTrade(characterId)) return;
 
-  const itemDef = getItem(data.itemId);
+  const itemDef = ctx.itemSys.getItemDefinition(data.itemId);
   if (!itemDef) return;
 
   const qty = data.quantity || 1;
