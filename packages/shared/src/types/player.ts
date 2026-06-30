@@ -120,6 +120,8 @@ export interface EnmityEntry {
   ce: number;
   ve: number;
   timestamp: number;
+  ceDecayAccum?: number;
+  veDecayAccum?: number;
 }
 
 export interface EnemyInstance {

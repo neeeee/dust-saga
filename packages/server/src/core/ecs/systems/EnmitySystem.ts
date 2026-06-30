@@ -109,15 +109,29 @@ export class EnmitySystem {
     const keys = Object.keys(enemy.enmityTable);
     if (keys.length === 0) return;
 
-    const veDecay = Math.floor(VE_DECAY_RATE * deltaTime);
-    const ceDecay = Math.floor((combat ? CE_DECAY_RATE_COMBAT : CE_DECAY_RATE_IDLE) * deltaTime);
-    if (veDecay <= 0 && ceDecay <= 0) return;
+    const veRate = VE_DECAY_RATE * deltaTime;
+    const ceRate = (combat ? CE_DECAY_RATE_COMBAT : CE_DECAY_RATE_IDLE) * deltaTime;
+    if (veRate <= 0 && ceRate <= 0) return;
 
     const toRemove: string[] = [];
     for (const characterId of keys) {
       const entry = enemy.enmityTable[characterId];
-      entry.ve = Math.max(0, entry.ve - veDecay);
-      entry.ce = Math.max(0, entry.ce - ceDecay);
+
+      entry.veDecayAccum = (entry.veDecayAccum || 0) + veRate;
+      entry.ceDecayAccum = (entry.ceDecayAccum || 0) + ceRate;
+
+      const veDecay = Math.floor(entry.veDecayAccum);
+      const ceDecay = Math.floor(entry.ceDecayAccum);
+
+      if (veDecay > 0) {
+        entry.ve = Math.max(0, entry.ve - veDecay);
+        entry.veDecayAccum -= veDecay;
+      }
+      if (ceDecay > 0) {
+        entry.ce = Math.max(0, entry.ce - ceDecay);
+        entry.ceDecayAccum -= ceDecay;
+      }
+
       if (entry.ce <= 0 && entry.ve <= 0) {
         toRemove.push(characterId);
       }

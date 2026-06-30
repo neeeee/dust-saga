@@ -338,6 +338,13 @@ export class AISystem extends System {
       return;
     }
 
+    if (def.leashRange > 0 && distance2D(enemy.position, enemy.spawnPosition) > def.leashRange) {
+      if (this.enmitySys) this.enmitySys.clearEnmity(enemy);
+      enemy.targetId = null;
+      this.transitionTo(enemy, 'return');
+      return;
+    }
+
     if (this.enmitySys) {
       this.enmitySys.decay(enemy, deltaTime, true);
       const topTarget = this.enmitySys.getTopTarget(enemy);
@@ -369,6 +376,13 @@ export class AISystem extends System {
     deltaTime: number
   ): void {
     if (!def || !enemy.targetId) {
+      this.transitionTo(enemy, 'return');
+      return;
+    }
+
+    if (def.leashRange > 0 && distance2D(enemy.position, enemy.spawnPosition) > def.leashRange) {
+      if (this.enmitySys) this.enmitySys.clearEnmity(enemy);
+      enemy.targetId = null;
       this.transitionTo(enemy, 'return');
       return;
     }
