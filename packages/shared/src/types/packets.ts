@@ -122,6 +122,7 @@ export enum PacketType {
   CUTSCENE_START = 186,
   CUTSCENE_COMPLETE = 187,
   CUTSCENE_END = 188,
+  FLOATING_TEXT = 189,
 }
 
 export interface Packet {

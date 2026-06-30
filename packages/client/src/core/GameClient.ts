@@ -894,6 +894,11 @@ export class GameClient {
       }
     });
 
+    this.network.onPacket(PacketType.FLOATING_TEXT, (packet: any) => {
+      const { entityId, text, color } = packet.data;
+      if (this.engine) this.engine.showFloatingText(entityId, text, color);
+    });
+
     this.network.onPacket(PacketType.ENHANCEMENT_RESULT, (packet: any) => {
       if (packet.data.success) {
         this.callbacks.onNotification?.(`Enhancement successful! +${packet.data.enhancementLevel}`, 'success');

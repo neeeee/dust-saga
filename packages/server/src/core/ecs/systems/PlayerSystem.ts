@@ -282,20 +282,24 @@ export class PlayerSystem extends System {
     return true;
   }
 
-  /** Snapshot equipment and strip to empty (for trial quests). */
-  stripEquipmentForTrial(session: PlayerSession): void {
-    session.trialEquipmentBackup = JSON.parse(JSON.stringify(session.equipment));
-    session.equipment = { ...DEFAULT_EQUIPMENT };
-    this.recalcStats(session);
-  }
-
-  /** Restore equipment from trial backup. */
-  restoreEquipmentFromTrial(session: PlayerSession): boolean {
-    if (!session.trialEquipmentBackup) return false;
-    session.equipment = session.trialEquipmentBackup;
-    session.trialEquipmentBackup = undefined;
-    this.recalcStats(session);
-    return true;
+  /** Unequip all items back to inventory (for class advancement gear strip). */
+  unequipAll(session: PlayerSession): { moved: number; failed: number } {
+    let moved = 0;
+    let failed = 0;
+    for (const slot of Object.keys(session.equipment) as Array<keyof typeof session.equipment>) {
+      const item = session.equipment[slot];
+      if (!item) continue;
+      const invItem = { itemId: item.itemId, quantity: 1, slot: 0, enhancementLevel: item.enhancementLevel, enhancementElement: item.enhancementElement };
+      const added = this.addItemToInventoryWithMeta(session, invItem);
+      if (added) {
+        session.equipment[slot] = null;
+        moved++;
+      } else {
+        failed++;
+      }
+    }
+    if (moved > 0) this.recalcStats(session);
+    return { moved, failed };
   }
 
   /** Refund all allocated stat points. */

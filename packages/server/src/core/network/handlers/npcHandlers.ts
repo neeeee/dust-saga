@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import {
-  Packet, PacketType, NPC_DATABASE, getNPCsInZone, getItem, NATION_ZONE_MAP, getZoneDefinition,
+  Packet, PacketType, NPC_DATABASE, getNPCsInZone, getItem, NATION_ZONE_MAP, getZoneDefinition, JobId,
 } from '@dust-saga/shared';
 import { NetworkContext, PacketHandler } from '../NetworkContext';
 
@@ -30,6 +30,12 @@ function handleNPCInteract(ctx: NetworkContext, socket: Socket, data: any): void
   if (typeof data.dialogId === 'string' && data.dialogId.startsWith('cutscene:')) {
     const cutsceneId = data.dialogId.slice('cutscene:'.length);
     ctx.startCutscene(session, cutsceneId);
+    return;
+  }
+
+  // Class advancement dialog actions: "adv:<step>:<param>"
+  if (typeof data.dialogId === 'string' && data.dialogId.startsWith('adv:')) {
+    handleAdvancementAction(ctx, characterId, session, npc, data.dialogId);
     return;
   }
 
@@ -182,4 +188,129 @@ function handleShopBuy(ctx: NetworkContext, socket: Socket, data: any): void {
       data: { characterId, stats: session.stats }
     });
   }
+}
+
+/**
+ * Class advancement dialog actions. The client sends NPC_INTERACT with
+ * dialogId = "adv:<step>:<param>" and the server executes the action,
+ * then serves the next dialog page (or closes).
+ *
+ * Flow:
+ *   adv:strip:<nextDialogId>   → unequip all gear to inventory
+ *   adv:reset:<nextDialogId>   → refund stat + skill points
+ *   adv:advance:<jobId>        → advance class + broadcast "Advanced!" effect
+ */
+function handleAdvancementAction(
+  ctx: NetworkContext,
+  characterId: string,
+  session: any,
+  npc: any,
+  dialogId: string
+): void {
+  const parts = dialogId.split(':');
+  const step = parts[1];
+  const param = parts.slice(2).join(':');
+
+  if (step === 'strip') {
+    const result = ctx.playerSys.unequipAll(session);
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.INVENTORY_UPDATE,
+      timestamp: Date.now(),
+      data: { inventory: session.inventory, equipment: session.equipment }
+    });
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: { characterId, stats: session.stats, statBreakdown: session.statBreakdown }
+    });
+    if (result.failed > 0) {
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: `${result.moved} items unequipped. ${result.failed} couldn't be moved — inventory full.`, type: 'info' }
+      });
+    }
+    // Serve the next dialog page (respec question)
+    if (param) serveDialog(ctx, characterId, npc, param);
+    return;
+  }
+
+  if (step === 'reset') {
+    ctx.playerSys.resetStatPoints(session);
+    ctx.playerSys.resetSkillPoints(session);
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.STATS_UPDATE,
+      timestamp: Date.now(),
+      data: {
+        characterId, stats: session.stats, statPoints: session.statPoints,
+        unspentStatPoints: session.unspentStatPoints, unspentSkillPoints: session.unspentSkillPoints,
+        skillProficiencies: session.skillProficiencies, skillAdeptness: session.skillAdeptness,
+        statBreakdown: session.statBreakdown
+      }
+    });
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.NOTIFICATION,
+      timestamp: Date.now(),
+      data: { message: 'Stat and skill points reset. Reallocate them now.', type: 'info' }
+    });
+    if (param) serveDialog(ctx, characterId, npc, param);
+    return;
+  }
+
+  if (step === 'advance') {
+    const jobId = param as JobId;
+    const advanced = ctx.playerSys.advanceJob(session, jobId);
+    if (advanced) {
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.STATS_UPDATE,
+        timestamp: Date.now(),
+        data: {
+          characterId, stats: session.stats, statPoints: session.statPoints,
+          jobId: session.jobId, baseClass: session.baseClass, statBreakdown: session.statBreakdown
+        }
+      });
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: `You are now a ${jobId}!`, type: 'success' }
+      });
+      // Broadcast "Advanced!" floating text to everyone in the zone
+      ctx.broadcastInZone(session.zoneId, {
+        type: PacketType.FLOATING_TEXT,
+        timestamp: Date.now(),
+        data: { entityId: session.characterId, text: 'Advanced!', color: '#ffd166' }
+      });
+    } else {
+      ctx.sendToPlayer(characterId, {
+        type: PacketType.NOTIFICATION,
+        timestamp: Date.now(),
+        data: { message: 'Advancement failed.', type: 'error' }
+      });
+    }
+    // Close dialog after advancement
+    ctx.sendToPlayer(characterId, {
+      type: PacketType.NPC_DIALOG,
+      timestamp: Date.now(),
+      data: { npcId: npc.id, npcName: npc.name, dialog: undefined }
+    });
+    session.currentNpcId = null;
+    return;
+  }
+}
+
+/** Helper: look up a dialog page from the NPC and send it to the player. */
+function serveDialog(ctx: NetworkContext, characterId: string, npc: any, dialogId: string): void {
+  const dialog = npc.dialogs?.find((d: any) => d.id === dialogId) || npc.dialogs?.[0];
+  ctx.sendToPlayer(characterId, {
+    type: PacketType.NPC_DIALOG,
+    timestamp: Date.now(),
+    data: {
+      npcId: npc.id,
+      npcName: npc.name,
+      dialog,
+      shopItems: undefined,
+      availableQuests: [],
+      activeQuests: [],
+    }
+  });
 }

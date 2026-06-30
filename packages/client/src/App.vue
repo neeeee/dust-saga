@@ -517,6 +517,13 @@ function handleDialogOption(option: any) {
   } else if (option.action === 'play_cutscene') {
     gameClient.interactNPC(currentDialogNPCId, `cutscene:${option.actionData.cutsceneId}`);
     closeDialog();
+  } else if (option.action === 'strip_gear') {
+    gameClient.interactNPC(currentDialogNPCId, `adv:strip:${option.nextDialogId || ''}`);
+  } else if (option.action === 'reset_points') {
+    gameClient.interactNPC(currentDialogNPCId, `adv:reset:${option.nextDialogId || ''}`);
+  } else if (option.action === 'advance_class') {
+    gameClient.interactNPC(currentDialogNPCId, `adv:advance:${option.actionData.jobId}`);
+    closeDialog();
   } else if (option.nextDialogId) {
     gameClient.interactNPC(currentDialogNPCId, option.nextDialogId);
   }

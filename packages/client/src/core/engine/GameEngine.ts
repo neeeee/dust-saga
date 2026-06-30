@@ -16,6 +16,7 @@ import {
   AnimationGroup,
   Mesh,
   TransformNode,
+  DynamicTexture,
 } from '@babylonjs/core';
 import { RecastJSPlugin } from '@babylonjs/core/Navigation/Plugins/recastJSPlugin';
 import { INavMeshParameters } from '@babylonjs/core/Navigation/INavigationEngine';
@@ -709,6 +710,51 @@ export class GameEngine {
     if (!group?.root || !this.assetManager) return;
 
     this.assetManager.createDamageNumber(damage, group.root.position, isCritical, element, miss);
+  }
+
+  /** Show arbitrary floating text above an entity (e.g. "Advanced!"). */
+  showFloatingText(entityId: string, text: string, color?: string): void {
+    const group = this.meshes.get(entityId);
+    if (!group?.root || !this.assetManager) return;
+
+    const pos = group.root.position;
+    const plane = MeshBuilder.CreatePlane(`ft_${Date.now()}`, { width: 2, height: 0.5 }, this.scene!);
+    plane.position = pos.add(new V3(0, 3, 0));
+    plane.billboardMode = 7;
+
+    const texture = new DynamicTexture(`ft_tex_${Date.now()}`, { width: 256, height: 64 }, this.scene!, true);
+    texture.hasAlpha = true;
+    const ctx = texture.getContext() as unknown as CanvasRenderingContext2D;
+    ctx.clearRect(0, 0, 256, 64);
+    ctx.font = 'bold 28px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color || '#ffd166';
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 4;
+    ctx.strokeText(text, 128, 32);
+    ctx.fillText(text, 128, 32);
+    texture.update();
+
+    const mat = new StandardMaterial(`ft_mat_${Date.now()}`, this.scene!);
+    mat.diffuseTexture = texture;
+    mat.emissiveTexture = texture;
+    mat.backFaceCulling = false;
+    mat.disableLighting = true;
+    mat.useAlphaFromDiffuseTexture = true;
+    plane.material = mat;
+
+    let elapsed = 0;
+    this.scene!.onBeforeRenderObservable.add(() => {
+      elapsed += this.scene!.getEngine().getDeltaTime() / 1000;
+      plane.position.y += 0.015;
+      mat.alpha = Math.max(0, 1 - elapsed / 2.5);
+      if (elapsed > 2.5) {
+        plane.dispose();
+        mat.dispose();
+        texture.dispose();
+      }
+    });
   }
 
   private lootBeacons: Map<string, AbstractMesh> = new Map();
