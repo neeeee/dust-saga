@@ -273,7 +273,7 @@ export class PlayerSystem extends System {
 
     if (newJob.parentJob !== session.jobId) return false;
 
-    const requiredLevel = newJob.tier === 2 ? 20 : newJob.tier === 3 ? 40 : 1;
+    const requiredLevel = newJob.tier === 2 ? 20 : newJob.tier === 3 ? 45 : 1;
     if (session.stats.level < requiredLevel) return false;
 
     session.jobId = newJobId;

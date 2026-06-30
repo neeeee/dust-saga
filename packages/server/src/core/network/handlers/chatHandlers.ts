@@ -323,7 +323,7 @@ function handleAdvance(ctx: NetworkContext, session: PlayerSession, parts: strin
     });
     ctx.refreshPartyForMember(session.characterId);
   } else {
-    const requiredLevel = targetDef?.tier === 2 ? 20 : targetDef?.tier === 3 ? 40 : 1;
+    const requiredLevel = targetDef?.tier === 2 ? 20 : targetDef?.tier === 3 ? 45 : 1;
     ctx.sendToPlayer(session.characterId, {
       type: PacketType.CHAT_MESSAGE,
       timestamp: Date.now(),
