@@ -274,7 +274,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue';
 import { GameClient } from './core/GameClient';
-import { PacketType, PlayerStats, StatPoints, PartyData, PartyLootItem, StatusEffectType, getRecipe } from '@dust-saga/shared';
+import { PacketType, PlayerStats, StatPoints, PartyData, PartyLootItem, StatusEffectType, getRecipe, SkillBarSlotKind } from '@dust-saga/shared';
 import type { TradeState } from '@dust-saga/shared';
 import { getCutscene } from '@dust-saga/shared';
 import CharacterSelect from './ui/CharacterSelect.vue';
@@ -578,12 +578,48 @@ function handleAllocateBatch(allocations: Record<string, number>) {
   gameClient.allocateStatBatch(allocations);
 }
 
+const ITEM_USE_COOLDOWN_MS = 500;
+
+function findEquippedSlotForItem(itemId: string): string | null {
+  const eq = equipment.value || {};
+  for (const [slotKey, item] of Object.entries(eq)) {
+    if (item && item.itemId === itemId) return slotKey;
+  }
+  return null;
+}
+
 function handleUseSkillSlot(barIndex: number, slotIndex: number) {
   if (!gameClient) return;
   const slot = skillStore.getSkillInSlot(barIndex, slotIndex);
-  if (!slot?.skillName) return;
-  if (skillStore.isOnCooldown(slot.skillName)) return;
-  gameClient.useSkill(slot.skillName, targetId.value);
+  if (!slot || slot.kind === SkillBarSlotKind.EMPTY) return;
+
+  if (slot.kind === SkillBarSlotKind.SKILL) {
+    if (!slot.skillName) return;
+    if (skillStore.isOnCooldown(slot.skillName)) return;
+    gameClient.useSkill(slot.skillName, targetId.value);
+    return;
+  }
+
+  if (slot.kind === SkillBarSlotKind.ITEM) {
+    if (!slot.itemId) return;
+    if (skillStore.isItemOnCooldown()) return;
+    gameClient.useItem(slot.itemId);
+    skillStore.startItemCooldown(ITEM_USE_COOLDOWN_MS);
+    return;
+  }
+
+  if (slot.kind === SkillBarSlotKind.EQUIPMENT) {
+    if (!slot.itemId) return;
+    const equippedSlot = findEquippedSlotForItem(slot.itemId);
+    if (equippedSlot) {
+      gameClient.unequipItem(equippedSlot);
+    } else {
+      gameClient.equipItem(slot.itemId);
+    }
+    return;
+  }
+
+  // MACRO: macros are not yet developed; no-op for now.
 }
 
 function handleToggleRest() {
@@ -882,6 +918,7 @@ onMounted(async () => {
     onInventoryUpdate: (inv, equip) => {
       inventory.value = inv;
       equipment.value = equip;
+      skillStore.updateItemCounts(inv);
     },
     onQuestUpdate: (q) => {
       quests.value = q;

@@ -2,10 +2,12 @@ import { reactive, ref, computed, watch } from 'vue';
 import {
   SkillBarSlot,
   SkillBarSlotCategory,
+  SkillBarSlotKind,
   SKILL_BAR_SIZE,
   MAX_SKILL_BARS,
   SkillBarLayout,
   createEmptySkillBar,
+  normalizeSlot,
   CLASS_SKILL_DATA,
   getClassSpecificSkillsForJob,
   getCategoryForSubCategory,
@@ -107,14 +109,15 @@ function defaultLayoutNormalized(): SkillBarLayout {
 }
 
 function migrateLegacyLayout(parsed: SkillBarLayout): SkillBarLayout {
-  if (parsed.v === LAYOUT_VERSION) return parsed;
+  const bars = (parsed.bars || []).map(bar => bar.map(s => normalizeSlot(s)));
+  if (parsed.v === LAYOUT_VERSION) return { ...parsed, bars };
   const w = (typeof window !== 'undefined' ? window.innerWidth : 0) || REF_WIDTH;
   const h = (typeof window !== 'undefined' ? window.innerHeight : 0) || REF_HEIGHT;
   const positions = (parsed.positions || []).map((p, i) => {
     if (i === 0 && p.x === 0 && p.y === 0) return { ...DEFAULT_BAR_NORM };
     return { x: clamp01(p.x / w), y: clamp01(p.y / h) };
   });
-  return { v: LAYOUT_VERSION, bars: parsed.bars, positions };
+  return { v: LAYOUT_VERSION, bars, positions };
 }
 
 interface SkillStoreState {
@@ -128,6 +131,8 @@ interface SkillStoreState {
   jobId: string;
   baseClass: string;
   level: number;
+  itemCounts: Record<string, number>;
+  itemCooldown: { readyAt: number; duration: number } | null;
 }
 
 const state = reactive<SkillStoreState>({
@@ -147,6 +152,8 @@ const state = reactive<SkillStoreState>({
   jobId: 'warrior',
   baseClass: 'warrior',
   level: 1,
+  itemCounts: {},
+  itemCooldown: null,
 });
 
 const now = ref(Date.now());
@@ -162,6 +169,9 @@ function startTick(): void {
       if (now.value >= state.cooldowns[key].readyAt) {
         delete state.cooldowns[key];
       }
+    }
+    if (state.itemCooldown && now.value >= state.itemCooldown.readyAt) {
+      state.itemCooldown = null;
     }
   }, 100);
 }
@@ -246,6 +256,7 @@ export function useSkillStore() {
       bar[slotIndex] = temp;
     } else {
       bar[slotIndex] = {
+        kind: SkillBarSlotKind.SKILL,
         skillName,
         category: category as SkillBarSlotCategory,
         subCategory,
@@ -253,11 +264,50 @@ export function useSkillStore() {
     }
   }
 
+  function setItemInSlot(barIndex: number, slotIndex: number, itemId: string): void {
+    const bar = state.layout.bars[barIndex];
+    if (!bar || slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return;
+    bar[slotIndex] = {
+      kind: SkillBarSlotKind.ITEM,
+      skillName: null,
+      itemId,
+      category: SkillBarSlotCategory.EMPTY,
+      subCategory: '',
+    };
+  }
+
+  function setEquipmentInSlot(barIndex: number, slotIndex: number, itemId: string): void {
+    const bar = state.layout.bars[barIndex];
+    if (!bar || slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return;
+    bar[slotIndex] = {
+      kind: SkillBarSlotKind.EQUIPMENT,
+      skillName: null,
+      itemId,
+      category: SkillBarSlotCategory.EMPTY,
+      subCategory: '',
+    };
+  }
+
+  function setMacroInSlot(barIndex: number, slotIndex: number, macroId: string): void {
+    const bar = state.layout.bars[barIndex];
+    if (!bar || slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return;
+    bar[slotIndex] = {
+      kind: SkillBarSlotKind.MACRO,
+      skillName: null,
+      macroId,
+      category: SkillBarSlotCategory.EMPTY,
+      subCategory: '',
+    };
+  }
+
   function removeFromSlot(barIndex: number, slotIndex: number): void {
     const bar = state.layout.bars[barIndex];
     if (!bar || slotIndex < 0 || slotIndex >= SKILL_BAR_SIZE) return;
     bar[slotIndex] = {
+      kind: SkillBarSlotKind.EMPTY,
       skillName: null,
+      itemId: null,
+      macroId: null,
       category: SkillBarSlotCategory.EMPTY,
       subCategory: '',
     };
@@ -587,6 +637,53 @@ export function useSkillStore() {
     for (const key of Object.keys(state.cooldowns)) {
       delete state.cooldowns[key];
     }
+    state.itemCooldown = null;
+  }
+
+  function updateItemCounts(inventory: Array<{ itemId: string; quantity: number }>): void {
+    const counts: Record<string, number> = {};
+    for (const item of inventory) {
+      counts[item.itemId] = (counts[item.itemId] || 0) + item.quantity;
+    }
+    state.itemCounts = counts;
+  }
+
+  function getItemCount(itemId: string): number {
+    return state.itemCounts[itemId] || 0;
+  }
+
+  function startItemCooldown(durationMs: number): void {
+    state.itemCooldown = {
+      readyAt: Date.now() + durationMs,
+      duration: durationMs,
+    };
+  }
+
+  function isItemOnCooldown(): boolean {
+    void now.value;
+    const cd = state.itemCooldown;
+    if (!cd) return false;
+    if (now.value >= cd.readyAt) {
+      state.itemCooldown = null;
+      return false;
+    }
+    return true;
+  }
+
+  function getItemCooldownRemaining(): number {
+    void now.value;
+    const cd = state.itemCooldown;
+    if (!cd) return 0;
+    return Math.max(0, cd.readyAt - now.value);
+  }
+
+  function getItemCooldownProgress(): number {
+    void now.value;
+    const cd = state.itemCooldown;
+    if (!cd) return 1;
+    const remaining = cd.readyAt - now.value;
+    if (remaining <= 0) return 1;
+    return 1 - remaining / cd.duration;
   }
 
   function getSlotForUse(barIndex: number, slotIndex: number): SkillBarSlot | null {
@@ -610,6 +707,9 @@ export function useSkillStore() {
     initForCharacter,
     updateSkillProficiencies,
     setSkillInSlot,
+    setItemInSlot,
+    setEquipmentInSlot,
+    setMacroInSlot,
     removeFromSlot,
     swapSlots,
     addBar,
@@ -633,6 +733,12 @@ export function useSkillStore() {
     getCategories,
     getClassSkills,
     clearAllCooldowns,
+    updateItemCounts,
+    getItemCount,
+    startItemCooldown,
+    isItemOnCooldown,
+    getItemCooldownRemaining,
+    getItemCooldownProgress,
     startTick,
     stopTick,
   };

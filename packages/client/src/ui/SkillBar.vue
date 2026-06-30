@@ -13,8 +13,8 @@
         :key="index"
         class="skill-slot"
         :class="{
-          'skill-slot-filled': slot.skillName,
-          'skill-slot-cooldown': slot.skillName && isOnCooldown(slot.skillName),
+          'skill-slot-filled': isFilled(slot),
+          'skill-slot-cooldown': (isSkillSlot(slot) && isOnCooldown(slot.skillName!)) || (slot.kind === 'item' && isItemOnCooldown()),
           'skill-slot-dragover': dragOverIndex === index,
         }"
         @dragover.prevent="onDragOver(index)"
@@ -23,23 +23,33 @@
         @contextmenu.prevent="onRightClick(index)"
         @click="$emit('use-skill', barIndex, index)"
       >
-        <template v-if="slot.skillName">
+        <template v-if="isFilled(slot)">
           <div
             class="skill-icon"
-            :style="{ backgroundColor: getCategoryColor(slot.category) }"
+            :class="{ 'skill-icon-depleted': slot.kind === 'item' && getItemCount(slot.itemId) === 0 }"
+            :style="{ backgroundColor: getSlotColor(slot) }"
             draggable="true"
             @dragstart="onDragStart(index, $event)"
           >
-            {{ getSkillAbbrev(slot.skillName) }}
+            {{ getSlotLabel(slot) }}
           </div>
           <div
-            v-if="isOnCooldown(slot.skillName)"
+            v-if="isSkillSlot(slot) && isOnCooldown(slot.skillName!)"
             class="cooldown-overlay"
-            :style="{ height: getCooldownHeight(slot.skillName) + '%' }"
+            :style="{ height: getCooldownHeight(slot.skillName!) + '%' }"
           >
-            <span class="cooldown-text">{{ getCooldownText(slot.skillName) }}</span>
+            <span class="cooldown-text">{{ getCooldownText(slot.skillName!) }}</span>
           </div>
-          <span v-if="getMpCost(slot.skillName)" class="mp-cost">{{ getMpCost(slot.skillName) }}</span>
+          <div
+            v-else-if="slot.kind === 'item' && isItemOnCooldown()"
+            class="cooldown-overlay"
+            :style="{ height: getItemCooldownHeight() + '%' }"
+          >
+            <span class="cooldown-text">{{ getItemCooldownText() }}</span>
+          </div>
+          <span v-if="isSkillSlot(slot) && getMpCost(slot.skillName!)" class="mp-cost">{{ getMpCost(slot.skillName!) }}</span>
+          <span v-else-if="slot.kind === 'macro'" class="slot-kind-tag">MAC</span>
+          <span v-if="slot.kind === 'item'" class="slot-qty" :class="{ depleted: getItemCount(slot.itemId) === 0 }">{{ getItemCount(slot.itemId) }}</span>
         </template>
         <template v-else>
           <span class="skill-key">{{ keyLabel(index) }}</span>
@@ -53,7 +63,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useSkillStore } from '../composables/useSkillStore';
-import { getCategoryColor, BAR_KEYBIND_LABELS, type SkillBarSlot } from '@dust-saga/shared';
+import {
+  getCategoryColor,
+  BAR_KEYBIND_LABELS,
+  ITEM_DATABASE,
+  SLOT_KIND_COLORS,
+  SkillBarSlotKind,
+  type SkillBarSlot,
+} from '@dust-saga/shared';
 
 const props = defineProps<{
   barIndex: number;
@@ -104,12 +121,15 @@ function startDrag(e: MouseEvent): void {
 function onDragStart(slotIndex: number, event: DragEvent): void {
   dragSourceIndex.value = slotIndex;
   const slot = props.bar[slotIndex];
-  if (slot.skillName && event.dataTransfer) {
+  if (isFilled(slot) && event.dataTransfer) {
     event.dataTransfer.setData('text/plain', JSON.stringify({
       type: 'bar-swap',
       barIndex: props.barIndex,
       slotIndex,
+      kind: slot.kind,
       skillName: slot.skillName,
+      itemId: slot.itemId,
+      macroId: slot.macroId,
       category: slot.category,
       subCategory: slot.subCategory,
     }));
@@ -149,6 +169,19 @@ function onDrop(slotIndex: number, event?: DragEvent): void {
           dragSourceIndex.value = null;
           return;
         }
+        // Inventory item drag (no `type` field) — see InventoryUI.vue onItemDragStart.
+        if (transferData.itemId && !transferData.type) {
+          const def = ITEM_DATABASE[transferData.itemId];
+          if (def) {
+            if (def.equipmentSlot) {
+              skillStore.setEquipmentInSlot(props.barIndex, slotIndex, transferData.itemId);
+            } else if (def.type === 'consumable') {
+              skillStore.setItemInSlot(props.barIndex, slotIndex, transferData.itemId);
+            }
+          }
+          dragSourceIndex.value = null;
+          return;
+        }
       }
     } catch {}
   }
@@ -161,6 +194,42 @@ function onDrop(slotIndex: number, event?: DragEvent): void {
 
 function onRightClick(slotIndex: number): void {
   skillStore.removeFromSlot(props.barIndex, slotIndex);
+}
+
+function isFilled(slot: SkillBarSlot): boolean {
+  return slot.kind !== SkillBarSlotKind.EMPTY;
+}
+
+function isSkillSlot(slot: SkillBarSlot): boolean {
+  return slot.kind === SkillBarSlotKind.SKILL;
+}
+
+function getSlotColor(slot: SkillBarSlot): string {
+  if (slot.kind === SkillBarSlotKind.SKILL) {
+    return getCategoryColor(slot.category);
+  }
+  return SLOT_KIND_COLORS[slot.kind] || SLOT_KIND_COLORS[SkillBarSlotKind.EMPTY];
+}
+
+function getSlotLabel(slot: SkillBarSlot): string {
+  if (slot.kind === SkillBarSlotKind.SKILL && slot.skillName) {
+    return getSkillAbbrev(slot.skillName);
+  }
+  if ((slot.kind === SkillBarSlotKind.ITEM || slot.kind === SkillBarSlotKind.EQUIPMENT) && slot.itemId) {
+    return abbrevName(ITEM_DATABASE[slot.itemId]?.name || slot.itemId);
+  }
+  if (slot.kind === SkillBarSlotKind.MACRO) {
+    return 'M';
+  }
+  return '';
+}
+
+function abbrevName(name: string): string {
+  const words = name.replace(/\(.*\)/, '').trim().split(/\s+/);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
 }
 
 function getSkillAbbrev(name: string): string {
@@ -197,6 +266,28 @@ function getCooldownText(skillName: string): string {
 function getMpCost(skillName: string): number {
   const skill = skillStore.state.availableSkills.find(s => s.name === skillName);
   return skill?.mpCost || 0;
+}
+
+function getItemCount(itemId?: string | null): number {
+  void skillStore.now.value;
+  if (!itemId) return 0;
+  return skillStore.getItemCount(itemId);
+}
+
+function isItemOnCooldown(): boolean {
+  void skillStore.now.value;
+  return skillStore.isItemOnCooldown();
+}
+
+function getItemCooldownHeight(): number {
+  void skillStore.now.value;
+  return (1 - skillStore.getItemCooldownProgress()) * 100;
+}
+
+function getItemCooldownText(): string {
+  void skillStore.now.value;
+  const remaining = skillStore.getItemCooldownRemaining();
+  return (remaining / 1000).toFixed(1);
 }
 </script>
 
@@ -357,5 +448,35 @@ function getMpCost(skillName: string): number {
   font-size: 0.5rem;
   color: #64b5f6;
   pointer-events: none;
+}
+
+.slot-kind-tag {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  font-size: 0.45rem;
+  color: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+  letter-spacing: 0.5px;
+}
+
+.slot-qty {
+  position: absolute;
+  bottom: 1px;
+  left: 3px;
+  font-size: 0.55rem;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+
+.slot-qty.depleted {
+  color: #ff6b6b;
+}
+
+.skill-icon-depleted {
+  opacity: 0.4;
+  filter: grayscale(0.6);
 }
 </style>
