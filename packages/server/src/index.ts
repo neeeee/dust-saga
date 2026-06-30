@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { NetworkServer } from './core/network/NetworkServer';
 import { DatabaseManager } from './core/database/DatabaseManager';
+import { createApiRouter } from './core/api';
 
 const app = express();
 const httpServer = createServer(app);
@@ -9,7 +10,7 @@ const PORT = process.env.PORT || 3001;
 
 app.use(express.json());
 
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   const db = DatabaseManager.getInstance();
   res.json({
     status: 'ok',
@@ -19,28 +20,10 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/api/classes', (req, res) => {
+app.get('/api/classes', (_req, res) => {
   const { CLASS_DEFINITIONS } = require('@dust-saga/shared');
   res.json(CLASS_DEFINITIONS);
 });
-
-function adminGuard(req: express.Request, res: express.Response): boolean {
-  const expected = process.env.ADMIN_TOKEN;
-  if (!expected) {
-    console.warn(`[admin] rejected ${req.method} ${req.path} — ADMIN_TOKEN env var is not set`);
-    res.status(503).json({ error: 'Admin API disabled (ADMIN_TOKEN not configured)' });
-    return false;
-  }
-  const provided = req.headers['authorization'];
-  const token = typeof provided === 'string' && provided.startsWith('Bearer ')
-    ? provided.slice(7)
-    : (req.headers['x-admin-token'] as string);
-  if (token !== expected) {
-    res.status(401).json({ error: 'Unauthorized' });
-    return false;
-  }
-  return true;
-}
 
 async function startServer() {
   try {
@@ -63,129 +46,14 @@ async function startServer() {
     await networkServer.questSys.initialize(db);
     await networkServer.cutsceneSys.initialize(db);
 
-    // ── Quest admin API ────────────────────────────────────────────────────
-    // CRUD over quest definitions in the DB. Secured by ADMIN_TOKEN (required,
-    // fails closed when unset). Updates the in-memory cache live so new quests
-    // are playable without a restart. Quests created here are visible to the
-    // whole cluster only if every shard reloads its cache (see POST /reload).
-    const QUEST_SCHEMA = {
-      id: 'string (required, unique)',
-      title: 'string (required)',
-      description: 'string',
-      type: 'kill | collect | talk | explore | escort',
-      requiredLevel: 'number (>= 1, default 1)',
-      requiredQuest: 'string | null (quest id prerequisite)',
-      npcId: 'string (required, must match an NPC id)',
-      objectives: [{
-        id: 'string (required)',
-        type: 'kill | collect | talk | explore | escort',
-        targetId: 'string (required — enemy type / item id / npc id / cell label)',
-        targetName: 'string (required — display name)',
-        requiredCount: 'number (>= 1)',
-        cell: 'string? (e.g. "K10" — turns an EXPLORE objective into a grid-cell waypoint)',
-        zoneId: 'string? (zone for cell objectives; defaults to the NPC\'s zone)',
-      }],
-      rewards: {
-        experience: 'number',
-        gold: 'number',
-        items: [{ itemId: 'string', quantity: 'number' }],
-      },
-      offerDialog: '[{ speaker?, text, emote? }] — pages shown when offering the quest',
-      inProgressDialog: '[{ speaker?, text, emote? }] — pages shown while quest is active',
-      turnInDialog: '[{ speaker?, text, emote? }] — pages shown at turn-in',
-    };
-
-    app.get('/api/admin/quests/schema', (req, res) => {
-      if (!adminGuard(req, res)) return;
-      res.json(QUEST_SCHEMA);
-    });
-
-    app.get('/api/admin/quests', (req, res) => {
-      if (!adminGuard(req, res)) return;
-      let quests = networkServer.questSys.getAllQuestDefinitions();
-      const npcFilter = req.query.npc as string | undefined;
-      const typeFilter = req.query.type as string | undefined;
-      const minLevel = req.query.minLevel ? parseInt(req.query.minLevel as string, 10) : undefined;
-      const maxLevel = req.query.maxLevel ? parseInt(req.query.maxLevel as string, 10) : undefined;
-      if (npcFilter) quests = quests.filter(q => q.npcId === npcFilter);
-      if (typeFilter) quests = quests.filter(q => q.type === typeFilter);
-      if (typeof minLevel === 'number' && !Number.isNaN(minLevel)) quests = quests.filter(q => q.requiredLevel >= minLevel);
-      if (typeof maxLevel === 'number' && !Number.isNaN(maxLevel)) quests = quests.filter(q => q.requiredLevel <= maxLevel);
-      res.json({ count: quests.length, quests });
-    });
-
-    app.get('/api/admin/quests/:id', (req, res) => {
-      if (!adminGuard(req, res)) return;
-      const def = networkServer.questSys.getQuestDefinition(req.params.id);
-      if (!def) {
-        res.status(404).json({ error: 'Quest not found' });
-        return;
-      }
-      res.json(def);
-    });
-
-    app.post('/api/admin/quests', async (req, res) => {
-      if (!adminGuard(req, res)) return;
-      const result = await networkServer.questSys.createQuest(req.body);
-      if (!result.success) {
-        res.status(400).json({ error: result.error });
-        return;
-      }
-      res.status(201).json({ success: true, id: req.body.id });
-    });
-
-    app.put('/api/admin/quests/:id', async (req, res) => {
-      if (!adminGuard(req, res)) return;
-      const body = { ...req.body, id: req.params.id };
-      const result = await networkServer.questSys.createQuest(body);
-      if (!result.success) {
-        res.status(400).json({ error: result.error });
-        return;
-      }
-      res.json({ success: true, id: body.id });
-    });
-
-    app.delete('/api/admin/quests/:id', async (req, res) => {
-      if (!adminGuard(req, res)) return;
-      const result = await networkServer.questSys.deleteQuest(req.params.id);
-      if (!result.success) {
-        res.status(404).json({ error: result.error });
-        return;
-      }
-      res.json({ success: true });
-    });
-
-    app.post('/api/admin/quests/reload', async (req, res) => {
-      if (!adminGuard(req, res)) return;
-      await networkServer.questSys.reload();
-      res.json({ success: true, count: networkServer.questSys.getAllQuestDefinitions().length });
-    });
-
-    // ── Cutscene admin API ─────────────────────────────────────────────────
-    app.get('/api/admin/cutscenes', (req, res) => {
-      if (!adminGuard(req, res)) return;
-      res.json({ count: networkServer.cutsceneSys.getAllCutscenes().length, cutscenes: networkServer.cutsceneSys.getAllCutscenes() });
-    });
-
-    app.post('/api/admin/cutscenes', async (req, res) => {
-      if (!adminGuard(req, res)) return;
-      const result = await networkServer.cutsceneSys.createCutscene(req.body);
-      if (!result.success) { res.status(400).json({ error: result.error }); return; }
-      res.status(201).json({ success: true, id: req.body.id });
-    });
-
-    app.delete('/api/admin/cutscenes/:id', async (req, res) => {
-      if (!adminGuard(req, res)) return;
-      const result = await networkServer.cutsceneSys.deleteCutscene(req.params.id);
-      if (!result.success) { res.status(404).json({ error: result.error }); return; }
-      res.json({ success: true });
-    });
-
-    app.post('/api/admin/cutscenes/reload', async (req, res) => {
-      if (!adminGuard(req, res)) return;
-      await networkServer.cutsceneSys.reload();
-      res.json({ success: true, count: networkServer.cutsceneSys.getAllCutscenes().length });
-    });
+    // ── HTTP API ───────────────────────────────────────────────────────────
+    // All gameplay/admin REST routes live under packages/server/src/core/api.
+    // Resolve the systems once here and hand them to the router tree; route
+    // handlers receive their dependencies instead of reaching into singletons.
+    app.use('/api', createApiRouter({
+      questSys: networkServer.questSys,
+      cutsceneSys: networkServer.cutsceneSys,
+    }));
 
     // B2: attach the Socket.IO Redis adapter when Redis is available so zone-room
     // broadcasts propagate across processes (enables future multi-shard). In
